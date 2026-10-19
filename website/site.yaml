@@ -1,0 +1,19 @@
+---
+base_url: https://guardianspec.org
+# PLACEHOLDER -- domain is confirmed (guardianspec.org) but DNS/hosting is not
+# yet wired up. Swap base_url and deploy once that's ready; nothing else in
+# this config needs to change.
+title: "did:guardian"
+description: |
+    A DID method for custodial oversight -- key recovery, revocation, and
+    transfer by one or more guardians, without impersonation.
+version: 1
+
+byline:
+    username: "@guardianspec.org"
+    name: "did:guardian"
+    favicon: /img/favicon.svg
+    href: /
+
+config:
+    theme: themes/guardian/theme.json

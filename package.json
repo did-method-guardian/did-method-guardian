@@ -1,0 +1,12 @@
+{
+  "name": "did-method-guardian",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/lib",
+    "test": "npm run test --workspace=packages/lib"
+  }
+}

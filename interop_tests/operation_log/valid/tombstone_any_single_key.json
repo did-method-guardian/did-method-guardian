@@ -1,0 +1,35 @@
+{
+  "note": "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
+  "expect": "accept",
+  "known_keys": {
+    "did:guardian:fred:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+  },
+  "log": [
+    {
+      "cid": "81e5ef78e97454f76a7f49700df350df13ffefcb564daf66c68627a4001f3301",
+      "op": {
+        "type": "custodial_create",
+        "name": "fred",
+        "operationalKeys": [
+          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+        ],
+        "verificationMethods": {},
+        "services": {},
+        "outgoing": [],
+        "incoming": [],
+        "prev": null,
+        "sigs": {}
+      }
+    },
+    {
+      "cid": "0555cdd25f6a196d01fc1112e97c80e364c652b62aafdd75f8edbda4af548626",
+      "op": {
+        "type": "custodial_tombstone",
+        "prev": "81e5ef78e97454f76a7f49700df350df13ffefcb564daf66c68627a4001f3301",
+        "sigs": {
+          "did:guardian:fred:example:com": "MEUCIGiS49K7APpxBTh1miBPgHD3AAsSXqL2jGLak0Nlt6EuAiEAmjMJ9FUhTTviKGfjRFXXOKr9T_gWH50ZVN8PeZdyL40"
+        }
+      }
+    }
+  ]
+}

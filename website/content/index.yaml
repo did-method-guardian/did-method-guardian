@@ -1,0 +1,16 @@
+---
+layout: home
+redirect: false
+refresh: ""
+title: "did:guardian"
+description: |
+  A DID method for custodial oversight -- key recovery, revocation, and
+  transfer by one or more guardians, without impersonation.
+
+hero:
+  title: A DID method built for guardianship.
+  description: |
+    Every identity needs its own keys. Some also need a second, distinct
+    kind of control: one or more guardians able to recover, revoke, or
+    transfer it -- without that ever amounting to impersonation.
+  example: "did:guardian:larrypage:google:com"

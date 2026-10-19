@@ -1,0 +1,45 @@
+{
+  "note": "REJECT: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.",
+  "expect": "reject",
+  "known_keys": {
+    "did:guardian:board-a:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1aNhs8IaVp2eMxcmKK+4mn89yyJ3\njs/9oLnM1nVO3CcwnozaZ0fxrBtIb0jgVXa4qZjXWZx0wBtt/WtO5wRaFQ==\n-----END PUBLIC KEY-----\n",
+    "did:guardian:board-b:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEkIA1EscJWz6iBjkDW/xyxpOX2z66\n3RB0tE0L3NgIuUazsqYp47/juoCqs8z86DypticcDclFP4YbntUTM/NoHw==\n-----END PUBLIC KEY-----\n",
+    "did:guardian:board-c:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAETRan3MR3La/0ltcqO7FRXd+nVjnG\nlzXcyN1JghnryZjTw0UmvdPgDYzDsH5H9iodAbR83sShr+wfayX6ELYnGQ==\n-----END PUBLIC KEY-----\n"
+  },
+  "log": [
+    {
+      "cid": "abd1e7b8c844e09bf1992b9e1d21c542b185ca8d9482bc2253ff82988b7a11fc",
+      "op": {
+        "type": "custodial_create",
+        "name": "fred",
+        "operationalKeys": [
+          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+        ],
+        "verificationMethods": {},
+        "services": {},
+        "outgoing": [],
+        "incoming": [
+          "did:guardian:board-a:example:com",
+          "did:guardian:board-b:example:com",
+          "did:guardian:board-c:example:com"
+        ],
+        "prev": null,
+        "sigs": {
+          "did:guardian:board-a:example:com": "MEUCIBSz-n5eT6xU0YQtuvMpkNd3xSU3HkOj7YHcOCuk2SKUAiEA4BnSOrT-IoGcpBP1M4uU0AZzYOz-APm1tbp-eU1quJw",
+          "did:guardian:board-b:example:com": "MEYCIQCjGeKjGhXfj75Szj9LkMChq3NA3U5k85jaiV_OpSjF9wIhAJQ3YeWvYck5CZw_dRAzZmbwEQJVWn0iZnd0Sjs0skUQ",
+          "did:guardian:board-c:example:com": "MEUCICW-PsXUts_AAovxpvPyR4GgxaApc1yvmGwlTXrCE8JKAiEA1yCg4HXXVWdJDISEOfpotJg-Z7CUi4BcC7zFGCj1fik"
+        }
+      }
+    },
+    {
+      "cid": "a5e4d7eca9983cd036a1b87a4c76b74757480ea5391119f9d1ace3a7ae8b95cc",
+      "op": {
+        "type": "guardian_relinquish",
+        "prev": "abd1e7b8c844e09bf1992b9e1d21c542b185ca8d9482bc2253ff82988b7a11fc",
+        "sigs": {
+          "did:guardian:board-a:example:com": "MEQCIEfx_fcsTJJn6LtQQB2jtz6D2_hjbLcsUtKdsJG_4S7aAiBp08HspOg6_KXbh1VCiQQ1d5dhnl3903-s9n9c4GRWIA"
+        }
+      }
+    }
+  ]
+}

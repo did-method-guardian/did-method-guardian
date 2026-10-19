@@ -1,0 +1,45 @@
+{
+  "note": "Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.",
+  "expect": "accept",
+  "known_keys": {
+    "did:guardian:board-a:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1aNhs8IaVp2eMxcmKK+4mn89yyJ3\njs/9oLnM1nVO3CcwnozaZ0fxrBtIb0jgVXa4qZjXWZx0wBtt/WtO5wRaFQ==\n-----END PUBLIC KEY-----\n",
+    "did:guardian:board-b:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEkIA1EscJWz6iBjkDW/xyxpOX2z66\n3RB0tE0L3NgIuUazsqYp47/juoCqs8z86DypticcDclFP4YbntUTM/NoHw==\n-----END PUBLIC KEY-----\n"
+  },
+  "log": [
+    {
+      "cid": "00ed39ac8a920033366f20a317db32ff0fdd63681d376c532149425fd096e21d",
+      "op": {
+        "type": "custodial_create",
+        "name": "fred",
+        "operationalKeys": [
+          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+        ],
+        "verificationMethods": {
+          "key-1": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+        },
+        "services": {},
+        "outgoing": [],
+        "incoming": [
+          "did:guardian:board-a:example:com",
+          "did:guardian:board-b:example:com"
+        ],
+        "prev": null,
+        "sigs": {
+          "did:guardian:board-a:example:com": "MEQCIDDuJs07jlBkujDKDaWPkxDMaA-piXAfMQvR2nOpCreRAiAka557J4GpC11wGhBdcPSxvbxp4Zx1KzQ3npwfOhBOCQ",
+          "did:guardian:board-b:example:com": "MEUCIQDK8z_Y-XCodvVMWXtQecS-J-DBKlKGnHqnuYZ8aR-h4wIgVzbA8zjeRK15dWgm7u35XjvpnBl9LPDOncgBvooYNEc"
+        }
+      }
+    },
+    {
+      "cid": "48704c7507a3dc41382ff75fcdd740941456350ac106d9719466c6d67bdac5a2",
+      "op": {
+        "type": "guardian_relinquish",
+        "prev": "00ed39ac8a920033366f20a317db32ff0fdd63681d376c532149425fd096e21d",
+        "sigs": {
+          "did:guardian:board-a:example:com": "MEUCIA5WSKomXpNnnkw5cAGyq8z58Nkhf9umUIOzb1tTDLt-AiEAh_aG0RqUdGa-16qieWFJAiJMRuMYgWH2caFyMvM9rdc",
+          "did:guardian:board-b:example:com": "MEQCIEEboT6Myf_IYvfaOdJKvOgXT6OLlkXq4HrAx29JK_i8AiBJ_7VNss-IBJX92oexUfjrRejawNLmGIjhnFQJ4qmFlA"
+        }
+      }
+    }
+  ]
+}

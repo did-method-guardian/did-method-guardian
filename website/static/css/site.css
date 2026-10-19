@@ -1,0 +1,50 @@
+:root {
+  --guardian-accent: #2f6f4f;
+}
+
+.brand {
+  font-weight: 700;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-decoration: none;
+}
+.brand-dim {
+  opacity: 0.5;
+}
+
+.hero {
+  padding: 3rem 0 2rem;
+  text-align: center;
+}
+.hero .eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  color: var(--guardian-accent);
+  margin-bottom: 0.5rem;
+}
+.hero h1 {
+  font-size: 2.4rem;
+  margin-bottom: 0.75rem;
+}
+.hero .lede {
+  max-width: 42rem;
+  margin: 0 auto 1.25rem;
+  font-size: 1.1rem;
+}
+.example-did {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.5rem;
+  background: var(--pico-code-background-color);
+  margin-bottom: 1.5rem;
+}
+.hero-actions a {
+  margin: 0 0.4rem;
+}
+
+.site-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  text-align: center;
+}

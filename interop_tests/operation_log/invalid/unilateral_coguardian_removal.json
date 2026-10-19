@@ -1,0 +1,46 @@
+{
+  "note": "REJECT: troy attempts to remove jane from a two-guardian set, but the signature claimed as jane's was produced with troy's own key, not jane's.",
+  "expect": "reject",
+  "known_keys": {
+    "did:guardian:troy:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1aNhs8IaVp2eMxcmKK+4mn89yyJ3\njs/9oLnM1nVO3CcwnozaZ0fxrBtIb0jgVXa4qZjXWZx0wBtt/WtO5wRaFQ==\n-----END PUBLIC KEY-----\n",
+    "did:guardian:jane:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEkIA1EscJWz6iBjkDW/xyxpOX2z66\n3RB0tE0L3NgIuUazsqYp47/juoCqs8z86DypticcDclFP4YbntUTM/NoHw==\n-----END PUBLIC KEY-----\n"
+  },
+  "log": [
+    {
+      "cid": "0f40b6f55ae9e51d7e8f0dabf41a186240ada3cde783979cb5db99083f39805d",
+      "op": {
+        "type": "custodial_create",
+        "name": "fred",
+        "operationalKeys": [
+          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+        ],
+        "verificationMethods": {},
+        "services": {},
+        "outgoing": [],
+        "incoming": [
+          "did:guardian:troy:example:com",
+          "did:guardian:jane:example:com"
+        ],
+        "prev": null,
+        "sigs": {
+          "did:guardian:troy:example:com": "MEYCIQDLeALTMSaXCJorK6ByALsQQYrTR5mRpVtpSDuLqqRl6QIhANs5N5_BLlSkPQNEiCEVejKMrfb8fW71dX0EMvWszh4q",
+          "did:guardian:jane:example:com": "MEYCIQDhk4HXJH1E4YsL9S2b-KAjpyOaUsfeveXfKNH5hdFriwIhAOwd5012K5HwaIiO1qn-ZiZzMHtgJZlEzKltRo96o8yR"
+        }
+      }
+    },
+    {
+      "cid": "e1958c423bbc9b9a6059d09e4b16ed33e305177273a9b0a104682b69460c43e9",
+      "op": {
+        "type": "guardian_transfer",
+        "outgoing": [
+          "did:guardian:jane:example:com"
+        ],
+        "incoming": [],
+        "prev": "0f40b6f55ae9e51d7e8f0dabf41a186240ada3cde783979cb5db99083f39805d",
+        "sigs": {
+          "did:guardian:jane:example:com": "MEUCIQCs1tJnK7K_Ba4gS3dwkW12sLKsWCi3OmD3t2_NLvH0PgIgDNniFYEITD6-hopgmsCrtuPZGEPeNkXkSkwWw0oC6Mk"
+        }
+      }
+    }
+  ]
+}
