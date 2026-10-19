@@ -1,4 +1,3 @@
----
 base_url: https://guardianspec.org
 # PLACEHOLDER -- domain is confirmed (guardianspec.org) but DNS/hosting is not
 # yet wired up. Swap base_url and deploy once that's ready; nothing else in
@@ -17,3 +16,4 @@ byline:
 
 config:
     theme: themes/guardian/theme.json
+    tidy_mode: true
