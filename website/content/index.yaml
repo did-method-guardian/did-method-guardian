@@ -1,6 +1,5 @@
 ---
 layout: home
-refresh: ""
 title: "did:guardian"
 description: |
   A DID method for custodial oversight -- key recovery, revocation, and

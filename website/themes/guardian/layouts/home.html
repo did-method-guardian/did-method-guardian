@@ -1,37 +1,36 @@
-<!doctype html>
-<html lang='en'>
-<head>
-<meta ht-include='fragments/head.html'></meta>
+<!DOCTYPE html><html lang="en"><head>
+<meta ht-include="fragments/head.html"/>
 </head>
 <body>
-<header ht-include='fragments/header.html'></header>
-<main class='container'>
-  <section class='hero'>
-    <p class='eyebrow'>Request for Comments &middot; v0.1 draft</p>
-    <h1 ht-content='page.hero.title'></h1>
-    <p class='lede' ht-content='markdown:page.hero.description'></p>
-    <code class='example-did' ht-content='page.hero.example'></code>
-    <p class='hero-actions'>
-      <a role='button' href='/spec/v1/'>Read the spec</a>
-      <a role='button' class='secondary' href='https://github.com/did-method-guardian/did-method-guardian'>View on GitHub</a>
+<header ht-include="fragments/header.html"></header>
+<main class="container">
+  <section class="hero">
+    <p class="eyebrow">Request for Comments · v0.1 draft</p>
+    <h1 ht-apply="">${ page.hero.title, &#34;&#34; }</h1>
+    <p class="lede" ht-apply="">${ markdown(page.hero.description, &#34;&#34;) }</p>
+    <code class="example-did" ht-apply="">${ page.hero.example, &#34;&#34; }</code>
+    <p class="hero-actions">
+      <a role="button" href="/spec/v1/">Read the spec</a>
+      <a role="button" class="secondary" href="https://github.com/did-method-guardian/did-method-guardian">View on GitHub</a>
     </p>
   </section>
 
-  <section class='grid' id='why'>
+  <section class="grid" id="why">
     <article>
       <h3>Group guardianship</h3>
       <p>Any identity may be overseen by one or more guardians -- transferable, terminable, governed by configurable consensus thresholds. No other DID method has this as a first-class relationship.</p>
     </article>
     <article>
       <h3>No impersonation, ever</h3>
-      <p>A guardian's recovery action is always signed by the guardian's own, distinct key -- never the ward's. Every action stays attributable in the replayed log.</p>
+      <p>A guardian&#39;s recovery action is always signed by the guardian&#39;s own, distinct key -- never the ward&#39;s. Every action stays attributable in the replayed log.</p>
     </article>
     <article>
       <h3>Built on did:plc</h3>
-      <p>Directly adopts did:plc's proven operation log, signing scheme, and recovery-window mechanism -- extended, not reinvented, where this method genuinely differs.</p>
+      <p>Directly adopts did:plc&#39;s proven operation log, signing scheme, and recovery-window mechanism -- extended, not reinvented, where this method genuinely differs.</p>
     </article>
   </section>
 </main>
-<footer ht-include='fragments/footer.html'></footer>
-</body>
-</html>
+<footer ht-include="fragments/footer.html"></footer>
+
+
+</body></html>

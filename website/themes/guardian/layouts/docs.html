@@ -1,13 +1,12 @@
-<!doctype html>
-<html lang='en'>
-<head>
-<meta ht-include='fragments/head.html'></meta>
+<!DOCTYPE html><html lang="en"><head>
+<meta ht-include="fragments/head.html"/>
 </head>
 <body>
-<header ht-include='fragments/header.html'></header>
-<main class='container'>
-<article ht-content='markdown:page.content'></article>
+<header ht-include="fragments/header.html"></header>
+<main class="container">
+<article ht-apply="">${ markdown(page.content, &#34;&#34;) }</article>
 </main>
-<footer ht-include='fragments/footer.html'></footer>
-</body>
-</html>
+<footer ht-include="fragments/footer.html"></footer>
+
+
+</body></html>

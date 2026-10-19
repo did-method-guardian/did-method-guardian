@@ -1,7 +1,7 @@
-<title ht-content='page.title,site.title'></title>
-<meta charset='utf-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
-<meta name='description' ht-attrs='content:page.description,site.description'>
-<link rel='icon' href='/img/favicon.svg'>
-<link rel='stylesheet' href='/css/pico.min.css'>
-<link rel='stylesheet' href='/css/site.css' ht-query='href?v:site.version'>
+<title ht-apply="">${ page.title, site.title, &#34;&#34; }</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="description" content="${ page.description, site.description, &#34;&#34; }" ht-apply=""/>
+<link rel="icon" href="/img/favicon.svg"/>
+<link rel="stylesheet" href="/css/pico.min.css"/>
+<link rel="stylesheet" href="/css/site.css?v=${ site.version, &#34;&#34; }" ht-apply=""/>

@@ -1,6 +1,5 @@
 ---
 layout: docs
-refresh: ""
 title: "DID Guardian Method Specification v0.1"
 description: "A self-authenticating DID method for custodial oversight -- key recovery, revocation, and transfer by one or more guardians -- without impersonation, governed by configurable consensus thresholds."
 ---
