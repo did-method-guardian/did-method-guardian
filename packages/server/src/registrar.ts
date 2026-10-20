@@ -14,7 +14,7 @@ import type { Did, LogEntry, Operation, ResolvedState } from "@did-guardian/lib"
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, type WardRow } from "./db.js";
-import { encryptSecret, decryptSecret } from "./secretBox.js";
+import { encryptSecret, decryptSecret, hashSecret, randomSecret } from "./secretBox.js";
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 
@@ -37,7 +37,7 @@ export function assertValidName(name: string): void {
  * needs to verify an externally-supplied guardian signature, concentrating
  * all of that complexity in one place (`submitOperation` below).
  */
-export async function registerWard(env: Env, name: string): Promise<{ did: string; document: unknown }> {
+export async function registerWard(env: Env, name: string): Promise<{ did: string; document: unknown; login_secret: string }> {
   assertValidName(name);
   if (await getWardByName(env, name)) {
     throw new RegistrarError(`name "${name}" is already taken`, 409);
@@ -61,13 +61,21 @@ export async function registerWard(env: Env, name: string): Promise<{ did: strin
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();
 
+  // The login secret proves control of this ward to THIS registrar's own
+  // login/OIDC flow -- a separate credential from the operational key,
+  // needed because the custodial model here means the key itself isn't
+  // provable client-side (the server holds it, not the caller). Returned
+  // once, in plaintext, here only -- stored hashed, same as a password.
+  const loginSecret = randomSecret();
+  const loginSecretHash = await hashSecret(loginSecret);
+
   const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
-  const ward: WardRow = { name, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt };
+  const ward: WardRow = { name, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: loginSecretHash };
   await insertWard(env, ward);
   await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
 
   const state = replay(did, [{ cid, op: genesis }]);
-  return { did, document: toDidDocument(state) };
+  return { did, document: toDidDocument(state), login_secret: loginSecret };
 }
 
 async function loadLog(env: Env, did: string): Promise<LogEntry[]> {

@@ -29,6 +29,16 @@ export async function encryptSecret(plaintext: string, keyB64: string): Promise<
   return `${toBase64(iv)}.${toBase64(ciphertext)}`;
 }
 
+/** One-way hash for login secrets -- checked, never decrypted back. */
+export async function hashSecret(plaintext: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(plaintext));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function randomSecret(): string {
+  return toBase64(crypto.getRandomValues(new Uint8Array(32))).replace(/[+/=]/g, "");
+}
+
 export async function decryptSecret(encoded: string, keyB64: string): Promise<string> {
   const [ivB64, ctB64] = encoded.split(".");
   const key = await importAesKey(keyB64);
