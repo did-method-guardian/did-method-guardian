@@ -4,6 +4,7 @@ import { registerWard, resolveDocument, resolveLog, submitOperation, RegistrarEr
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
+import { authenticateOidcClient } from "./clientAuth.js";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -44,13 +45,18 @@ export default {
           // not attempted here rather than half-wired (email forwarding's
           // own name-keyed lookups assume a real registered name).
           if (name === null) return error("email forwarding is not available for the bare-domain identity", 400);
-          // Only the ward itself (an active gw_session for its own DID) may
-          // set up forwarding for its own address -- otherwise anyone could
-          // redirect someone else's mail just by naming their identity.
+          // Either the ward itself (an active gw_session for its own DID)
+          // or a trusted OIDC client (clientAuth.ts) may set up forwarding
+          // for this address -- the latter is what lets zz's own name-
+          // picker wire a contact email in the same request that creates
+          // the ward, before any interactive session with this registrar
+          // exists. A trusted client still only ever acts on the ward
+          // named in the URL path itself, never an arbitrary other one.
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          if (!sessionWardDid || sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN)) {
-            return error("must be signed in as this identity to set up its mail forwarding", 403);
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to set up its mail forwarding", 403);
           }
           const body = (await request.json()) as { forward_to?: string };
           if (!body.forward_to) return error("forward_to is required", 400);
@@ -75,9 +81,15 @@ export default {
 
     if (path === "/register" && request.method === "POST") {
       try {
-        const body = (await request.json()) as { name?: string };
+        const body = (await request.json()) as { name?: string; guardian_did?: string };
         if (!body.name) return error("name is required", 400);
-        const result = await registerWard(env, body.name);
+        // guardian_did is only ever honored for a trusted OIDC client (the
+        // same credential already used at /token) -- an unauthenticated
+        // caller's guardian_did is silently ignored, not an error, since
+        // plain self-service registration (no guardian) is still a normal,
+        // valid request shape.
+        const client = await authenticateOidcClient(request, env);
+        const result = await registerWard(env, body.name, client ? body.guardian_did : null);
         return json(result, 201);
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);

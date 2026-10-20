@@ -12,14 +12,23 @@
     { "binding": "DB", "database_name": "zz-guardian", "database_id": "651d3286-cf1f-4e57-a9fb-7d237e8d8174", "migrations_dir": "migrations" }
   ],
   "vars": {
-    // A dedicated subdomain, not the bare zzmq.dev zone -- zzmq.dev already
-    // has two other Workers splitting it by path (zzbin-docs, zz-maintainer)
-    // and zz-maintainer's own route is a catch-all, so claiming /.well-known/
-    // guardian/*, /authorize, /token, etc. on the bare zone risks colliding
-    // with it. A subdomain sidesteps that entirely.
-    "REGISTRAR_DOMAIN": "id.zzmq.dev"
+    // The bare zone, not a dedicated subdomain -- did:guardian:zzmq.dev is
+    // zz's own real identity, the whole point of the bare-domain identity
+    // feature. zzmq.dev already has zz-maintainer's own catch-all route
+    // (zzmq.dev/*) on the same zone; these routes list the registrar's own
+    // specific paths as plain (non-custom_domain) route patterns instead,
+    // which Cloudflare matches by specificity -- these take precedence over
+    // zz-maintainer's catch-all for exactly these paths, nothing else.
+    "REGISTRAR_DOMAIN": "zzmq.dev"
   },
   "routes": [
-    { "pattern": "id.zzmq.dev", "custom_domain": true }
+    { "pattern": "zzmq.dev/.well-known/guardian/*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/.well-known/openid-configuration", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/.well-known/jwks.json", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/register", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/verify-email", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/authorize", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/token", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/userinfo", "zone_name": "zzmq.dev" }
   ]
 }

@@ -33,16 +33,37 @@ export function assertValidName(name: string): void {
 }
 
 /**
- * Registers a brand-new, ownerless (`incoming: []`) identity. Establishing a
- * guardian is always done afterward via a real, signed `guardian_transfer`
- * (spec §4.1/§4.3) -- kept out of registration itself so this endpoint never
- * needs to verify an externally-supplied guardian signature, concentrating
- * all of that complexity in one place (`submitOperation` below).
+ * Registers a brand-new identity. Ordinarily ownerless (`incoming: []`) --
+ * establishing a guardian is normally done afterward via a real, signed
+ * `guardian_transfer` (spec §4.1/§4.3), kept out of registration itself so
+ * this endpoint never needs to verify an externally-supplied guardian
+ * signature, concentrating that complexity in one place (`submitOperation`
+ * below).
+ *
+ * `guardianDid`, when given, is the one exception: a real guardian
+ * established at genesis instead, atomically. Only ever reached with a
+ * caller-supplied value when index.ts's own route handler has already
+ * verified a trusted OIDC client credential (clientAuth.ts) -- an
+ * unauthenticated caller's `guardian_did` is never honored, never even
+ * reaches this function. Safe specifically because this registrar custodies
+ * both keys: the new ward's own (always true) and the guardian's (only true
+ * when `guardianDid` identifies one of this same registrar's own wards,
+ * checked below) -- so both required signatures are producible server-side,
+ * with no separate interactive signing round-trip needed.
  */
-export async function registerWard(env: Env, name: string): Promise<{ did: string; document: unknown; login_secret: string }> {
+export async function registerWard(env: Env, name: string, guardianDid?: string | null): Promise<{ did: string; document: unknown; login_secret: string }> {
   assertValidName(name);
   if (await getWardByName(env, name)) {
     throw new RegistrarError(`name "${name}" is already taken`, 409);
+  }
+
+  let incomingKeys: Record<Did, string> = {};
+  if (guardianDid) {
+    const guardianWard = await getWardByDid(env, guardianDid);
+    if (!guardianWard) {
+      throw new RegistrarError(`guardian_did "${guardianDid}" is not a ward this registrar custodies -- it can't produce that ward's signature`, 400);
+    }
+    incomingKeys = { [guardianDid]: await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY) };
   }
 
   const did = didFor(name, env.REGISTRAR_DOMAIN);
@@ -55,10 +76,10 @@ export async function registerWard(env: Env, name: string): Promise<{ did: strin
       verificationMethods: { "key-1": keypair.publicKey },
       services: {},
       outgoing: [],
-      incoming: [],
+      incoming: guardianDid ? [guardianDid] : [],
       prev: null,
     },
-    {},
+    incomingKeys,
   );
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();
