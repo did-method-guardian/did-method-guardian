@@ -1,7 +1,9 @@
 import type { Env } from "./env.js";
+import { didFor } from "./env.js";
 import { registerWard, resolveDocument, resolveLog, submitOperation, RegistrarError } from "./registrar.js";
 import { handleOidcRequest } from "./oidc.js";
-import { handleEmail } from "./email.js";
+import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
+import { readCookie, resolveSession } from "./login.js";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -16,7 +18,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email)?$/);
     if (wellKnownMatch) {
       const [, name, suffix] = wellKnownMatch;
       try {
@@ -33,11 +35,34 @@ export default {
           const result = await submitOperation(env, name, op as any);
           return result.accepted ? json({ accepted: true }) : error(result.reason, 400);
         }
+        if (suffix === "/email" && request.method === "POST") {
+          // Only the ward itself (an active gw_session for its own DID) may
+          // set up forwarding for its own address -- otherwise anyone could
+          // redirect someone else's mail just by naming their identity.
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          if (!sessionWardDid || sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN)) {
+            return error("must be signed in as this identity to set up its mail forwarding", 403);
+          }
+          const body = (await request.json()) as { forward_to?: string };
+          if (!body.forward_to) return error("forward_to is required", 400);
+          const result = await requestEmailForwarding(env, name, body.forward_to);
+          return result.ok ? json({ ok: true, message: "verification email sent" }) : error(result.reason, 400);
+        }
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);
         return error("internal error", 500);
       }
       return error("not found", 404);
+    }
+
+    if (path === "/verify-email" && request.method === "GET") {
+      const token = url.searchParams.get("token");
+      if (!token) return error("token is required", 400);
+      const result = await confirmEmailForwarding(env, token);
+      return result.ok
+        ? new Response(`Mail forwarding confirmed for ${result.did}.`, { headers: { "content-type": "text/plain" } })
+        : error(result.reason, 400);
     }
 
     if (path === "/register" && request.method === "POST") {

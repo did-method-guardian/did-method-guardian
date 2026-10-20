@@ -123,3 +123,34 @@ export async function getLoginSession(env: Env, sessionId: string): Promise<{ wa
   const row = await env.DB.prepare("SELECT ward_did, expires_at FROM login_sessions WHERE session_id = ?").bind(sessionId).first<{ ward_did: string; expires_at: string }>();
   return row ?? null;
 }
+
+export interface EmailForwardingRow {
+  did: string;
+  forward_to: string;
+  verified: number;
+  verification_token: string | null;
+  created_at: string;
+}
+
+export async function upsertEmailForwarding(env: Env, row: Omit<EmailForwardingRow, "verified"> & { verified?: number }): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO email_forwarding (did, forward_to, verified, verification_token, created_at) VALUES (?, ?, 0, ?, ?) " +
+      "ON CONFLICT(did) DO UPDATE SET forward_to = excluded.forward_to, verified = 0, verification_token = excluded.verification_token, created_at = excluded.created_at",
+  )
+    .bind(row.did, row.forward_to, row.verification_token, row.created_at)
+    .run();
+}
+
+export async function getEmailForwardingByToken(env: Env, token: string): Promise<EmailForwardingRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM email_forwarding WHERE verification_token = ?").bind(token).first<EmailForwardingRow>();
+  return row ?? null;
+}
+
+export async function markEmailForwardingVerified(env: Env, did: string): Promise<void> {
+  await env.DB.prepare("UPDATE email_forwarding SET verified = 1, verification_token = NULL WHERE did = ?").bind(did).run();
+}
+
+export async function getVerifiedForwardingByDid(env: Env, did: string): Promise<EmailForwardingRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM email_forwarding WHERE did = ? AND verified = 1").bind(did).first<EmailForwardingRow>();
+  return row ?? null;
+}
