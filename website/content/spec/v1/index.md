@@ -24,27 +24,27 @@ domain-label = 1*63(ALPHA / DIGIT / "-")
               ; an ordinary DNS label
 ```
 
-Examples: `did:guardian:larrypage:google:com`, `did:guardian:fred:example:org`, `did:guardian:ops-bot:accounts:example:com` (a subdomain registrar).
+Examples: `did:guardian:alice:example:com`, `did:guardian:fred:example:org`, `did:guardian:ops-bot:accounts:example:com` (a subdomain registrar).
 
-The identifier is **name-first**: the ward's own chosen name comes immediately after the method name, followed by the registering domain's labels in ordinary left-to-right reading order -- `larrypage`, then `google`, then `com`, reading the same way `larrypage@google.com` does. This is a deliberate choice over the reverse-DNS convention `did:web` itself popularized (`did:web:com:google` is not how `did:web` actually works, but the general reverse-label convention is common elsewhere, e.g. Java package names): reverse-label ordering earns its keep when one shared, central directory needs to prefix-group entries from many different registrars together for efficient indexing. Resolution in this method is already partitioned by registrar (§5 below) -- each registrar's own server only ever serves its own namespace, by construction, independent of how the identifier string reads -- so that benefit doesn't apply here, leaving plain readability as the deciding factor.
+The identifier is **name-first**: the ward's own chosen name comes immediately after the method name, followed by the registering domain's labels in ordinary left-to-right reading order -- `alice`, then `example`, then `com`, reading the same way `alice@example.com` does. This is a deliberate choice over the reverse-DNS convention `did:web` itself popularized (`did:web:com:example` is not how `did:web` actually works, but the general reverse-label convention is common elsewhere, e.g. Java package names): reverse-label ordering earns its keep when one shared, central directory needs to prefix-group entries from many different registrars together for efficient indexing. Resolution in this method is already partitioned by registrar (§5 below) -- each registrar's own server only ever serves its own namespace, by construction, independent of how the identifier string reads -- so that benefit doesn't apply here, leaving plain readability as the deciding factor.
 
-Names are scoped **per registrar**, not globally flat -- `did:guardian:larrypage:google:com` and `did:guardian:larrypage:deviantart:com` are two entirely separate, unrelated DIDs, each with their own keys, their own guardians, and their own independent history. This is a deliberate feature, not an accident of the domain-qualified design: it lets the same person hold genuinely different, separately-governed identities under different registrars -- a corporate identity under a board's guardianship and a personal one under no guardianship at all, say -- without the method forcing them into one unified record. Unifying two such identities later, if ever wanted, needs its own explicit mechanism; see §8's "cross-registrar identity unification" item.
+Names are scoped **per registrar**, not globally flat -- `did:guardian:alice:example:com` and `did:guardian:alice:example:net` are two entirely separate, unrelated DIDs, each with their own keys, their own guardians, and their own independent history. This is a deliberate feature, not an accident of the domain-qualified design: it lets the same person hold genuinely different, separately-governed identities under different registrars -- a corporate identity under a board's guardianship and a personal one under no guardianship at all, say -- without the method forcing them into one unified record. Unifying two such identities later, if ever wanted, needs its own explicit mechanism; see §8's "cross-registrar identity unification" item.
 
 ## 3. DID Document shape
 
-Resolving `did:guardian:larrypage:google:com` returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document:
+Resolving `did:guardian:alice:example:com` returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document:
 
 ```json
 {
   "@context": ["https://www.w3.org/ns/did/v1"],
-  "id": "did:guardian:larrypage:google:com",
+  "id": "did:guardian:alice:example:com",
   "verificationMethod": [
-    { "id": "did:guardian:larrypage:google:com#key-1", "type": "Multikey", "controller": "did:guardian:larrypage:google:com", "publicKeyMultibase": "z..." }
+    { "id": "did:guardian:alice:example:com#key-1", "type": "Multikey", "controller": "did:guardian:alice:example:com", "publicKeyMultibase": "z..." }
   ],
-  "authentication": ["did:guardian:larrypage:google:com#key-1"],
-  "assertionMethod": ["did:guardian:larrypage:google:com#key-1"],
+  "authentication": ["did:guardian:alice:example:com#key-1"],
+  "assertionMethod": ["did:guardian:alice:example:com#key-1"],
   "service": [
-    { "id": "did:guardian:larrypage:google:com#registrar", "type": "GuardianRegistrarService", "serviceEndpoint": "https://google.com" }
+    { "id": "did:guardian:alice:example:com#registrar", "type": "GuardianRegistrarService", "serviceEndpoint": "https://example.com" }
   ],
   "alsoKnownAs": []
 }
@@ -61,15 +61,15 @@ Every `did:guardian` identity is defined by an append-only, hash-chained, signed
 ```json
 {
   "type": "custodial_create",
-  "name": "larrypage",
+  "name": "alice",
   "operationalKeys": ["did:key:z6Mk..."],
   "verificationMethods": { "key-1": "did:key:z6Mk..." },
-  "services": { "registrar": { "type": "GuardianRegistrarService", "endpoint": "https://google.com" } },
-  "registrar": { "did": "did:guardian-registrar:google:com", "sig": "..." },
+  "services": { "registrar": { "type": "GuardianRegistrarService", "endpoint": "https://example.com" } },
+  "registrar": { "did": "did:guardian-registrar:example:com", "sig": "..." },
   "outgoing": [],
-  "incoming": ["did:guardian:larrypageboard:google:com"],
+  "incoming": ["did:guardian:aliceboard:example:com"],
   "prev": null,
-  "sigs": { "did:guardian:larrypageboard:google:com": "..." }
+  "sigs": { "did:guardian:aliceboard:example:com": "..." }
 }
 ```
 
@@ -165,12 +165,12 @@ One subtler, correct-but-worth-stating consequence: if a guardian's own key rota
 
 ## 5. Resolution
 
-Registrars operate independently -- there is no single, central directory for this method, unlike `did:plc`. Resolving `did:guardian:larrypage:google:com`:
+Registrars operate independently -- there is no single, central directory for this method, unlike `did:plc`. Resolving `did:guardian:alice:example:com`:
 
-1. Reconstruct the domain from the identifier's trailing labels, in order: `google.com`.
-2. `GET https://google.com/.well-known/guardian/larrypage` -- returns the current, derived DID Document (§3).
-3. `GET https://google.com/.well-known/guardian/larrypage/log` -- returns the full, timestamped operation log.
-4. `POST https://google.com/.well-known/guardian/larrypage/operations` -- submits one new signed operation.
+1. Reconstruct the domain from the identifier's trailing labels, in order: `example.com`.
+2. `GET https://example.com/.well-known/guardian/alice` -- returns the current, derived DID Document (§3).
+3. `GET https://example.com/.well-known/guardian/alice/log` -- returns the full, timestamped operation log.
+4. `POST https://example.com/.well-known/guardian/alice/operations` -- submits one new signed operation.
 
 Full validation requires replaying the entire log from genesis: checking the genesis hash matches the DID, verifying every operation's signatures against whichever keys/guardians had authority *at that point in the log*, and applying nullification rules -- the registrar's own say-so is never the root of trust, the self-certifying log is, exactly as `did:plc` already establishes for its own single directory.
 
