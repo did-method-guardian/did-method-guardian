@@ -1,0 +1,25 @@
+// zz's own deployment of this registrar -- a concrete example of a real
+// operator's config, kept alongside the generic wrangler.jsonc rather than
+// replacing it. Same code, different name/database/domain; nothing in this
+// package depends on zz specifically. Deploy with:
+//   wrangler deploy -c wrangler.zz.jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zz-guardian-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "zz-guardian", "database_id": "651d3286-cf1f-4e57-a9fb-7d237e8d8174", "migrations_dir": "migrations" }
+  ],
+  "vars": {
+    // A dedicated subdomain, not the bare zzmq.dev zone -- zzmq.dev already
+    // has two other Workers splitting it by path (zzbin-docs, zz-maintainer)
+    // and zz-maintainer's own route is a catch-all, so claiming /.well-known/
+    // guardian/*, /authorize, /token, etc. on the bare zone risks colliding
+    // with it. A subdomain sidesteps that entirely.
+    "REGISTRAR_DOMAIN": "id.zzmq.dev"
+  },
+  "routes": [
+    { "pattern": "id.zzmq.dev", "custom_domain": true }
+  ]
+}
