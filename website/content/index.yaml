@@ -10,4 +10,4 @@ hero:
     Every identity needs its own keys. Some also need a second, distinct
     kind of control: one or more guardians able to recover, revoke, or
     transfer it -- without that ever amounting to impersonation.
-  example: "did:guardian:alice:acme:example"
+  example: "did:guardian:alice:acme:com"

@@ -24,27 +24,27 @@ domain-label = 1*63(ALPHA / DIGIT / "-")
               ; an ordinary DNS label
 ```
 
-Examples: `did:guardian:alice:acme:example`, `did:guardian:fred:example:org`, `did:guardian:ops-bot:accounts:example:com` (a subdomain registrar).
+Examples: `did:guardian:alice:acme:com`, `did:guardian:fred:example:org`, `did:guardian:ops-bot:accounts:example:com` (a subdomain registrar).
 
-The identifier is **name-first**: the ward's own chosen name comes immediately after the method name, followed by the registering domain's labels in ordinary left-to-right reading order -- `alice`, then `acme`, then `example`, reading the same way `alice@acme.example` does. This is a deliberate choice over the reverse-DNS convention `did:web` itself popularized (`did:web:example:acme` is not how `did:web` actually works, but the general reverse-label convention is common elsewhere, e.g. Java package names): reverse-label ordering earns its keep when one shared, central directory needs to prefix-group entries from many different registrars together for efficient indexing. Resolution in this method is already partitioned by registrar (§5 below) -- each registrar's own server only ever serves its own namespace, by construction, independent of how the identifier string reads -- so that benefit doesn't apply here, leaving plain readability as the deciding factor.
+The identifier is **name-first**: the ward's own chosen name comes immediately after the method name, followed by the registering domain's labels in ordinary left-to-right reading order -- `alice`, then `acme`, then `com`, reading the same way `alice@acme.com` does. This is a deliberate choice over the reverse-DNS convention `did:web` itself popularized (`did:web:com:acme` is not how `did:web` actually works, but the general reverse-label convention is common elsewhere, e.g. Java package names): reverse-label ordering earns its keep when one shared, central directory needs to prefix-group entries from many different registrars together for efficient indexing. Resolution in this method is already partitioned by registrar (§5 below) -- each registrar's own server only ever serves its own namespace, by construction, independent of how the identifier string reads -- so that benefit doesn't apply here, leaving plain readability as the deciding factor.
 
-Names are scoped **per registrar**, not globally flat -- and that's not just a syntax detail, it's what makes a real, common situation expressible at all. Take `did:guardian:alice:acme:example`: Alice is Acme's CEO, and a public company's own executive identity is exactly the case this method's group guardianship was built for -- Acme's board of directors is the guardian set, holding real recovery power (if Alice's key is lost or compromised, or her role simply ends) under whatever quorum Acme's own `GuardianPolicy` requires, the same governance relationship a board already has over the role, now expressed over the identity. Alice *also* keeps `did:guardian:alice:inkwell:example` -- a personal account on a hobby art-sharing site, under a completely different registrar, with no guardian at all. These are two entirely separate, unrelated DIDs: different keys, different guardians (or none), different independent history. That separation is the point, not a limitation -- Alice's corporate identity carries Acme's own governance and accountability; her personal one carries none of it and nobody at Acme can see it, let alone guard it, which is exactly why it's a separate identity rather than a second "account" hanging off the first. Unifying the two later, if Alice ever wanted to, needs its own explicit, consent-based mechanism; see §8's "cross-registrar identity unification" item -- it is deliberately not possible by default.
+Names are scoped **per registrar**, not globally flat -- and that's not just a syntax detail, it's what makes a real, common situation expressible at all. Take `did:guardian:alice:acme:com`: Alice is Acme's CEO, and a public company's own executive identity is exactly the case this method's group guardianship was built for -- Acme's board of directors is the guardian set, holding real recovery power (if Alice's key is lost or compromised, or her role simply ends) under whatever quorum Acme's own `GuardianPolicy` requires, the same governance relationship a board already has over the role, now expressed over the identity. Alice *also* keeps `did:guardian:alice:fandom:com` -- a personal account on Fandom (fan wikis and fan communities), under a completely different registrar, with no guardian at all. These are two entirely separate, unrelated DIDs: different keys, different guardians (or none), different independent history. That separation is the point, not a limitation -- Alice's corporate identity carries Acme's own governance and accountability; her personal one carries none of it and nobody at Acme can see it, let alone guard it, which is exactly why it's a separate identity rather than a second "account" hanging off the first. Unifying the two later, if Alice ever wanted to, needs its own explicit, consent-based mechanism; see §8's "cross-registrar identity unification" item -- it is deliberately not possible by default.
 
 ## 3. DID Document shape
 
-Resolving `did:guardian:alice:acme:example` returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document:
+Resolving `did:guardian:alice:acme:com` returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document:
 
 ```json
 {
   "@context": ["https://www.w3.org/ns/did/v1"],
-  "id": "did:guardian:alice:acme:example",
+  "id": "did:guardian:alice:acme:com",
   "verificationMethod": [
-    { "id": "did:guardian:alice:acme:example#key-1", "type": "Multikey", "controller": "did:guardian:alice:acme:example", "publicKeyMultibase": "z..." }
+    { "id": "did:guardian:alice:acme:com#key-1", "type": "Multikey", "controller": "did:guardian:alice:acme:com", "publicKeyMultibase": "z..." }
   ],
-  "authentication": ["did:guardian:alice:acme:example#key-1"],
-  "assertionMethod": ["did:guardian:alice:acme:example#key-1"],
+  "authentication": ["did:guardian:alice:acme:com#key-1"],
+  "assertionMethod": ["did:guardian:alice:acme:com#key-1"],
   "service": [
-    { "id": "did:guardian:alice:acme:example#registrar", "type": "GuardianRegistrarService", "serviceEndpoint": "https://acme.example" }
+    { "id": "did:guardian:alice:acme:com#registrar", "type": "GuardianRegistrarService", "serviceEndpoint": "https://acme.com" }
   ],
   "alsoKnownAs": []
 }
@@ -64,12 +64,12 @@ Every `did:guardian` identity is defined by an append-only, hash-chained, signed
   "name": "alice",
   "operationalKeys": ["did:key:z6Mk..."],
   "verificationMethods": { "key-1": "did:key:z6Mk..." },
-  "services": { "registrar": { "type": "GuardianRegistrarService", "endpoint": "https://acme.example" } },
-  "registrar": { "did": "did:guardian-registrar:acme:example", "sig": "..." },
+  "services": { "registrar": { "type": "GuardianRegistrarService", "endpoint": "https://acme.com" } },
+  "registrar": { "did": "did:guardian-registrar:acme:com", "sig": "..." },
   "outgoing": [],
-  "incoming": ["did:guardian:acme-board:acme:example"],
+  "incoming": ["did:guardian:acme-board:acme:com"],
   "prev": null,
-  "sigs": { "did:guardian:acme-board:acme:example": "..." }
+  "sigs": { "did:guardian:acme-board:acme:com": "..." }
 }
 ```
 
@@ -165,12 +165,12 @@ One subtler, correct-but-worth-stating consequence: if a guardian's own key rota
 
 ## 5. Resolution
 
-Registrars operate independently -- there is no single, central directory for this method, unlike `did:plc`. Resolving `did:guardian:alice:acme:example`:
+Registrars operate independently -- there is no single, central directory for this method, unlike `did:plc`. Resolving `did:guardian:alice:acme:com`:
 
-1. Reconstruct the domain from the identifier's trailing labels, in order: `acme.example`.
-2. `GET https://acme.example/.well-known/guardian/alice` -- returns the current, derived DID Document (§3).
-3. `GET https://acme.example/.well-known/guardian/alice/log` -- returns the full, timestamped operation log.
-4. `POST https://acme.example/.well-known/guardian/alice/operations` -- submits one new signed operation.
+1. Reconstruct the domain from the identifier's trailing labels, in order: `acme.com`.
+2. `GET https://acme.com/.well-known/guardian/alice` -- returns the current, derived DID Document (§3).
+3. `GET https://acme.com/.well-known/guardian/alice/log` -- returns the full, timestamped operation log.
+4. `POST https://acme.com/.well-known/guardian/alice/operations` -- submits one new signed operation.
 
 Full validation requires replaying the entire log from genesis: checking the genesis hash matches the DID, verifying every operation's signatures against whichever keys/guardians had authority *at that point in the log*, and applying nullification rules -- the registrar's own say-so is never the root of trust, the self-certifying log is, exactly as `did:plc` already establishes for its own single directory.
 
