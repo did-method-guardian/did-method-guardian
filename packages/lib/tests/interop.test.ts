@@ -46,7 +46,7 @@ async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boole
       if (!result.valid) return result;
       currentOperationalKeys = op.operationalKeys;
     } else if (op.type === "guardian_transfer") {
-      const result = await verifyGuardianTransfer(op, currentGuardians, resolve);
+      const result = await verifyGuardianTransfer(op, wardDid, currentGuardians, resolve);
       if (!result.valid) return result;
       currentGuardians = op.incoming;
     } else if (op.type === "guardian_relinquish") {

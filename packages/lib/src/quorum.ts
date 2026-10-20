@@ -44,8 +44,20 @@ export function meetsThreshold(
  * Telling "continuing" apart from "newly joining" requires knowing `current`;
  * `outgoing`/`incoming` alone can't distinguish them (both are just "absent
  * from outgoing, present in incoming" from that narrower view).
+ *
+ * Plus one more: when `current` is empty, this operation is establishing a
+ * guardian over a previously guardian-less (fully autonomous) ward -- the
+ * ward's own current operational key must also sign. Without this, anyone
+ * could impose guardianship on an autonomous ward unilaterally, just by
+ * having a willing incoming guardian sign; nothing would ever require the
+ * ward's own consent to acquiring oversight in the first place. Ordinary
+ * reshuffles among a ward's own already-consenting guardians don't re-
+ * require this -- the ward already accepted oversight once, this isn't
+ * re-litigated on every later transfer among those guardians.
  */
-export function requiredTransferSigners(current: Did[], outgoing: Did[], incoming: Did[]): Did[] {
+export function requiredTransferSigners(wardDid: Did, current: Did[], outgoing: Did[], incoming: Did[]): Did[] {
   const genuinelyNew = incoming.filter((d) => !current.includes(d));
-  return [...new Set([...outgoing, ...genuinelyNew])];
+  const required = [...outgoing, ...genuinelyNew];
+  if (current.length === 0) required.push(wardDid);
+  return [...new Set(required)];
 }

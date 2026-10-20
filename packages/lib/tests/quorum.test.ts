@@ -61,7 +61,7 @@ test("ineligible or duplicate signers are never double-counted", () => {
 
 test("requiredTransferSigners: continuing guardians (in current and incoming, not in outgoing) are excluded", () => {
   // current = [troy, jane]; troy steps down, jane continues, caleb joins.
-  const signers = requiredTransferSigners(["troy", "jane"], ["troy"], ["jane", "caleb"]);
+  const signers = requiredTransferSigners("fred", ["troy", "jane"], ["troy"], ["jane", "caleb"]);
   assert.deepEqual(new Set(signers), new Set(["troy", "caleb"]), "jane continues and should not need to re-sign");
 });
 
@@ -69,11 +69,18 @@ test("requiredTransferSigners: naming someone in both outgoing and incoming stil
   // Listing a party in `outgoing` is itself a claim they're being removed,
   // so their consent is still required even if `incoming` re-adds them --
   // this isn't the "jane continues" case, it's "jane is removed and rejoins".
-  const signers = requiredTransferSigners(["troy", "jane"], ["troy", "jane"], ["jane", "caleb"]);
+  const signers = requiredTransferSigners("fred", ["troy", "jane"], ["troy", "jane"], ["jane", "caleb"]);
   assert.deepEqual(new Set(signers), new Set(["troy", "jane", "caleb"]));
 });
 
-test("requiredTransferSigners: genesis case (current and outgoing both empty) requires only incoming", () => {
-  const signers = requiredTransferSigners([], [], ["board-a", "board-b"]);
-  assert.deepEqual(new Set(signers), new Set(["board-a", "board-b"]));
+test("requiredTransferSigners: establishing from zero (current empty) requires incoming AND the ward's own consent", () => {
+  const signers = requiredTransferSigners("fred", [], [], ["board-a", "board-b"]);
+  assert.deepEqual(new Set(signers), new Set(["board-a", "board-b", "fred"]), "the ward itself must also consent to acquiring a guardian where it had none");
+});
+
+test("requiredTransferSigners: ordinary reshuffle among already-consenting guardians does not re-require the ward", () => {
+  // current is non-empty, so this is NOT the zero-to-one transition --
+  // the ward already accepted oversight once and isn't re-asked here.
+  const signers = requiredTransferSigners("fred", ["troy"], ["troy"], ["caleb"]);
+  assert.ok(!signers.includes("fred"), "ward consent is only required when establishing guardianship from zero");
 });

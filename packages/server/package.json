@@ -1,0 +1,24 @@
+{
+  "name": "@did-guardian/server",
+  "version": "0.1.0",
+  "description": "Reference registrar + OIDC provider + email proxy server for the did:guardian method -- a Cloudflare Worker anyone can self-host on their own domain",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply guardian-server --local",
+    "db:migrate:remote": "wrangler d1 migrations apply guardian-server --remote",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@did-guardian/lib": "file:../lib"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0",
+    "@cloudflare/workers-types": "^4.0.0"
+  },
+  "license": "MIT OR Apache-2.0"
+}

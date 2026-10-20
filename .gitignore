@@ -7,3 +7,4 @@ dist/
 website/.builds/
 website/builds/
 .wrangler/
+.dev.vars

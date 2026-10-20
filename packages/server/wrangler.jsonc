@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "guardian-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  // This name/database_id pair is a placeholder -- each operator (including
+  // zz's own deployment) creates their own D1 database and fills in a real
+  // database_id here; see README.md for the full self-hosting setup.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "guardian-server", "database_id": "REPLACE_ME", "migrations_dir": "migrations" }
+  ],
+  "vars": {
+    "REGISTRAR_DOMAIN": "guardianspec.org"
+  }
+}

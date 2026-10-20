@@ -11,8 +11,13 @@ import type {
   Operation,
 } from "./types.js";
 
-/** Resolves a DID's current, authoritative public key(s) at verification time -- live, never a frozen snapshot (spec §4.8). */
-export type KeyResolver = (did: Did) => string[] | undefined;
+/**
+ * Resolves a DID's current, authoritative public key(s) at verification time
+ * -- live, never a frozen snapshot (spec §4.8). Async: a real deployment
+ * resolves external DIDs over the network (spec §5), not just from local
+ * state.
+ */
+export type KeyResolver = (did: Did) => string[] | undefined | Promise<string[] | undefined>;
 
 function payloadWithoutSig<T extends { sig?: unknown; sigs?: unknown }>(op: T): Omit<T, "sig" | "sigs"> {
   const { sig: _sig, sigs: _sigs, ...rest } = op;
@@ -21,7 +26,7 @@ function payloadWithoutSig<T extends { sig?: unknown; sigs?: unknown }>(op: T): 
 
 /** Verifies one party's signature over an operation, checked against that party's own resolved keys. */
 export async function verifySignerSig(op: Operation, signerDid: Did, sigB64: string, resolve: KeyResolver): Promise<boolean> {
-  const keys = resolve(signerDid);
+  const keys = await resolve(signerDid);
   if (!keys || keys.length === 0) return false;
   const payload = payloadWithoutSig(op as any);
   for (const pk of keys) {
@@ -83,10 +88,11 @@ export async function verifyCustodialRotate(op: CustodialRotateOp, currentOperat
 
 export async function signGuardianTransfer(
   partial: Omit<GuardianTransferOp, "sigs">,
+  wardDid: Did,
   currentGuardians: Did[],
   signerKeys: Record<Did, string>,
 ): Promise<GuardianTransferOp> {
-  const required = requiredTransferSigners(currentGuardians, partial.outgoing, partial.incoming);
+  const required = requiredTransferSigners(wardDid, currentGuardians, partial.outgoing, partial.incoming);
   const payload = payloadWithoutSig(partial as any);
   const sigs: Record<Did, string> = {};
   for (const did of required) {
@@ -99,14 +105,15 @@ export async function signGuardianTransfer(
 
 export async function verifyGuardianTransfer(
   op: GuardianTransferOp,
+  wardDid: Did,
   currentGuardians: Did[],
   resolve: KeyResolver,
 ): Promise<{ valid: boolean; reason?: string }> {
-  if (op.outgoing.length === 0) return { valid: false, reason: "outgoing must be non-empty (use guardian_relinquish for full removal)" };
+  if (op.incoming.length === 0) return { valid: false, reason: "incoming must be non-empty (use guardian_relinquish for full removal)" };
   if (!op.outgoing.every((d) => currentGuardians.includes(d))) {
     return { valid: false, reason: "outgoing includes a party that is not a current guardian" };
   }
-  const required = requiredTransferSigners(currentGuardians, op.outgoing, op.incoming);
+  const required = requiredTransferSigners(wardDid, currentGuardians, op.outgoing, op.incoming);
   for (const did of required) {
     const sig = op.sigs[did];
     if (!sig || !(await verifySignerSig(op, did, sig, resolve))) {

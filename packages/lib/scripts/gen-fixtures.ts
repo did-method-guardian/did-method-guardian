@@ -95,6 +95,7 @@ const impostor = await generateKeypair();
 
   const transfer = await signGuardianTransfer(
     { type: "guardian_transfer", outgoing: ["did:guardian:board-a:example:com"], incoming: ["did:guardian:board-b:example:com", "did:guardian:board-c:example:com"], prev: rotateCid },
+    wardDid,
     ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
     { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-c:example:com": boardC.privateKey },
   );
@@ -208,7 +209,8 @@ const impostor = await generateKeypair();
   );
   const genesisCid = await cidFor(genesis);
   const transfer = await signGuardianTransfer(
-    { type: "guardian_transfer", outgoing: ["did:guardian:jane:example:com"], incoming: [], prev: genesisCid },
+    { type: "guardian_transfer", outgoing: ["did:guardian:jane:example:com"], incoming: ["did:guardian:troy:example:com"], prev: genesisCid },
+    wardDid,
     ["did:guardian:troy:example:com", "did:guardian:jane:example:com"],
     { "did:guardian:jane:example:com": boardA.privateKey }, // troy forges jane's own removal signature
   );
