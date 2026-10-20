@@ -38,65 +38,65 @@ function write(
 }
 
 const wardDid = "did:guardian:fred:example:com";
-const ward = generateKeypair();
-const boardA = generateKeypair();
-const boardB = generateKeypair();
-const impostor = generateKeypair();
+const ward = await generateKeypair();
+const boardA = await generateKeypair();
+const boardB = await generateKeypair();
+const impostor = await generateKeypair();
 
 // --- valid: genesis with a two-member initial guardian set ---
 {
-  const genesis = signCustodialCreate(
+  const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
       name: "fred",
-      operationalKeys: [ward.publicKeyPem],
-      verificationMethods: { "key-1": ward.publicKeyPem },
+      operationalKeys: [ward.publicKey],
+      verificationMethods: { "key-1": ward.publicKey },
       services: {},
       outgoing: [],
       incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": boardA.privateKeyPem, "did:guardian:board-b:example:com": boardB.privateKeyPem },
+    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
   );
   write(
     "valid",
     "genesis_two_guardians",
-    [{ cid: cidFor(genesis), op: genesis }],
+    [{ cid: await cidFor(genesis), op: genesis }],
     "Genesis establishing a two-member guardian set, both consenting.",
-    { "did:guardian:board-a:example:com": boardA.publicKeyPem, "did:guardian:board-b:example:com": boardB.publicKeyPem },
+    { "did:guardian:board-a:example:com": boardA.publicKey, "did:guardian:board-b:example:com": boardB.publicKey },
     "accept",
   );
 }
 
 // --- valid: genesis -> rotate -> guardian_transfer (board-a steps down, board-c joins) ---
 {
-  const boardC = generateKeypair();
-  const genesis = signCustodialCreate(
+  const boardC = await generateKeypair();
+  const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
       name: "fred",
-      operationalKeys: [ward.publicKeyPem],
-      verificationMethods: { "key-1": ward.publicKeyPem },
+      operationalKeys: [ward.publicKey],
+      verificationMethods: { "key-1": ward.publicKey },
       services: {},
       outgoing: [],
       incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": boardA.privateKeyPem, "did:guardian:board-b:example:com": boardB.privateKeyPem },
+    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
   );
-  const genesisCid = cidFor(genesis);
+  const genesisCid = await cidFor(genesis);
 
-  const newWardKey = generateKeypair();
-  const rotate = signCustodialRotate(
-    { type: "custodial_rotate", operationalKeys: [newWardKey.publicKeyPem], verificationMethods: { "key-1": newWardKey.publicKeyPem }, services: {}, prev: genesisCid },
-    ward.privateKeyPem,
+  const newWardKey = await generateKeypair();
+  const rotate = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: [newWardKey.publicKey], verificationMethods: { "key-1": newWardKey.publicKey }, services: {}, prev: genesisCid },
+    ward.privateKey,
   );
-  const rotateCid = cidFor(rotate);
+  const rotateCid = await cidFor(rotate);
 
-  const transfer = signGuardianTransfer(
+  const transfer = await signGuardianTransfer(
     { type: "guardian_transfer", outgoing: ["did:guardian:board-a:example:com"], incoming: ["did:guardian:board-b:example:com", "did:guardian:board-c:example:com"], prev: rotateCid },
     ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
-    { "did:guardian:board-a:example:com": boardA.privateKeyPem, "did:guardian:board-c:example:com": boardC.privateKeyPem },
+    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-c:example:com": boardC.privateKey },
   );
 
   write(
@@ -105,13 +105,13 @@ const impostor = generateKeypair();
     [
       { cid: genesisCid, op: genesis },
       { cid: rotateCid, op: rotate },
-      { cid: cidFor(transfer), op: transfer },
+      { cid: await cidFor(transfer), op: transfer },
     ],
     "Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.",
     {
-      "did:guardian:board-a:example:com": boardA.publicKeyPem,
-      "did:guardian:board-b:example:com": boardB.publicKeyPem,
-      "did:guardian:board-c:example:com": boardC.publicKeyPem,
+      "did:guardian:board-a:example:com": boardA.publicKey,
+      "did:guardian:board-b:example:com": boardB.publicKey,
+      "did:guardian:board-c:example:com": boardC.publicKey,
     },
     "accept",
   );
@@ -119,117 +119,117 @@ const impostor = generateKeypair();
 
 // --- valid: guardian_relinquish reaching full autonomy ---
 {
-  const genesis = signCustodialCreate(
+  const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
       name: "fred",
-      operationalKeys: [ward.publicKeyPem],
-      verificationMethods: { "key-1": ward.publicKeyPem },
+      operationalKeys: [ward.publicKey],
+      verificationMethods: { "key-1": ward.publicKey },
       services: {},
       outgoing: [],
       incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": boardA.privateKeyPem, "did:guardian:board-b:example:com": boardB.privateKeyPem },
+    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
   );
-  const genesisCid = cidFor(genesis);
-  const relinquish = signGuardianRelinquish(
+  const genesisCid = await cidFor(genesis);
+  const relinquish = await signGuardianRelinquish(
     { type: "guardian_relinquish", prev: genesisCid },
-    { "did:guardian:board-a:example:com": boardA.privateKeyPem, "did:guardian:board-b:example:com": boardB.privateKeyPem },
+    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
     ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
   );
   write(
     "valid",
     "guardian_relinquish_unanimous",
-    [{ cid: genesisCid, op: genesis }, { cid: cidFor(relinquish), op: relinquish }],
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(relinquish), op: relinquish }],
     "Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.",
-    { "did:guardian:board-a:example:com": boardA.publicKeyPem, "did:guardian:board-b:example:com": boardB.publicKeyPem },
+    { "did:guardian:board-a:example:com": boardA.publicKey, "did:guardian:board-b:example:com": boardB.publicKey },
     "accept",
   );
 }
 
 // --- valid: tombstone, any single current key ---
 {
-  const genesis = signCustodialCreate(
-    { type: "custodial_create", name: "fred", operationalKeys: [ward.publicKeyPem], verificationMethods: {}, services: {}, outgoing: [], incoming: [], prev: null },
+  const genesis = await signCustodialCreate(
+    { type: "custodial_create", name: "fred", operationalKeys: [ward.publicKey], verificationMethods: {}, services: {}, outgoing: [], incoming: [], prev: null },
     {},
   );
-  const genesisCid = cidFor(genesis);
-  const tombstone = signCustodialTombstone({ type: "custodial_tombstone", prev: genesisCid }, { [wardDid]: ward.privateKeyPem }, [wardDid]);
+  const genesisCid = await cidFor(genesis);
+  const tombstone = await signCustodialTombstone({ type: "custodial_tombstone", prev: genesisCid }, { [wardDid]: ward.privateKey }, [wardDid]);
   write(
     "valid",
     "tombstone_any_single_key",
-    [{ cid: genesisCid, op: genesis }, { cid: cidFor(tombstone), op: tombstone }],
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(tombstone), op: tombstone }],
     "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
-    { [wardDid]: ward.publicKeyPem },
+    { [wardDid]: ward.publicKey },
     "accept",
   );
 }
 
 // --- invalid: forged guardian claim (genesis names a guardian who never signed) ---
 {
-  const genesis = signCustodialCreate(
+  const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
       name: "puppet",
-      operationalKeys: [ward.publicKeyPem],
+      operationalKeys: [ward.publicKey],
       verificationMethods: {},
       services: {},
       outgoing: [],
       incoming: ["did:guardian:board-a:example:com"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": impostor.privateKeyPem }, // forged: not board-a's real key
+    { "did:guardian:board-a:example:com": impostor.privateKey }, // forged: not board-a's real key
   );
   write(
     "invalid",
     "forged_guardian_claim",
-    [{ cid: cidFor(genesis), op: genesis }],
+    [{ cid: await cidFor(genesis), op: genesis }],
     "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
-    { "did:guardian:board-a:example:com": boardA.publicKeyPem }, // the REAL board-a key -- the fixture's signature won't match it
+    { "did:guardian:board-a:example:com": boardA.publicKey }, // the REAL board-a key -- the fixture's signature won't match it
     "reject",
   );
 }
 
 // --- invalid: guardian_transfer missing the removed guardian's own signature ---
 {
-  const genesis = signCustodialCreate(
+  const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
       name: "fred",
-      operationalKeys: [ward.publicKeyPem],
+      operationalKeys: [ward.publicKey],
       verificationMethods: {},
       services: {},
       outgoing: [],
       incoming: ["did:guardian:troy:example:com", "did:guardian:jane:example:com"],
       prev: null,
     },
-    { "did:guardian:troy:example:com": boardA.privateKeyPem, "did:guardian:jane:example:com": boardB.privateKeyPem },
+    { "did:guardian:troy:example:com": boardA.privateKey, "did:guardian:jane:example:com": boardB.privateKey },
   );
-  const genesisCid = cidFor(genesis);
-  const transfer = signGuardianTransfer(
+  const genesisCid = await cidFor(genesis);
+  const transfer = await signGuardianTransfer(
     { type: "guardian_transfer", outgoing: ["did:guardian:jane:example:com"], incoming: [], prev: genesisCid },
     ["did:guardian:troy:example:com", "did:guardian:jane:example:com"],
-    { "did:guardian:jane:example:com": boardA.privateKeyPem }, // troy forges jane's own removal signature
+    { "did:guardian:jane:example:com": boardA.privateKey }, // troy forges jane's own removal signature
   );
   write(
     "invalid",
     "unilateral_coguardian_removal",
-    [{ cid: genesisCid, op: genesis }, { cid: cidFor(transfer), op: transfer }],
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(transfer), op: transfer }],
     "REJECT: troy attempts to remove jane from a two-guardian set, but the signature claimed as jane's was produced with troy's own key, not jane's.",
-    { "did:guardian:troy:example:com": boardA.publicKeyPem, "did:guardian:jane:example:com": boardB.publicKeyPem },
+    { "did:guardian:troy:example:com": boardA.publicKey, "did:guardian:jane:example:com": boardB.publicKey },
     "reject",
   );
 }
 
 // --- invalid: quorum not met (majority required, only one of three signs) ---
 {
-  const boardC = generateKeypair();
-  const genesis = signCustodialCreate(
+  const boardC = await generateKeypair();
+  const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
       name: "fred",
-      operationalKeys: [ward.publicKeyPem],
+      operationalKeys: [ward.publicKey],
       verificationMethods: {},
       services: {},
       outgoing: [],
@@ -237,28 +237,28 @@ const impostor = generateKeypair();
       prev: null,
     },
     {
-      "did:guardian:board-a:example:com": boardA.privateKeyPem,
-      "did:guardian:board-b:example:com": boardB.privateKeyPem,
-      "did:guardian:board-c:example:com": boardC.privateKeyPem,
+      "did:guardian:board-a:example:com": boardA.privateKey,
+      "did:guardian:board-b:example:com": boardB.privateKey,
+      "did:guardian:board-c:example:com": boardC.privateKey,
     },
   );
-  const genesisCid = cidFor(genesis);
+  const genesisCid = await cidFor(genesis);
   // Only board-a signs the relinquish; default removal/relinquish bar is
   // majority (2 of 3) -- this must NOT be accepted.
-  const relinquish = signGuardianRelinquish(
+  const relinquish = await signGuardianRelinquish(
     { type: "guardian_relinquish", prev: genesisCid },
-    { "did:guardian:board-a:example:com": boardA.privateKeyPem },
+    { "did:guardian:board-a:example:com": boardA.privateKey },
     ["did:guardian:board-a:example:com"],
   );
   write(
     "invalid",
     "relinquish_quorum_not_met",
-    [{ cid: genesisCid, op: genesis }, { cid: cidFor(relinquish), op: relinquish }],
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(relinquish), op: relinquish }],
     "REJECT: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.",
     {
-      "did:guardian:board-a:example:com": boardA.publicKeyPem,
-      "did:guardian:board-b:example:com": boardB.publicKeyPem,
-      "did:guardian:board-c:example:com": boardC.publicKeyPem,
+      "did:guardian:board-a:example:com": boardA.publicKey,
+      "did:guardian:board-b:example:com": boardB.publicKey,
+      "did:guardian:board-c:example:com": boardC.publicKey,
     },
     "reject",
   );

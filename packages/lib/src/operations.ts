@@ -20,74 +20,88 @@ function payloadWithoutSig<T extends { sig?: unknown; sigs?: unknown }>(op: T): 
 }
 
 /** Verifies one party's signature over an operation, checked against that party's own resolved keys. */
-export function verifySignerSig(op: Operation, signerDid: Did, sigB64: string, resolve: KeyResolver): boolean {
+export async function verifySignerSig(op: Operation, signerDid: Did, sigB64: string, resolve: KeyResolver): Promise<boolean> {
   const keys = resolve(signerDid);
   if (!keys || keys.length === 0) return false;
   const payload = payloadWithoutSig(op as any);
-  return keys.some((pk) => verifyPayload(payload, sigB64, pk));
+  for (const pk of keys) {
+    if (await verifyPayload(payload, sigB64, pk)) return true;
+  }
+  return false;
 }
 
-export function signCustodialCreate(
+async function filterValidSigners(op: Operation, dids: Did[], resolve: KeyResolver, sigs: Record<Did, string>): Promise<Did[]> {
+  const valid: Did[] = [];
+  for (const did of dids) {
+    const sig = sigs[did];
+    if (sig && (await verifySignerSig(op, did, sig, resolve))) valid.push(did);
+  }
+  return valid;
+}
+
+export async function signCustodialCreate(
   partial: Omit<CustodialCreateOp, "sigs">,
-  incomingKeys: Record<Did, string>, // privateKeyPem per `incoming` DID
-): CustodialCreateOp {
+  incomingKeys: Record<Did, string>, // private key per `incoming` DID
+): Promise<CustodialCreateOp> {
   const payload = payloadWithoutSig(partial as any);
   const sigs: Record<Did, string> = {};
   for (const did of partial.incoming) {
     const pk = incomingKeys[did];
     if (!pk) throw new Error(`missing private key for incoming guardian ${did}`);
-    sigs[did] = signPayload(payload, pk);
+    sigs[did] = await signPayload(payload, pk);
   }
   return { ...partial, sigs };
 }
 
-export function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyResolver): { valid: boolean; reason?: string } {
+export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
   if (op.prev !== null) return { valid: false, reason: "genesis must have prev: null" };
   for (const did of op.incoming) {
     const sig = op.sigs[did];
-    if (!sig || !verifySignerSig(op, did, sig, resolve)) {
+    if (!sig || !(await verifySignerSig(op, did, sig, resolve))) {
       return { valid: false, reason: `missing or invalid signature from incoming guardian ${did}` };
     }
   }
   if (op.registrar) {
-    const ok = verifySignerSig(op, op.registrar.did, op.registrar.sig, resolve);
+    const ok = await verifySignerSig(op, op.registrar.did, op.registrar.sig, resolve);
     if (!ok) return { valid: false, reason: "invalid registrar attestation signature" };
   }
   return { valid: true };
 }
 
-export function signCustodialRotate(partial: Omit<CustodialRotateOp, "sig">, privateKeyPem: string): CustodialRotateOp {
+export async function signCustodialRotate(partial: Omit<CustodialRotateOp, "sig">, privateKey: string): Promise<CustodialRotateOp> {
   const payload = payloadWithoutSig(partial as any);
-  return { ...partial, sig: signPayload(payload, privateKeyPem) };
+  return { ...partial, sig: await signPayload(payload, privateKey) };
 }
 
-export function verifyCustodialRotate(op: CustodialRotateOp, currentOperationalKeys: string[], resolve: KeyResolver): { valid: boolean; reason?: string } {
+export async function verifyCustodialRotate(op: CustodialRotateOp, currentOperationalKeys: string[], resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
   const payload = payloadWithoutSig(op as any);
-  const ok = currentOperationalKeys.some((pk) => verifyPayload(payload, op.sig, pk));
-  return ok ? { valid: true } : { valid: false, reason: "rotation not signed by a current operational key" };
+  for (const pk of currentOperationalKeys) {
+    if (await verifyPayload(payload, op.sig, pk)) return { valid: true };
+  }
+  return { valid: false, reason: "rotation not signed by a current operational key" };
 }
 
-export function signGuardianTransfer(
+export async function signGuardianTransfer(
   partial: Omit<GuardianTransferOp, "sigs">,
   currentGuardians: Did[],
   signerKeys: Record<Did, string>,
-): GuardianTransferOp {
+): Promise<GuardianTransferOp> {
   const required = requiredTransferSigners(currentGuardians, partial.outgoing, partial.incoming);
   const payload = payloadWithoutSig(partial as any);
   const sigs: Record<Did, string> = {};
   for (const did of required) {
     const pk = signerKeys[did];
     if (!pk) throw new Error(`missing private key for required signer ${did}`);
-    sigs[did] = signPayload(payload, pk);
+    sigs[did] = await signPayload(payload, pk);
   }
   return { ...partial, sigs };
 }
 
-export function verifyGuardianTransfer(
+export async function verifyGuardianTransfer(
   op: GuardianTransferOp,
   currentGuardians: Did[],
   resolve: KeyResolver,
-): { valid: boolean; reason?: string } {
+): Promise<{ valid: boolean; reason?: string }> {
   if (op.outgoing.length === 0) return { valid: false, reason: "outgoing must be non-empty (use guardian_relinquish for full removal)" };
   if (!op.outgoing.every((d) => currentGuardians.includes(d))) {
     return { valid: false, reason: "outgoing includes a party that is not a current guardian" };
@@ -95,59 +109,59 @@ export function verifyGuardianTransfer(
   const required = requiredTransferSigners(currentGuardians, op.outgoing, op.incoming);
   for (const did of required) {
     const sig = op.sigs[did];
-    if (!sig || !verifySignerSig(op, did, sig, resolve)) {
+    if (!sig || !(await verifySignerSig(op, did, sig, resolve))) {
       return { valid: false, reason: `missing or invalid signature from required party ${did}` };
     }
   }
   return { valid: true };
 }
 
-export function signGuardianRelinquish(partial: Omit<GuardianRelinquishOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): GuardianRelinquishOp {
+export async function signGuardianRelinquish(partial: Omit<GuardianRelinquishOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<GuardianRelinquishOp> {
   const payload = payloadWithoutSig(partial as any);
   const sigs: Record<Did, string> = {};
   for (const did of signers) {
     const pk = signerKeys[did];
     if (!pk) throw new Error(`missing private key for guardian ${did}`);
-    sigs[did] = signPayload(payload, pk);
+    sigs[did] = await signPayload(payload, pk);
   }
   return { ...partial, sigs };
 }
 
-export function verifyGuardianRelinquish(
+export async function verifyGuardianRelinquish(
   op: GuardianRelinquishOp,
   currentGuardians: Did[],
   removalThreshold: GuardianPolicy["removal_threshold"],
   resolve: KeyResolver,
-): { valid: boolean; reason?: string } {
-  const validSigners = currentGuardians.filter((did) => op.sigs[did] && verifySignerSig(op, did, op.sigs[did], resolve));
+): Promise<{ valid: boolean; reason?: string }> {
+  const validSigners = await filterValidSigners(op, currentGuardians, resolve, op.sigs);
   if (!meetsThreshold(removalThreshold, validSigners, currentGuardians)) {
     return { valid: false, reason: "removal_threshold not met for guardian_relinquish" };
   }
   return { valid: true };
 }
 
-export function signCustodialTombstone(partial: Omit<CustodialTombstoneOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): CustodialTombstoneOp {
+export async function signCustodialTombstone(partial: Omit<CustodialTombstoneOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<CustodialTombstoneOp> {
   const payload = payloadWithoutSig(partial as any);
   const sigs: Record<Did, string> = {};
   for (const did of signers) {
-    sigs[did] = signPayload(payload, signerKeys[did]);
+    sigs[did] = await signPayload(payload, signerKeys[did]);
   }
   return { ...partial, sigs };
 }
 
-export function verifyCustodialTombstone(
+export async function verifyCustodialTombstone(
   op: CustodialTombstoneOp,
   eligibleSigners: Did[], // operational key holder(s) treated as their own "did" for this check, plus current guardians
   tombstoneThreshold: GuardianPolicy["tombstone_threshold"],
   resolve: KeyResolver,
-): { valid: boolean; reason?: string } {
-  const validSigners = eligibleSigners.filter((did) => op.sigs[did] && verifySignerSig(op, did, op.sigs[did], resolve));
+): Promise<{ valid: boolean; reason?: string }> {
+  const validSigners = await filterValidSigners(op, eligibleSigners, resolve, op.sigs);
   if (!meetsThreshold(tombstoneThreshold, validSigners, eligibleSigners)) {
     return { valid: false, reason: "tombstone_threshold not met" };
   }
   return { valid: true };
 }
 
-export function cidFor(op: Operation): string {
+export async function cidFor(op: Operation): Promise<string> {
   return contentRef(op);
 }

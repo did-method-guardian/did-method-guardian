@@ -2,16 +2,16 @@
   "note": "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:fred:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJ-RcB6jevdouc9c30TdsHavBzJ6u2sfnc7F3WqAauxEsegwGgnDzptc5WfGRYNPxgf7K8ZUGjNuVt3978Acwew"
   },
   "log": [
     {
-      "cid": "81e5ef78e97454f76a7f49700df350df13ffefcb564daf66c68627a4001f3301",
+      "cid": "2b13f01458cc9363e16eba3632e2ef7467ec7b99b15ba93a7f9e79c3bcabcda7",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJ-RcB6jevdouc9c30TdsHavBzJ6u2sfnc7F3WqAauxEsegwGgnDzptc5WfGRYNPxgf7K8ZUGjNuVt3978Acwew"
         ],
         "verificationMethods": {},
         "services": {},
@@ -22,12 +22,12 @@
       }
     },
     {
-      "cid": "0555cdd25f6a196d01fc1112e97c80e364c652b62aafdd75f8edbda4af548626",
+      "cid": "a44cc382a6927d5f8081f581837b60d0f31a7bd0637096a94ecbbd5b0cd01e51",
       "op": {
         "type": "custodial_tombstone",
-        "prev": "81e5ef78e97454f76a7f49700df350df13ffefcb564daf66c68627a4001f3301",
+        "prev": "2b13f01458cc9363e16eba3632e2ef7467ec7b99b15ba93a7f9e79c3bcabcda7",
         "sigs": {
-          "did:guardian:fred:example:com": "MEUCIGiS49K7APpxBTh1miBPgHD3AAsSXqL2jGLak0Nlt6EuAiEAmjMJ9FUhTTviKGfjRFXXOKr9T_gWH50ZVN8PeZdyL40"
+          "did:guardian:fred:example:com": "-1tYL2oEYmfviuROv-oVG0GV7gl39rqxmzYrDXG8LAchVNrtvKIoZwp8VBudPEpGxo6n9TMKhAmzMwrWGi7u_w"
         }
       }
     }

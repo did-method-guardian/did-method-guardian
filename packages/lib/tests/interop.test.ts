@@ -29,7 +29,7 @@ function loadFixtures(subdir: "valid" | "invalid"): { name: string; fixture: Fix
 }
 
 /** Verifies every operation in a fixture's log in order, stopping at (and reporting) the first failure. */
-function verifyLog(fixture: Fixture, wardDid: Did): { valid: boolean; reason?: string } {
+async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boolean; reason?: string }> {
   const resolve: KeyResolver = (did) => (fixture.known_keys[did] ? [fixture.known_keys[did]] : undefined);
   let currentGuardians: Did[] = [];
   let currentOperationalKeys: string[] = [];
@@ -37,25 +37,25 @@ function verifyLog(fixture: Fixture, wardDid: Did): { valid: boolean; reason?: s
   for (const entry of fixture.log) {
     const op = entry.op;
     if (op.type === "custodial_create") {
-      const result = verifyCustodialCreate(op, resolve);
+      const result = await verifyCustodialCreate(op, resolve);
       if (!result.valid) return result;
       currentGuardians = op.incoming;
       currentOperationalKeys = op.operationalKeys;
     } else if (op.type === "custodial_rotate") {
-      const result = verifyCustodialRotate(op, currentOperationalKeys, resolve);
+      const result = await verifyCustodialRotate(op, currentOperationalKeys, resolve);
       if (!result.valid) return result;
       currentOperationalKeys = op.operationalKeys;
     } else if (op.type === "guardian_transfer") {
-      const result = verifyGuardianTransfer(op, currentGuardians, resolve);
+      const result = await verifyGuardianTransfer(op, currentGuardians, resolve);
       if (!result.valid) return result;
       currentGuardians = op.incoming;
     } else if (op.type === "guardian_relinquish") {
-      const result = verifyGuardianRelinquish(op, currentGuardians, DEFAULT_GUARDIAN_POLICY.removal_threshold, resolve);
+      const result = await verifyGuardianRelinquish(op, currentGuardians, DEFAULT_GUARDIAN_POLICY.removal_threshold, resolve);
       if (!result.valid) return result;
       currentGuardians = [];
     } else if (op.type === "custodial_tombstone") {
       const eligible = [wardDid, ...currentGuardians];
-      const result = verifyCustodialTombstone(op, eligible, DEFAULT_GUARDIAN_POLICY.tombstone_threshold, resolve);
+      const result = await verifyCustodialTombstone(op, eligible, DEFAULT_GUARDIAN_POLICY.tombstone_threshold, resolve);
       if (!result.valid) return result;
     }
   }
@@ -63,8 +63,8 @@ function verifyLog(fixture: Fixture, wardDid: Did): { valid: boolean; reason?: s
 }
 
 for (const { name, fixture } of loadFixtures("valid")) {
-  test(`valid fixture accepted: ${name}`, () => {
-    const result = verifyLog(fixture, "did:guardian:fred:example:com");
+  test(`valid fixture accepted: ${name}`, async () => {
+    const result = await verifyLog(fixture, "did:guardian:fred:example:com");
     assert.equal(result.valid, true, `${fixture.note} -- ${result.reason ?? ""}`);
   });
 
@@ -75,8 +75,8 @@ for (const { name, fixture } of loadFixtures("valid")) {
 }
 
 for (const { name, fixture } of loadFixtures("invalid")) {
-  test(`invalid fixture rejected: ${name}`, () => {
-    const result = verifyLog(fixture, "did:guardian:fred:example:com");
+  test(`invalid fixture rejected: ${name}`, async () => {
+    const result = await verifyLog(fixture, "did:guardian:fred:example:com");
     assert.equal(result.valid, false, `expected rejection (${fixture.note}) but verification passed`);
   });
 }

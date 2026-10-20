@@ -2,21 +2,21 @@
   "note": "Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1aNhs8IaVp2eMxcmKK+4mn89yyJ3\njs/9oLnM1nVO3CcwnozaZ0fxrBtIb0jgVXa4qZjXWZx0wBtt/WtO5wRaFQ==\n-----END PUBLIC KEY-----\n",
-    "did:guardian:board-b:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEkIA1EscJWz6iBjkDW/xyxpOX2z66\n3RB0tE0L3NgIuUazsqYp47/juoCqs8z86DypticcDclFP4YbntUTM/NoHw==\n-----END PUBLIC KEY-----\n",
-    "did:guardian:board-c:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqtehO+E9qmPIfAwSQOTcXLpdAAz/\n7WonrxIFfEefiLD0E43CXC1ZaMK+VHywOyZJuR+V3s4CJaiKNBpGJyR61A==\n-----END PUBLIC KEY-----\n"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4otCfA_xiAc1ETgktyxDhA1HnoNRWxIjYAGyKxnkga9QhQYcTipU4MyTXhmI3LDMUEB9k1KZtPePgKehKmLDKw",
+    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaKCju-tFzlLjcTJZF_7QWkBMLp1ZTLNdCV54BBbSO1Jn4hj9CHOfEOeoIeC6XEc9HB2U-SCLqIIx5oMi0X9bCA",
+    "did:guardian:board-c:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEd8Gjhgnaz1RmcCEf0nrqK0FbtpVzPz2ikfeeQ6RU6g3PFddb4AN7Z_V2MJ_zmU1WDcuPYlNl_1y8xtKMD7zfWw"
   },
   "log": [
     {
-      "cid": "7ef065c3fbb7606f55e50dbfa7e067c9e1a0cd1842dbe40bdc6a93b850139a14",
+      "cid": "8d466b0a6d87bef27c58548a11cdb5114a86e04d6b550648151061a54aebdde3",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJ-RcB6jevdouc9c30TdsHavBzJ6u2sfnc7F3WqAauxEsegwGgnDzptc5WfGRYNPxgf7K8ZUGjNuVt3978Acwew"
         ],
         "verificationMethods": {
-          "key-1": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJ-RcB6jevdouc9c30TdsHavBzJ6u2sfnc7F3WqAauxEsegwGgnDzptc5WfGRYNPxgf7K8ZUGjNuVt3978Acwew"
         },
         "services": {},
         "outgoing": [],
@@ -26,28 +26,28 @@
         ],
         "prev": null,
         "sigs": {
-          "did:guardian:board-a:example:com": "MEQCIC0SnVCieBzctqJ8uXfXYeYjRKvJIkbD94L-R_TLipy0AiBxixLnJdJqG54YektvYt7NQiNrJAC1qLLX9zij6qC-wQ",
-          "did:guardian:board-b:example:com": "MEUCIQD9pcHMQvmn-E7kp-Ol77AQ3F5Lmv7EKwU2sPLp6OEq6wIgOAFeKu80XHdSh9WCnDnSPcQLYWGX2aL7dc_KoG7l-q4"
+          "did:guardian:board-a:example:com": "CY6cj0eRNpJUmPHaJMMVBkZqVY8nF3sY3RKkHnB0hlofNpRPU_y1KuFK-WYxzJ8YjJR6JIa9HfCHMHzVp5qQwA",
+          "did:guardian:board-b:example:com": "yIdO7KxL4yzJDgSS5goL0MlY9jXz_2rLmuTA8L13M6cjWTiFGlUPJNY4vC76ezBlCLV3MQ1cOfKG-sSjWucsew"
         }
       }
     },
     {
-      "cid": "adbd01c65e0e39558e03abcd783e2c7978f411854b73ccf0c86beaf0e9df7754",
+      "cid": "d85780ca9c9e0f889c74a7519c9fec50f741cd62fab74387451774effe7275ed",
       "op": {
         "type": "custodial_rotate",
         "operationalKeys": [
-          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECeTNRXtlZg+cqj+7MmJzGKML50KC\nWTtuQPT2Au+GOwdHDBUBDr7ZpJO69sXzMhs03FJsOKOCjzF+VFb6s4aPgg==\n-----END PUBLIC KEY-----\n"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmxM5wIsFD8wiTogATJ7cFbuWScvqLgQjkFqyia1lAyOK9haiQ1i_LAYFNkpqXkUZBT1YiWeuPmTI7laEZHaqng"
         ],
         "verificationMethods": {
-          "key-1": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECeTNRXtlZg+cqj+7MmJzGKML50KC\nWTtuQPT2Au+GOwdHDBUBDr7ZpJO69sXzMhs03FJsOKOCjzF+VFb6s4aPgg==\n-----END PUBLIC KEY-----\n"
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmxM5wIsFD8wiTogATJ7cFbuWScvqLgQjkFqyia1lAyOK9haiQ1i_LAYFNkpqXkUZBT1YiWeuPmTI7laEZHaqng"
         },
         "services": {},
-        "prev": "7ef065c3fbb7606f55e50dbfa7e067c9e1a0cd1842dbe40bdc6a93b850139a14",
-        "sig": "MEUCIHA_fLsWOe-Hko0oSi6gEgzypv-3gZHfDw7TzCD62bUSAiEAnRswj4-DXErZHgfMNqGMaqkhCmftQYep28aMulPU1SE"
+        "prev": "8d466b0a6d87bef27c58548a11cdb5114a86e04d6b550648151061a54aebdde3",
+        "sig": "9Kb3Y9l7YOLwgp74O3ud0RN3CLgnW_cBaaVZogiljnCqYPJyOsALw3U04Gmi5rUeQ9i2Nzu1tb9U-aU-xD_xiQ"
       }
     },
     {
-      "cid": "eafa68a59fdc661c2ca6f97811209efb4e9844f9f630e9ec9642bb8a1dfe1b1d",
+      "cid": "f084c709995dba585e6ee52a794bc569e739c13909caa3ff72d85810d36ac655",
       "op": {
         "type": "guardian_transfer",
         "outgoing": [
@@ -57,10 +57,10 @@
           "did:guardian:board-b:example:com",
           "did:guardian:board-c:example:com"
         ],
-        "prev": "adbd01c65e0e39558e03abcd783e2c7978f411854b73ccf0c86beaf0e9df7754",
+        "prev": "d85780ca9c9e0f889c74a7519c9fec50f741cd62fab74387451774effe7275ed",
         "sigs": {
-          "did:guardian:board-a:example:com": "MEUCIQCORjgv6ZuIQ_-38lFv-EMAlRlexlzXsGXH-P8tTb9DtQIga6u1ve2VQrm8jQ-oS8tSQgUfEqcInY6zdgfv_snBHRM",
-          "did:guardian:board-c:example:com": "MEQCIHaO99HoOhxy9M56HiVTLNh2ltsB2oB8X16Zxa-O6S8DAiB-YpJL5VPMk9ydEnQje7uopZLNBXcJlii-4Dht97TPhA"
+          "did:guardian:board-a:example:com": "NzjL-e1fyWcmjQkXHNFwRYKbX3pIZ9u0j_5fofA0w3hs7GhDxotBjFN3_l-2biopTWV-qd-s3_EHwXdjx54DzQ",
+          "did:guardian:board-c:example:com": "XfN5l8dAwxWKUiJa8X_3Co92tdbvqZkTkJi1Qx-ahLcoHQYsO1Vh1Nzdb611WfMTWAUfsm5_9GFTY37DtesF3Q"
         }
       }
     }

@@ -2,16 +2,16 @@
   "note": "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1aNhs8IaVp2eMxcmKK+4mn89yyJ3\njs/9oLnM1nVO3CcwnozaZ0fxrBtIb0jgVXa4qZjXWZx0wBtt/WtO5wRaFQ==\n-----END PUBLIC KEY-----\n"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4otCfA_xiAc1ETgktyxDhA1HnoNRWxIjYAGyKxnkga9QhQYcTipU4MyTXhmI3LDMUEB9k1KZtPePgKehKmLDKw"
   },
   "log": [
     {
-      "cid": "d5b3fdf52220ee7bd6c84b7e76c85342c3ee8f1ab71808c60d9c498c5fbf53ef",
+      "cid": "53ed948c6f4c22329d060c3b57e486ec2f556fa3883c545631871aad9354d271",
       "op": {
         "type": "custodial_create",
         "name": "puppet",
         "operationalKeys": [
-          "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEv1F0zL4B0khodslsliziGZykph0P\nR5d/96lqfvxbiNEvE0Vkf6LuDpE6MV4NW7wY5rgQ0UVLsZj3ijXcF1ivcw==\n-----END PUBLIC KEY-----\n"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJ-RcB6jevdouc9c30TdsHavBzJ6u2sfnc7F3WqAauxEsegwGgnDzptc5WfGRYNPxgf7K8ZUGjNuVt3978Acwew"
         ],
         "verificationMethods": {},
         "services": {},
@@ -21,7 +21,7 @@
         ],
         "prev": null,
         "sigs": {
-          "did:guardian:board-a:example:com": "MEQCIAx6ycRTAaAky7NK43dDkFmfTh6FkDiCBXskZti7lH_DAiAZp0bObCy8q6b_ibG3SUIcZeFftTA7AbPjJsH_5VoRTQ"
+          "did:guardian:board-a:example:com": "rxl3N6CGJPSg2Lub8BdoZABmg5xWqzgF-Ub-2aURMCjhFeRkZJmYsxn0r93z-1_Rp8DOYZY3gKJQv1tdiNBdYA"
         }
       }
     }
