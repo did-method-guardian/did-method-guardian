@@ -21,14 +21,23 @@
     // zz-maintainer's catch-all for exactly these paths, nothing else.
     "REGISTRAR_DOMAIN": "zzmq.dev"
   },
+  // Trailing "*" on every one of these, even ones with no further real
+  // path to match -- confirmed live, empirically: a non-wildcard exact-
+  // path route on this zone stopped matching the instant a query string
+  // was present (e.g. "zzmq.dev/authorize?client_id=..." fell through to
+  // zz-maintainer's own catch-all, while the bare "zzmq.dev/authorize"
+  // with no query matched this Worker correctly) -- a real Cloudflare
+  // routing quirk, not a theoretical one. The "*" costs nothing here
+  // (none of these paths collide with anything zz-maintainer serves) and
+  // makes every one of them query-string-safe.
   "routes": [
     { "pattern": "zzmq.dev/.well-known/guardian/*", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/.well-known/openid-configuration", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/.well-known/jwks.json", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/register", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/verify-email", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/authorize", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/token", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/userinfo", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/.well-known/openid-configuration*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/.well-known/jwks.json*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/register*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/verify-email*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/authorize*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/token*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/userinfo*", "zone_name": "zzmq.dev" }
   ]
 }
