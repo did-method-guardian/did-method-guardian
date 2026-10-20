@@ -1,13 +1,23 @@
 import type { Did } from "./types.js";
 
-/** Splits a name-first identifier into its name and registrar domain. */
-export function parseDid(did: Did): { name: string; domain: string } {
+/**
+ * Splits an identifier into its (optional) name and registrar domain.
+ * Deterministic, single parse -- no retry/fallback needed (spec §2/§5): the
+ * domain is always dot-joined and a name can never contain a dot, so
+ * "one colon after the method name" vs. "none" fully disambiguates bare
+ * (`did:guardian:acme.com`) from named (`did:guardian:alice:acme.com`).
+ */
+export function parseDid(did: Did): { name: string | null; domain: string } {
   const parts = did.split(":");
-  if (parts[0] !== "did" || parts[1] !== "guardian" || parts.length < 4) {
+  if (parts[0] !== "did" || parts[1] !== "guardian" || parts.length < 3) {
     throw new Error(`not a valid did:guardian identifier: ${did}`);
   }
-  const [, , name, ...labels] = parts;
-  return { name, domain: labels.join(".") };
+  const rest = parts.slice(2);
+  const domain = rest[rest.length - 1];
+  if (rest.length < 1 || rest.length > 2 || !domain) {
+    throw new Error(`not a valid did:guardian identifier: ${did}`);
+  }
+  return rest.length === 1 ? { name: null, domain } : { name: rest[0], domain };
 }
 
 /**
@@ -21,6 +31,7 @@ export interface Resolver {
   resolveLog(did: Did): Promise<never>;
 }
 
-export function wellKnownPath(name: string): string {
-  return `/.well-known/guardian/${name}`;
+/** `name: null` resolves to the reserved `_` segment -- the bare-domain identity's own well-known path (spec §2.1/§5), never a real registration (the name ABNF forbids `_`). */
+export function wellKnownPath(name: string | null): string {
+  return `/.well-known/guardian/${name ?? "_"}`;
 }

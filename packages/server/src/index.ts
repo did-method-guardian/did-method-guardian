@@ -20,7 +20,11 @@ export default {
 
     const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email)?$/);
     if (wellKnownMatch) {
-      const [, name, suffix] = wellKnownMatch;
+      // "_" is the bare-domain root identity's own reserved path segment
+      // (spec §2.1/§5) -- never a real registration (assertValidName's own
+      // regex already rejects "_", so /register can never produce one).
+      const [, rawName, suffix] = wellKnownMatch;
+      const name = rawName === "_" ? null : rawName;
       try {
         if (!suffix && request.method === "GET") {
           const doc = await resolveDocument(env, name);
@@ -36,6 +40,10 @@ export default {
           return result.accepted ? json({ accepted: true }) : error(result.reason, 400);
         }
         if (suffix === "/email" && request.method === "POST") {
+          // Out of scope for the bare-domain root identity in this pass --
+          // not attempted here rather than half-wired (email forwarding's
+          // own name-keyed lookups assume a real registered name).
+          if (name === null) return error("email forwarding is not available for the bare-domain identity", 400);
           // Only the ward itself (an active gw_session for its own DID) may
           // set up forwarding for its own address -- otherwise anyone could
           // redirect someone else's mail just by naming their identity.

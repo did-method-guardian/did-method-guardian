@@ -8,6 +8,8 @@ import {
   verifyGuardianTransfer,
   verifyGuardianRelinquish,
   verifyCustodialTombstone,
+  parseDid,
+  wellKnownPath,
   DEFAULT_GUARDIAN_POLICY,
 } from "@did-guardian/lib";
 import type { Did, LogEntry, Operation, ResolvedState } from "@did-guardian/lib";
@@ -78,26 +80,74 @@ export async function registerWard(env: Env, name: string): Promise<{ did: strin
   return { did, document: toDidDocument(state), login_secret: loginSecret };
 }
 
+const ROOT_WARD_NAME = ""; // the `wards.name` sentinel for the bare-domain identity (spec §2.1) -- empty string, not NULL, so the table's own existing PRIMARY KEY on `name` enforces "at most one root ward" for free, no schema change needed. Never produced by assertValidName (which requires 3-32 chars), so it can never collide with a real registration.
+
+/**
+ * The bare-domain identity (spec §2.1) is never registered by an external
+ * caller the way a name is -- there's exactly one per deployment, and it
+ * belongs to whoever legitimately operates this domain by construction
+ * (same as every other resolution in this method: by being the party DNS
+ * and TLS actually route the request to). Auto-provisioned lazily, on
+ * first access -- mirrors oidc.ts's getOrCreateSigningKeypair exactly,
+ * for the same reason: a Cloudflare Worker has no persistent "startup" to
+ * hook, so first-access-wins is the only correct place for this.
+ */
+export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
+  const existing = await getWardByName(env, ROOT_WARD_NAME);
+  if (existing) return existing;
+
+  const did = didFor(null, env.REGISTRAR_DOMAIN);
+  const keypair =
+    env.ROOT_WARD_PUBLIC_KEY && env.ROOT_WARD_PRIVATE_KEY
+      ? { publicKey: env.ROOT_WARD_PUBLIC_KEY, privateKey: env.ROOT_WARD_PRIVATE_KEY }
+      : await generateKeypair();
+  const genesis = await signCustodialCreate(
+    {
+      type: "custodial_create",
+      name: null,
+      operationalKeys: [keypair.publicKey],
+      verificationMethods: { "key-1": keypair.publicKey },
+      services: {},
+      outgoing: [],
+      incoming: [],
+      prev: null,
+    },
+    {},
+  );
+  const cid = await cidFor(genesis);
+  const createdAt = new Date().toISOString();
+  const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
+  const ward: WardRow = { name: ROOT_WARD_NAME, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: null };
+  await insertWard(env, ward);
+  await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
+  return ward;
+}
+
 async function loadLog(env: Env, did: string): Promise<LogEntry[]> {
   const rows = await getOperationLog(env, did);
   return rows.map((r) => ({ cid: r.cid, op: JSON.parse(r.payload) as Operation }));
 }
 
-export async function resolveState(env: Env, name: string): Promise<{ did: string; state: ResolvedState } | null> {
-  const ward = await getWardByName(env, name);
+/** `name: null` auto-provisions the bare-domain root identity (never missing); a real name that isn't registered yet stays a plain miss. */
+async function findWard(env: Env, name: string | null): Promise<WardRow | null> {
+  return name === null ? await getOrCreateRootWard(env) : await getWardByName(env, name);
+}
+
+export async function resolveState(env: Env, name: string | null): Promise<{ did: string; state: ResolvedState } | null> {
+  const ward = await findWard(env, name);
   if (!ward) return null;
   const log = await loadLog(env, ward.did);
   return { did: ward.did, state: replay(ward.did, log) };
 }
 
-export async function resolveDocument(env: Env, name: string): Promise<unknown | null> {
+export async function resolveDocument(env: Env, name: string | null): Promise<unknown | null> {
   const resolved = await resolveState(env, name);
   if (!resolved) return null;
   return toDidDocument(resolved.state);
 }
 
-export async function resolveLog(env: Env, name: string): Promise<LogEntry[] | null> {
-  const ward = await getWardByName(env, name);
+export async function resolveLog(env: Env, name: string | null): Promise<LogEntry[] | null> {
+  const ward = await findWard(env, name);
   if (!ward) return null;
   return loadLog(env, ward.did);
 }
@@ -108,8 +158,8 @@ export async function resolveLog(env: Env, name: string): Promise<LogEntry[] | n
  * resolved keys (own wards, or external DIDs resolved via fetch, see
  * resolveExternal below), never a cached snapshot (spec §4.8).
  */
-export async function submitOperation(env: Env, name: string, op: Operation): Promise<{ accepted: true } | { accepted: false; reason: string }> {
-  const ward = await getWardByName(env, name);
+export async function submitOperation(env: Env, name: string | null, op: Operation): Promise<{ accepted: true } | { accepted: false; reason: string }> {
+  const ward = await findWard(env, name);
   if (!ward) return { accepted: false, reason: `no such ward "${name}"` };
   const log = await loadLog(env, ward.did);
   const state = replay(ward.did, log);
@@ -162,13 +212,17 @@ function makeExternalResolver(env: Env) {
   return async (did: Did): Promise<string[] | undefined> => {
     const local = await getWardByDid(env, did);
     if (local) return [local.public_key];
-    // External DID: resolve via its own registrar's .well-known endpoint.
-    const parts = did.split(":");
-    if (parts[0] !== "did" || parts[1] !== "guardian" || parts.length < 4) return undefined;
-    const [, , extName, ...labels] = parts;
-    const domain = labels.join(".");
+    // External DID: resolve via its own registrar's .well-known endpoint --
+    // the same deterministic, single-parse split used everywhere else in
+    // this method (spec §5), not a bespoke re-implementation of it.
+    let name: string | null, domain: string;
     try {
-      const resp = await fetch(`https://${domain}/.well-known/guardian/${extName}`);
+      ({ name, domain } = parseDid(did));
+    } catch {
+      return undefined;
+    }
+    try {
+      const resp = await fetch(`https://${domain}${wellKnownPath(name)}`);
       if (!resp.ok) return undefined;
       const doc = (await resp.json()) as { verificationMethod?: { publicKeyMultibase: string }[] };
       return doc.verificationMethod?.map((vm) => vm.publicKeyMultibase);

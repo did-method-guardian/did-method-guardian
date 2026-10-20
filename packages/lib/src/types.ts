@@ -1,7 +1,7 @@
 // Core types for the did:guardian method.
 // See website/content/spec/v1/index.md for the full specification these mirror.
 
-export type Did = string; // "did:guardian:<name>:<domain-labels...>"
+export type Did = string; // "did:guardian:<domain>" (bare) or "did:guardian:<name>:<domain>" (named) -- domain is dot-joined, never colon-joined (see spec §2)
 
 /** One of the four consensus thresholds a GuardianPolicy knob may be set to. */
 export type Threshold = "any" | "majority" | "unanimous" | { at_least: number };
@@ -27,7 +27,7 @@ export interface RegistrarAttestation {
 
 export interface CustodialCreateOp {
   type: "custodial_create";
-  name: string;
+  name: string | null; // null for the bare-domain (nameless) identity -- see spec §2.1
   operationalKeys: string[];
   verificationMethods: Record<string, string>;
   services: Record<string, { type: string; endpoint: string }>;
