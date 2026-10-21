@@ -32,16 +32,43 @@ function err(message: string, status: number): Response {
   return json({ error: message }, status);
 }
 
-function loginForm(action: string, hidden: Record<string, string>): string {
+/**
+ * This is the one page in the whole registrar a real end user actually
+ * looks at directly (every other response here is JSON, consumed by a
+ * relying party's own code) -- confirmed live it was previously bare,
+ * unstyled HTML with no visual continuity from whatever relying-party
+ * page sent someone here, which reads as a broken/wrong page rather
+ * than a real step in the same flow. Kept deliberately generic/neutral
+ * (not any one relying party's own branding) since this is a self-
+ * hostable component -- any operator's users land here.
+ */
+function pageStyles(): string {
+  return `<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 360px; margin: 10vh auto 0; padding: 0 1.25rem; line-height: 1.5; }
+  h1 { font-size: 1.25rem; margin-bottom: .25rem; }
+  p.hint { color: #767676; font-size: .9rem; margin-top: 0; }
+  label { display: block; font-size: .85rem; font-weight: 600; margin: 1rem 0 .3rem; }
+  label small { font-weight: 400; color: #767676; }
+  input { display: block; width: 100%; box-sizing: border-box; padding: .6rem .7rem; font-size: 1rem; border: 1px solid #888; border-radius: 6px; background: Canvas; color: CanvasText; }
+  button { display: block; width: 100%; margin-top: 1.25rem; padding: .7rem; font-size: 1rem; border: none; border-radius: 6px; background: #2962ff; color: white; cursor: pointer; }
+  button:hover { background: #1e4fd6; }
+  p.error { color: #c0392b; font-size: .9rem; }
+</style>`;
+}
+
+function loginForm(action: string, hidden: Record<string, string>, opts: { nameValue?: string; error?: string } = {}): string {
   const hiddenInputs = Object.entries(hidden)
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
     .join("\n");
-  return `<!doctype html><html><body>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${pageStyles()}</head><body>
 <h1>Sign in with did:guardian</h1>
+<p class="hint">Enter just the name part of your id (not the domain), and the login secret you were shown once when it was created.</p>
+${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
 <form method="post" action="${action}">
   ${hiddenInputs}
-  <label>Name <input name="name" required></label><br>
-  <label>Login secret <input name="login_secret" type="password" required></label><br>
+  <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
+  <label>Login secret <small>(shown once, at creation)</small><input name="login_secret" type="password" required></label>
   <button type="submit">Sign in</button>
 </form>
 </body></html>`;
@@ -111,15 +138,24 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
 
   if (request.method === "POST") {
     const form = await request.formData();
-    wardDid = await verifyLogin(env, String(form.get("name") ?? ""), String(form.get("login_secret") ?? ""));
+    const submittedName = String(form.get("name") ?? "");
+    wardDid = await verifyLogin(env, submittedName, String(form.get("login_secret") ?? ""));
     if (!wardDid) {
-      return html(loginForm(url.pathname + url.search, { name: String(form.get("name") ?? "") }) + "<p>Invalid name or login secret.</p>", 401);
+      return html(loginForm(url.pathname + url.search, {}, { nameValue: submittedName, error: "Invalid name or login secret." }), 401);
     }
   } else {
     const sessionId = readCookie(request, SESSION_COOKIE);
     if (sessionId) wardDid = await resolveSession(env, sessionId);
     if (!wardDid) {
-      return html(loginForm(`${url.pathname}${url.search}`, {}));
+      // login_hint (standard OIDC authentication request parameter) --
+      // a relying party that already parsed "name@domain" on its own
+      // login page can pass just the name along, so this form's own
+      // name field starts pre-filled instead of asking the person to
+      // type the same thing again in a different shape (confirmed live
+      // this was a real point of confusion: this registrar's own name
+      // field never wants the domain part, but a relying party's own
+      // login page usually does).
+      return html(loginForm(`${url.pathname}${url.search}`, {}, { nameValue: params.get("login_hint") ?? "" }));
     }
   }
 
