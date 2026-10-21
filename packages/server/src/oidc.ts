@@ -62,7 +62,7 @@ function loginForm(action: string, hidden: Record<string, string>, opts: { nameV
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
     .join("\n");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${pageStyles()}</head><body>
-<h1>Sign in with did:guardian</h1>
+<h1>Sign in with your Guardian ID</h1>
 <p class="hint">Enter just the name part of your id (not the domain), and the login secret you were shown once when it was created.</p>
 ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
 <form method="post" action="${action}">
