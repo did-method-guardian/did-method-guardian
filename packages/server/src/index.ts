@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, submitOperation, RegistrarError } from "./registrar.js";
+import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, submitOperation, RegistrarError } from "./registrar.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -19,7 +19,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email|\/login-secret)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email|\/login-secret|\/rotate)?$/);
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -78,6 +78,26 @@ export default {
           }
           const loginSecret = await reissueLoginSecret(env, name);
           return json({ ok: true, login_secret: loginSecret });
+        }
+        if (suffix === "/rotate" && request.method === "POST") {
+          // Same two-way trust as /email and /login-secret, same
+          // reason: either the ward itself (self-rotation, an active
+          // gw_session for its own DID) or a trusted OIDC client acting
+          // on an already-authenticated decision of its own (zz
+          // rotating a managed agent's key on behalf of whoever created
+          // it, say) -- never an arbitrary caller for a DID that isn't
+          // theirs. Rotating the custodied operational key, not the
+          // guardian relationship itself (that's guardian_transfer,
+          // reached only through /operations, pre-signed).
+          if (name === null) return error("the bare-domain identity's own key isn't rotatable through this path", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
+          }
+          const result = await rotateWard(env, name);
+          return json({ ok: true, did: result.did, document: result.document });
         }
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);

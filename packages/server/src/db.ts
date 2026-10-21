@@ -54,6 +54,11 @@ export async function setLoginSecretHash(env: Env, name: string, hash: string): 
   await env.DB.prepare("UPDATE wards SET login_secret_hash = ? WHERE name = ?").bind(hash, name).run();
 }
 
+/** Only ever called after a custodial_rotate op this registrar itself just signed and appended has been accepted (registrar.ts's own rotateWard) -- the stored key material this registrar custodies for a ward moves to the new keypair only once the operation it's meant to back is already durable in the log, never before. */
+export async function updateWardKeys(env: Env, did: string, publicKey: string, privateKeyEnc: string): Promise<void> {
+  await env.DB.prepare("UPDATE wards SET public_key = ?, private_key_enc = ? WHERE did = ?").bind(publicKey, privateKeyEnc, did).run();
+}
+
 export interface OidcClientRow {
   client_id: string;
   client_secret_hash: string;

@@ -1,6 +1,7 @@
 import {
   generateKeypair,
   signCustodialCreate,
+  signCustodialRotate,
   cidFor,
   replay,
   toDidDocument,
@@ -15,7 +16,7 @@ import {
 import type { Did, LogEntry, Operation, ResolvedState } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, type WardRow } from "./db.js";
+import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, randomSecret } from "./secretBox.js";
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -116,6 +117,70 @@ export async function reissueLoginSecret(env: Env, name: string): Promise<string
   const loginSecret = randomSecret();
   await setLoginSecretHash(env, name, await hashSecret(loginSecret));
   return loginSecret;
+}
+
+/**
+ * A ward's own self-service operational-key rotation (spec §4.2,
+ * custodial_rotate). The real reason this needs to be a registrar
+ * capability rather than something a caller does by submitting an
+ * already-signed op directly (POST .../operations, above): for a
+ * custodial ward (every one this registrar hosts, human or managed
+ * agent -- the whole point of "custodial"), nobody outside this
+ * registrar ever holds the current operational private key to sign a
+ * rotation with in the first place. It's decrypted here for the one
+ * moment it takes to sign the new operation, never returned to any
+ * caller.
+ *
+ * Builds and self-signs a custodial_rotate op with a freshly generated
+ * keypair, then appends it through the exact same verify-then-append
+ * path an externally-submitted operation goes through (submitOperation,
+ * below) -- no separate, parallel trust path for this one operation
+ * type, even though this registrar could technically skip verification
+ * since it produced both the old and new key material itself. Only on
+ * that succeeding does the ward's own stored key material actually
+ * move to the new keypair -- if anything above fails, the ward is left
+ * exactly as it was, never half-rotated.
+ *
+ * Callers (index.ts) gate who may call this at all -- either an active
+ * session as this exact ward (self-rotation), or a trusted relying
+ * party (zz's own backend, say) that has already decided the caller is
+ * authorized to do this on behalf of a ward it manages. This function
+ * performs the rotation unconditionally once called, same split as
+ * reissueLoginSecret above.
+ */
+export async function rotateWard(env: Env, name: string): Promise<{ did: string; document: unknown }> {
+  // Same exclusion as /email and /login-secret above -- the bare-
+  // domain root identity (findWard's `null` case) isn't reachable
+  // through this name-keyed path at all, deliberately: rotating the
+  // domain's own root credential is a different, more sensitive
+  // operation than anything this zz-driven feature needs.
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to rotate from`, 500);
+  const state = replay(ward.did as Did, log);
+
+  const oldPrivateKey = await decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const newKeypair = await generateKeypair();
+  const op = await signCustodialRotate(
+    {
+      type: "custodial_rotate",
+      operationalKeys: [newKeypair.publicKey],
+      verificationMethods: { "key-1": newKeypair.publicKey },
+      services: state.services,
+      prev: latestCid,
+    },
+    oldPrivateKey,
+  );
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`rotation failed: ${result.reason}`, 500);
+
+  const newPrivateKeyEnc = await encryptSecret(newKeypair.privateKey, env.KEY_ENCRYPTION_KEY);
+  await updateWardKeys(env, ward.did, newKeypair.publicKey, newPrivateKeyEnc);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document };
 }
 
 const ROOT_WARD_NAME = ""; // the `wards.name` sentinel for the bare-domain identity (spec §2.1) -- empty string, not NULL, so the table's own existing PRIMARY KEY on `name` enforces "at most one root ward" for free, no schema change needed. Never produced by assertValidName (which requires 3-32 chars), so it can never collide with a real registration.
