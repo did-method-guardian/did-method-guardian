@@ -15,7 +15,7 @@ import {
 import type { Did, LogEntry, Operation, ResolvedState } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, type WardRow } from "./db.js";
+import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, randomSecret } from "./secretBox.js";
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -99,6 +99,23 @@ export async function registerWard(env: Env, name: string, guardianDid?: string 
 
   const state = replay(did, [{ cid, op: genesis }]);
   return { did, document: toDidDocument(state), login_secret: loginSecret };
+}
+
+/**
+ * Replaces a ward's login secret with a freshly generated one -- the one
+ * real recovery path for "I never saved it" or "I think it leaked,"
+ * since there's no way to recover the original (only its hash is ever
+ * stored). The old secret stops working the instant this runs: nothing
+ * here keeps the previous hash around or allows more than one valid
+ * secret at a time, same as a password reset invalidating the old
+ * password. Callers (index.ts) already gate who may call this at all --
+ * either an active session as this exact ward, or a trusted relying
+ * party acting on an already-authenticated session of its own.
+ */
+export async function reissueLoginSecret(env: Env, name: string): Promise<string> {
+  const loginSecret = randomSecret();
+  await setLoginSecretHash(env, name, await hashSecret(loginSecret));
+  return loginSecret;
 }
 
 const ROOT_WARD_NAME = ""; // the `wards.name` sentinel for the bare-domain identity (spec §2.1) -- empty string, not NULL, so the table's own existing PRIMARY KEY on `name` enforces "at most one root ward" for free, no schema change needed. Never produced by assertValidName (which requires 3-32 chars), so it can never collide with a real registration.

@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { registerWard, resolveDocument, resolveLog, submitOperation, RegistrarError } from "./registrar.js";
+import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, submitOperation, RegistrarError } from "./registrar.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -19,7 +19,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email|\/login-secret)?$/);
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -62,6 +62,22 @@ export default {
           if (!body.forward_to) return error("forward_to is required", 400);
           const result = await requestEmailForwarding(env, name, body.forward_to);
           return result.ok ? json({ ok: true, message: "verification email sent" }) : error(result.reason, 400);
+        }
+        if (suffix === "/login-secret" && request.method === "POST") {
+          // Same two-way trust as /email, same reason: either the ward
+          // itself (an active gw_session for its own DID) or a trusted
+          // OIDC client acting on an already-authenticated session of its
+          // own may reissue this -- never an arbitrary caller for a DID
+          // that isn't theirs.
+          if (name === null) return error("the bare-domain identity has no login secret to reissue", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to reissue its login secret", 403);
+          }
+          const loginSecret = await reissueLoginSecret(env, name);
+          return json({ ok: true, login_secret: loginSecret });
         }
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);
