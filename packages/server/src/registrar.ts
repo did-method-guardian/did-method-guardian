@@ -2,6 +2,8 @@ import {
   generateKeypair,
   signCustodialCreate,
   signCustodialRotate,
+  signGuardianRelinquish,
+  signCustodialTombstone,
   cidFor,
   replay,
   toDidDocument,
@@ -9,6 +11,7 @@ import {
   verifyGuardianTransfer,
   verifyGuardianRelinquish,
   verifyCustodialTombstone,
+  meetsThreshold,
   parseDid,
   wellKnownPath,
   DEFAULT_GUARDIAN_POLICY,
@@ -178,6 +181,86 @@ export async function rotateWard(env: Env, name: string): Promise<{ did: string;
 
   const newPrivateKeyEnc = await encryptSecret(newKeypair.privateKey, env.KEY_ENCRYPTION_KEY);
   await updateWardKeys(env, ward.did, newKeypair.publicKey, newPrivateKeyEnc);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document };
+}
+
+/**
+ * Self-destruct, not a transfer -- custodial_tombstone's own eligible
+ * signers are "the ward's own operational key, or any current
+ * guardian" (verifyCustodialTombstone), and DEFAULT_GUARDIAN_POLICY's
+ * tombstone_threshold is "any" -- the lowest bar, by design (an
+ * identity can always end itself). That means the ward's own
+ * registrar-custodied key is *always* sufficient on its own, with no
+ * guardian signature needed at all -- the same safe, self-contained
+ * shape rotateWard already has (no new authority granted to anyone),
+ * so the same trusted-client-or-self-session gate /rotate uses is
+ * enough here too; nothing more to check at this layer.
+ */
+export async function tombstoneWard(env: Env, name: string): Promise<{ did: string; document: unknown }> {
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to tombstone from`, 500);
+
+  const ownKey = await decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const op = await signCustodialTombstone({ type: "custodial_tombstone", prev: latestCid }, { [ward.did]: ownKey }, [ward.did]);
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`tombstone failed: ${result.reason}`, 500);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document };
+}
+
+/**
+ * Full self-abdication (every current guardian relinquishes, leaving
+ * the ward ownerless) -- deliberately NOT the general guardian_transfer
+ * case (adding/swapping SOME guardians while keeping others), which
+ * this registrar does not offer as a convenience endpoint: transfer
+ * hands new authority to a party who never asked for it, and
+ * requiredTransferSigners needs that incoming party's own consent too
+ * -- a bare trusted-client credential alone can't legitimately produce
+ * that signature even when this registrar custodies the incoming
+ * DID's key, since holding a key isn't the same as that identity
+ * having agreed to take on this specific new responsibility right
+ * now. Relinquish has no such problem: every signer it needs is
+ * already a CURRENT guardian voluntarily giving up its own standing,
+ * the same self-contained shape as rotate/tombstone.
+ *
+ * Only signs with whichever of the ward's current guardians this
+ * registrar itself custodies (a guardian hosted on a different
+ * registrar entirely can't be signed for here, same limit
+ * registerWard's own atomic-creation path already accepts for
+ * `incoming`) -- refuses clearly if that subset doesn't meet the
+ * ward's own removal_threshold, rather than silently doing nothing.
+ */
+export async function relinquishWard(env: Env, name: string): Promise<{ did: string; document: unknown }> {
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to relinquish from`, 500);
+  const state = replay(ward.did as Did, log);
+  if (state.guardians.length === 0) throw new RegistrarError(`"${name}" has no guardians to relinquish -- it's already ownerless`, 400);
+
+  const signerKeys: Record<string, string> = {};
+  for (const guardianDid of state.guardians) {
+    const guardianWard = await getWardByDid(env, guardianDid);
+    if (guardianWard) signerKeys[guardianDid] = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  }
+  const signers = Object.keys(signerKeys);
+  if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, state.guardians)) {
+    throw new RegistrarError(
+      `not enough of "${name}"'s current guardians (${state.guardians.join(", ")}) are custodied by this registrar to meet its own removal_threshold -- a guardian on a different registrar has to relinquish through that registrar directly`,
+      400,
+    );
+  }
+
+  const op = await signGuardianRelinquish({ type: "guardian_relinquish", prev: latestCid }, signerKeys, signers);
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`relinquish failed: ${result.reason}`, 500);
 
   const document = await resolveDocument(env, name);
   return { did: ward.did, document };

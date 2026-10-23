@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, submitOperation, RegistrarError } from "./registrar.js";
+import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, submitOperation, RegistrarError } from "./registrar.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -19,7 +19,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email|\/login-secret|\/rotate)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone)?$/);
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -87,8 +87,11 @@ export default {
           // rotating a managed agent's key on behalf of whoever created
           // it, say) -- never an arbitrary caller for a DID that isn't
           // theirs. Rotating the custodied operational key, not the
-          // guardian relationship itself (that's guardian_transfer,
-          // reached only through /operations, pre-signed).
+          // guardian relationship itself (full relinquishment has its
+          // own convenience endpoint, /relinquish, below -- swapping
+          // in a NEW guardian, guardian_transfer, is reached only
+          // through /operations, pre-signed, since that hands new
+          // authority to a party who never consented here).
           if (name === null) return error("the bare-domain identity's own key isn't rotatable through this path", 400);
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
@@ -97,6 +100,39 @@ export default {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
           }
           const result = await rotateWard(env, name);
+          return json({ ok: true, did: result.did, document: result.document });
+        }
+        if (suffix === "/relinquish" && request.method === "POST") {
+          // Same two-way trust as /rotate, same reasoning: self-
+          // contained (every signer this needs is already a current
+          // guardian voluntarily giving up its own standing, not a
+          // new party being handed authority), so the same trusted-
+          // client-or-self-session gate is enough -- see relinquishWard's
+          // own comment for why this is NOT extended to the general
+          // guardian_transfer case.
+          if (name === null) return error("the bare-domain identity's own guardians aren't relinquishable through this path", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to relinquish its guardians", 403);
+          }
+          const result = await relinquishWard(env, name);
+          return json({ ok: true, did: result.did, document: result.document });
+        }
+        if (suffix === "/tombstone" && request.method === "POST") {
+          // Same two-way trust as /rotate -- self-destruct needs only
+          // the ward's own operational key (tombstone_threshold's
+          // default is "any", the lowest bar), so this is exactly as
+          // self-contained as rotation.
+          if (name === null) return error("the bare-domain identity isn't tombstonable through this path", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to tombstone it", 403);
+          }
+          const result = await tombstoneWard(env, name);
           return json({ ok: true, did: result.did, document: result.document });
         }
       } catch (e) {
