@@ -125,6 +125,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - <a id="req-7.2-3"></a>**REQ-7.2-3**: A registrar *MUST* reject this operation if `incoming` is already a current guardian.
 - <a id="req-7.2-4"></a>**REQ-7.2-4**: When the current guardian set is non-empty, required signers are `incoming`'s own key, and enough current guardians to meet `addition_threshold`.
 - <a id="req-7.2-5"></a>**REQ-7.2-5**: When the current guardian set is empty, required signers are `incoming`'s own key, and the ward's own current operational key.
+- <a id="req-7.2-11"></a>**REQ-7.2-11**: A registrar *MUST* reject this operation if `incoming` names the ward's own identity. A ward is never its own guardian: aside from the confusion of a ward appearing in both roles at once, an effectively-guarded ward's own guardian set must never be allowed to look non-empty when no independent, external oversight actually exists -- which matters directly for `on_orphan` (REQ-5-8), since that safety net is only ever consulted once the guardian set becomes empty.
 
 **`guardian_remove`** -- removes exactly one current guardian, named in `outgoing`.
 

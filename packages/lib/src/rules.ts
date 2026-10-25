@@ -155,13 +155,15 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
 };
 
 export const guardianAddRule: OperationRule<GuardianAddOp> = {
-  reqIds: ["REQ-7.2-3", "REQ-7.2-4", "REQ-7.2-5", "REQ-5-5", "REQ-4-4"],
+  reqIds: ["REQ-7.2-3", "REQ-7.2-4", "REQ-7.2-5", "REQ-7.2-11", "REQ-5-5", "REQ-4-4"],
   governingPolicyField: "addition_threshold",
   checkShape(op, ctx) {
     // Checked against the LIVE set -- REQ-4-4's "every purpose this document defines" covers this check too.
+    if (op.incoming === ctx.wardDid) return { valid: false, reason: "REQ-7.2-11: a ward cannot name itself as its own guardian" };
     return { valid: true }; // live-membership check needs ctx, done in isSatisfied's own live computation below to avoid double resolution
   },
   async isSatisfied(op, _validSigners, ctx) {
+    if (op.incoming === ctx.wardDid) return false; // REQ-7.2-11
     const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
     if (live.includes(op.incoming)) return false; // REQ-7.2-3
     const validSigners = await validSignersOf(op, ctx);

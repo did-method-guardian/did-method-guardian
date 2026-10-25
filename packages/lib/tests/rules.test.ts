@@ -339,6 +339,18 @@ test("REQ-7.2-3: guardian_add naming an already-current guardian is rejected", a
   assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs }, [], ctx), false);
 });
 
+test("REQ-7.2-11: a ward cannot name itself as its own guardian, even zero-to-one with its own key alone", async () => {
+  const wardDid = "did:guardian:alice:example.com";
+  const ward = await generateKeypair();
+  const state = makeState({ did: wardDid, guardians: [] });
+  const partial = { type: "guardian_add" as const, incoming: wardDid, prev: "cid0" };
+  const resolveKey = makeResolver({ [wardDid]: ward.publicKey });
+  const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
+  const sigs = await signMap(partial, { [wardDid]: ward.privateKey }, [wardDid]);
+  assert.equal((await OPERATION_RULES.guardian_add.checkShape({ ...partial, sigs }, ctx)).valid, false, "checkShape rejects it outright");
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs }, [], ctx), false, "isSatisfied rejects it too, defense in depth for any caller that skips checkShape");
+});
+
 // --- REQ-7.2-6/7, REQ-5-4, REQ-5-7: guardian_remove ----------------------
 
 test("REQ-7.2-7(a): a guardian can always voluntarily remove itself", async () => {
