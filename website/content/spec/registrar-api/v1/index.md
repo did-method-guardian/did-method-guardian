@@ -11,7 +11,7 @@ All endpoints are rooted at `/.well-known/guardian/<name>` (or `/.well-known/gua
 
 ## 1. Method-required endpoints
 
-Required by the formal spec's REQ-9-1; this registrar's own implementation of them.
+Required by the formal spec's REQ-8-2; this registrar's own implementation of them.
 
 | Method | Path | |
 |---|---|---|
@@ -19,7 +19,7 @@ Required by the formal spec's REQ-9-1; this registrar's own implementation of th
 | `GET` | `/.well-known/guardian/<name>/log` | full operation log, timestamped |
 | `POST` | `/.well-known/guardian/<name>/operations` | submit one fully-signed operation |
 
-`POST .../operations` accepts any operation type from the formal spec's §6 with all required signatures already attached (per that operation's own REQ-6.x signer rules) and appends it if valid, rejecting with a reason string otherwise. This is the only path by which an *externally* pre-signed operation (e.g. two guardians who coordinated their own signatures out-of-band) reaches the log directly, without going through §3's collection machinery.
+`POST .../operations` accepts any operation type from the formal spec's §7 with all required signatures already attached (per that operation's own REQ-7.x signer rules) and appends it if valid, rejecting with a reason string otherwise. This is the only path by which an *externally* pre-signed operation (e.g. two guardians who coordinated their own signatures out-of-band) reaches the log directly, without going through §3's collection machinery.
 
 ## 2. Self-contained convenience endpoints
 
@@ -28,14 +28,15 @@ Each of these corresponds to an operation whose formal signer requirement can be
 | Method | Path | Operation produced | Why it's self-contained |
 |---|---|---|---|
 | `POST` | `.../rotate` | `custodial_rotate`, ward-signed | self-rotation grants no new authority |
-| `POST` | `.../remove-self` | `guardian_remove`, `outgoing = [caller]` | needs only the caller's own consent (REQ-6.4-2) |
+| `POST` | `.../remove-self` | `guardian_remove`, voluntary (`outgoing = [caller]`) | needs only the caller's own consent (REQ-7.2-7a) |
+| `POST` | `.../remove` | `guardian_remove`, forced | self-contained **only** when the *other* current guardians (excluding the one being removed) are custodied entirely by this registrar **and** that custodied subset alone meets `removal_threshold` (REQ-7.2-7b); otherwise rejected, directing the caller to §3 |
 | `POST` | `.../relinquish` | `guardian_relinquish` | self-contained **only** when the current guardian set is custodied entirely by this registrar **and** that custodied subset alone meets `removal_threshold` (e.g. a sole guardian, trivially); otherwise rejected with a clear reason directing the caller to §3 |
 | `POST` | `.../tombstone` | `custodial_tombstone`, ward-signed | `tombstone_threshold` defaults to `any`; the ward's own key alone always suffices |
-| `POST` | `.../adopt` | `guardian_add`, zero-to-one case only | needs only the incoming party's own consent plus the ward's own key (REQ-6.3-3) -- rejected if the ward already has any current guardian; use §3 for a non-empty guardian set |
+| `POST` | `.../adopt` | `guardian_add`, zero-to-one case only | needs only the incoming party's own consent plus the ward's own key (REQ-7.2-5) -- rejected if the ward already has any current guardian; use §3 for a non-empty guardian set |
 
 ## 3. Asynchronous signature collection (`pending_operations`)
 
-For anything needing more than one signature collected over more than one request -- `guardian_add` against a non-empty guardian set (REQ-6.3-2), `policy_update` (REQ-6.6-2), or a `guardian_relinquish`/guardian-initiated `custodial_rotate` whose required signers aren't all custodied by (or available in the same call to) this registrar.
+For anything needing more than one signature collected over more than one request -- `guardian_add` against a non-empty guardian set (REQ-7.2-4), a forced `guardian_remove` (REQ-7.2-7b), `policy_update` (REQ-7.2-9), or a `guardian_relinquish`/guardian-initiated `custodial_rotate` whose required signers aren't all custodied by (or available in the same call to) this registrar.
 
 Modeled as a state machine per pending proposal: `proposed -> collecting -> satisfied -> finalized`, with `expired` and `declined` as terminal alternatives from `collecting`. `finalized` is entered automatically the instant `satisfied` is reached (the registrar submits the now-complete operation to §1's own `/operations` itself) -- a caller never finalizes by hand.
 
