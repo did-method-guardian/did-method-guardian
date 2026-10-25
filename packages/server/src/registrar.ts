@@ -2,8 +2,10 @@ import {
   generateKeypair,
   signCustodialCreate,
   signCustodialRotate,
+  signGuardianAdd,
   signGuardianRelinquish,
   signCustodialTombstone,
+  signRegistrarAttestation,
   cidFor,
   replay,
   checkNullification,
@@ -36,23 +38,29 @@ export function assertValidName(name: string): void {
 }
 
 /**
- * Registers a brand-new identity. Ordinarily ownerless (`incoming: []`) --
- * establishing a guardian is normally done afterward via a real, signed
- * `guardian_transfer` (spec §4.1/§4.3), kept out of registration itself so
- * this endpoint never needs to verify an externally-supplied guardian
- * signature, concentrating that complexity in one place (`submitOperation`
- * below).
+ * Registers a brand-new identity. Genesis itself is always guardian-less
+ * now (REQ-7.1-1) -- `incoming` is always `[]`, and `signCustodialCreate`'s
+ * own loop over it is trivially a no-op, so genesis never needs a guardian
+ * signature at all. `creator` (REQ-7.1-4) is this registrar's own bare-
+ * domain root identity for an ordinary self-service signup (no other party
+ * initiated it); a `registrar` attestation (REQ-7.1-5), signed with that
+ * same root identity's own key, is attached unconditionally -- cheap, since
+ * the root ward is already auto-provisioned on first access regardless.
  *
- * `guardianDid`, when given, is the one exception: a real guardian
- * established at genesis instead, atomically. Only ever reached with a
- * caller-supplied value when index.ts's own route handler has already
- * verified a trusted OIDC client credential (clientAuth.ts) -- an
- * unauthenticated caller's `guardian_did` is never honored, never even
- * reaches this function. Safe specifically because this registrar custodies
- * both keys: the new ward's own (always true) and the guardian's (only true
- * when `guardianDid` identifies one of this same registrar's own wards,
- * checked below) -- so both required signatures are producible server-side,
- * with no separate interactive signing round-trip needed.
+ * `guardianDid`, when given, establishes a real first guardian immediately
+ * afterward via a genuine, separately-signed `guardian_add` (REQ-7.2-5,
+ * zero-to-one) -- two log entries, one API call, not genesis itself
+ * carrying a guardian directly. Only ever reached with a caller-supplied
+ * value when index.ts's own route handler has already verified a trusted
+ * OIDC client credential (clientAuth.ts) -- an unauthenticated caller's
+ * `guardian_did` is never honored, never even reaches this function. Safe
+ * specifically because this registrar custodies both keys: the new ward's
+ * own (always true) and the guardian's (only true when `guardianDid`
+ * identifies one of this same registrar's own wards, checked below) -- so
+ * both required signatures are producible server-side, with no separate
+ * interactive signing round-trip needed. If the guardian_add fails, genesis
+ * itself has already succeeded -- the ward exists, ownerless, rather than
+ * half-created; the caller gets a clear error naming just that failure.
  */
 export async function registerWard(env: Env, name: string, guardianDid?: string | null): Promise<{ did: string; document: unknown; login_secret: string }> {
   assertValidName(name);
@@ -60,30 +68,24 @@ export async function registerWard(env: Env, name: string, guardianDid?: string 
     throw new RegistrarError(`name "${name}" is already taken`, 409);
   }
 
-  let incomingKeys: Record<Did, string> = {};
-  if (guardianDid) {
-    const guardianWard = await getWardByDid(env, guardianDid);
-    if (!guardianWard) {
-      throw new RegistrarError(`guardian_did "${guardianDid}" is not a ward this registrar custodies -- it can't produce that ward's signature`, 400);
-    }
-    incomingKeys = { [guardianDid]: await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY) };
-  }
-
   const did = didFor(name, env.REGISTRAR_DOMAIN);
   const keypair = await generateKeypair();
-  const genesis = await signCustodialCreate(
-    {
-      type: "custodial_create",
-      name,
-      operationalKeys: [keypair.publicKey],
-      verificationMethods: { "key-1": keypair.publicKey },
-      services: {},
-      outgoing: [],
-      incoming: guardianDid ? [guardianDid] : [],
-      prev: null,
-    },
-    incomingKeys,
-  );
+  const rootWard = await getOrCreateRootWard(env);
+  const rootPrivateKey = await decryptSecret(rootWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+
+  const genesisPartial = {
+    type: "custodial_create" as const,
+    name,
+    operationalKeys: [keypair.publicKey],
+    verificationMethods: { "key-1": keypair.publicKey },
+    services: {},
+    outgoing: [] as [],
+    incoming: [] as Did[],
+    prev: null,
+    creator: rootWard.did,
+  };
+  const attestation = await signRegistrarAttestation(genesisPartial, rootWard.did, rootPrivateKey);
+  const genesis = await signCustodialCreate({ ...genesisPartial, registrar: attestation }, {});
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();
 
@@ -100,7 +102,25 @@ export async function registerWard(env: Env, name: string, guardianDid?: string 
   await insertWard(env, ward);
   await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
 
-  const state = replay(did, [{ cid, op: genesis }]);
+  if (guardianDid) {
+    const guardianWard = await getWardByDid(env, guardianDid);
+    if (!guardianWard) {
+      throw new RegistrarError(`guardian_did "${guardianDid}" is not a ward this registrar custodies -- it can't produce that ward's signature`, 400);
+    }
+    const guardianPrivateKey = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+    const addOp = await signGuardianAdd(
+      { type: "guardian_add", incoming: guardianDid, prev: cid },
+      { [guardianDid]: guardianPrivateKey, [did]: keypair.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's own key and the ward's own operational key
+      [guardianDid, did],
+    );
+    const result = await submitOperation(env, name, addOp);
+    if (!result.accepted) {
+      throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 500);
+    }
+  }
+
+  const log = await loadLog(env, did);
+  const state = replay(did as Did, log);
   return { did, document: toDidDocument(state), login_secret: loginSecret };
 }
 
@@ -287,6 +307,10 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
     env.ROOT_WARD_PUBLIC_KEY && env.ROOT_WARD_PRIVATE_KEY
       ? { publicKey: env.ROOT_WARD_PUBLIC_KEY, privateKey: env.ROOT_WARD_PRIVATE_KEY }
       : await generateKeypair();
+  // No registrar attestation for the root ward itself -- it IS this
+  // registrar's own identity; nothing else exists yet to vouch for it.
+  // creator names itself (REQ-7.1-4 requires a DID; there is no other
+  // party to name for the one identity a deployment bootstraps on its own).
   const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
@@ -297,6 +321,7 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
       outgoing: [],
       incoming: [],
       prev: null,
+      creator: did,
     },
     {},
   );
