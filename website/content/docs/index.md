@@ -52,6 +52,7 @@ Resolving `did:guardian:alice:acme.com` returns an ordinary [W3C DID Core](https
   ],
   "authentication": ["did:guardian:alice:acme.com#key-1"],
   "assertionMethod": ["did:guardian:alice:acme.com#key-1"],
+  "capabilityInvocation": ["did:guardian:alice:acme.com#key-1"],
   "service": [
     { "id": "did:guardian:alice:acme.com#registrar", "type": "GuardianRegistrarService", "serviceEndpoint": "https://acme.com" }
   ],
@@ -59,7 +60,7 @@ Resolving `did:guardian:alice:acme.com` returns an ordinary [W3C DID Core](https
 }
 ```
 
-Only the **operational tier** of rotation keys (§4) is reflected in `verificationMethod`/`authentication`. The guardian tier, `GuardianPolicy`, and the full operation log are method-internal state needed to *produce* this document, never part of the document itself -- the same way `did:plc`'s own `rotationKeys` are omitted from its presented document. Nothing in this document's own shape distinguishes any particular kind of ward from any other.
+Only the **operational tier** of rotation keys (§4) is reflected in `verificationMethod`/`authentication`/`capabilityInvocation` -- an operational key is exactly what invokes the capability to update the document, the semantic `capabilityInvocation` itself names. The guardian tier, `GuardianPolicy`, and the full operation log are method-internal state needed to *produce* this document, never part of the document itself -- the same way `did:plc`'s own `rotationKeys` are omitted from its presented document. Nothing in this document's own shape distinguishes any particular kind of ward from any other.
 
 ## 4. The operation log
 

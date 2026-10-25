@@ -35,7 +35,7 @@ domain-label = 1*63(ALPHA / DIGIT / "-")
 Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](https://www.w3.org/TR/did-core/), containing:
 
 - <a id="req-3-1"></a>**REQ-3-1**: exactly one `verificationMethod` entry per entry in the ward's current `operationalKeys` ([§4](#4-key-material)), each of type `Multikey`.
-- <a id="req-3-2"></a>**REQ-3-2**: `authentication` and `assertionMethod` arrays referencing every such `verificationMethod`.
+- <a id="req-3-2"></a>**REQ-3-2**: `authentication`, `assertionMethod`, and `capabilityInvocation` arrays referencing every such `verificationMethod` -- an operational key is exactly what invokes the capability to update the document (REQ-6-2 through REQ-6-11), the semantic `capabilityInvocation` itself names.
 - <a id="req-3-3"></a>**REQ-3-3**: The guardian tier, `GuardianPolicy`, and the full operation log *MUST NOT* appear in the presented document -- they are method-internal state used to derive it, resolvable separately ([§8](#8-resolution)).
 
 ## 4. Key material
@@ -145,15 +145,19 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - <a id="req-9-1"></a>**REQ-9-1**: The full operation log *MUST* remain permanently, publicly resolvable after `custodial_tombstone`.
 - <a id="req-9-2"></a>**REQ-9-2**: A name, once registered, *MUST NOT* be returned to the available pool within its registrar after deactivation.
 
-## 10. Security and privacy considerations
+## 10. Security considerations
 
 - **Trust model**: a registrar is trusted to order operations and resist denial-of-service against its own log; it is not trusted to forge history, since the log is self-certifying and independently replayable by anyone.
-- **Data permanence**: the full log stays public forever ([§9](#9-deactivation-and-data-permanence)) -- nothing in `services` should be anything that shouldn't be permanently, publicly linkable to this identity.
-- **Key reuse**: reusing an operational or guardian key across more than one identity can leak a relationship between them that was never meant to be public.
+- **Key generation and storage** are a registrar-implementation concern, out of this method's own scope -- this document specifies rotation (REQ-6-2 through REQ-6-11, REQ-7.2-1) and revocation (`guardian_remove`, `guardian_relinquish`, `custodial_tombstone`) precisely; how a given registrar generates or custodies the private key material behind an `operationalKeys`/guardian entry is that registrar's own concern, same as it is for `did:web`.
 - **Guardian-claim forgery**: a ward cannot be made to falsely name an unwilling party as its guardian ([REQ-7.2-4](#req-7.2-4)/[REQ-7.2-5](#req-7.2-5) structurally require that party's own signature). A party cannot name itself guardian of an already-guarded ward it doesn't already co-guard ([REQ-7.2-4](#req-7.2-4) requires cooperation from enough of the existing guardian set).
 - **Registrar-claim forgery**: a forged `registrar` attestation ([REQ-7.1-5](#req-7.1-5)) fails verification the same way any other forged signature does.
 - **Guardian key compromise**: a single compromised guardian key cannot act alone in a guardian set held to anything stricter than `any`. `guardian_remove`'s voluntary path ([REQ-7.2-7a](#req-7.2-7)) only ever lets a compromised key remove that same guardian, never another. A compromised sole guardian, or a guardian set deliberately held at `any`, is a real, unmitigated risk.
+- **Nullification window**: for 72 hours after any operation ([REQ-6-9](#req-6-9)), a verifier *SHOULD* treat current state as provisional, not final -- a guardian-signed recovery rotation can still rewrite history back to that point. A compromised guardian set that also meets `recovery_threshold` can itself abuse nullification within the same window; this is the same class of risk as any other guardian-key compromise (above), not a new one.
 - **Name squatting**: names are permanent within a registrar ([§9](#9-deactivation-and-data-permanence)); claiming a name ahead of its likely owner is possible, bounded to one registrar's own namespace.
 - **Sybil creation**: nothing in this method limits how many identities one party may register, within a registrar or across many.
-- **Cross-registrar identity unification**: two `did:guardian` identities under different registrars are never provably the same party by this method alone, including when they share a name.
-- **Nullification window**: for 72 hours after any operation ([REQ-6-9](#req-6-9)), a verifier *SHOULD* treat current state as provisional, not final -- a guardian-signed recovery rotation can still rewrite history back to that point. A compromised guardian set that also meets `recovery_threshold` can itself abuse nullification within the same window; this is the same class of risk as any other guardian-key compromise ([§10](#10-security-and-privacy-considerations), above), not a new one.
+
+## 11. Privacy considerations
+
+- **Data permanence**: the full log stays public forever ([§9](#9-deactivation-and-data-permanence)) -- nothing in `services` should be anything that shouldn't be permanently, publicly linkable to this identity.
+- **Key reuse (correlation risk)**: reusing an operational or guardian key across more than one identity can leak a relationship between them that was never meant to be public.
+- **Cross-registrar identity unification**: two `did:guardian` identities under different registrars are never provably the same party by this method alone, including when they share a name -- this method makes no correlation between them possible by default.
