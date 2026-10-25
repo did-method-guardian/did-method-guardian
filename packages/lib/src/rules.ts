@@ -57,13 +57,25 @@ export interface VerificationContext {
   state: ResolvedState;
   resolveKey: KeyResolver;
   isGuardianLive: GuardianLivenessResolver;
+  /**
+   * REQ-4-2: when a signer's own signature was actually collected by this
+   * registrar, keyed by signer DID (ISO timestamp) -- so a signature that
+   * outlives its own signer's later key rotation still verifies against the
+   * key that was valid when it was produced, not whatever's current now.
+   * Only meaningful for a signature collected asynchronously and verified
+   * again later (registrar API spec §3); absent for any signer means
+   * "assume now," correct for the ordinary case where signing and
+   * verification happen in the same call.
+   */
+  sigTimestamps?: Record<Did, string>;
 }
 
 async function validSignersOf(op: { sigs?: Record<Did, string> }, ctx: VerificationContext): Promise<Did[]> {
   const sigs = op.sigs ?? {};
   const valid: Did[] = [];
   for (const did of Object.keys(sigs)) {
-    if (await verifySignerSig(op as any, did, sigs[did], ctx.resolveKey)) valid.push(did);
+    const ts = ctx.sigTimestamps?.[did];
+    if (await verifySignerSig(op as any, did, sigs[did], ctx.resolveKey, ts ? new Date(ts) : undefined)) valid.push(did);
   }
   return valid;
 }
@@ -114,7 +126,8 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
   checkShape: () => ({ valid: true }), // REQ-7.2-2 holds by construction -- the type carries no guardian/policy fields
   async isSatisfied(op, _validSigners, ctx) {
     if (op.sig) {
-      const wardSigned = await verifySignerSig(op as any, ctx.wardDid, op.sig, ctx.resolveKey);
+      const wardTs = ctx.sigTimestamps?.[ctx.wardDid];
+      const wardSigned = await verifySignerSig(op as any, ctx.wardDid, op.sig, ctx.resolveKey, wardTs ? new Date(wardTs) : undefined);
       if (wardSigned) return true; // REQ-7.2-1(a)
     }
     if (op.sigs) {

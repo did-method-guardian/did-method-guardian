@@ -145,6 +145,8 @@ export async function proposeOperation(env: Env, name: string | null, op: Operat
   const actor = createActor(pendingOperationMachine, { input: { collectedSigs: sigs, satisfiedAtPropose } }).start();
   const id = randomSecret();
   const now = new Date();
+  const sigTimestamps: Record<Did, string> = {};
+  for (const did of Object.keys(sigs)) sigTimestamps[did as Did] = now.toISOString();
   const row: PendingOperationRow = {
     id,
     ward_did: ward.did,
@@ -152,6 +154,7 @@ export async function proposeOperation(env: Env, name: string | null, op: Operat
     partial_op: JSON.stringify(op),
     required_signers: JSON.stringify(requiredSigners),
     collected_sigs: JSON.stringify(actor.getSnapshot().context.collectedSigs),
+    sig_timestamps: JSON.stringify(sigTimestamps),
     state: actor.getSnapshot().value as string,
     created_at: now.toISOString(),
     expires_at: new Date(now.getTime() + PROPOSAL_TTL_MS).toISOString(),
@@ -159,7 +162,7 @@ export async function proposeOperation(env: Env, name: string | null, op: Operat
   await insertPendingOperation(env, row);
 
   if (actor.getSnapshot().value === "satisfied") {
-    const final = await finalize(env, name, id, op, actor.getSnapshot().context.collectedSigs, requiredSigners);
+    const final = await finalize(env, name, id, op, actor.getSnapshot().context.collectedSigs, requiredSigners, sigTimestamps);
     return { id, state: final.state, document: final.document };
   }
 
@@ -183,7 +186,7 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
     throw new RegistrarError(`pending operation "${id}" is already ${row.state}`, 409);
   }
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    await updatePendingOperationState(env, id, "expired", row.collected_sigs);
+    await updatePendingOperationState(env, id, "expired", row.collected_sigs, row.sig_timestamps);
     throw new RegistrarError(`pending operation "${id}" has expired`, 409);
   }
 
@@ -197,7 +200,8 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
   if (row.state === "satisfied") {
     // Already met -- nothing a new signature could add. Most likely a retry after a prior FINALIZE_FAILED; just re-attempt rather than silently dropping this signer's contribution (the machine itself has no CONTRIBUTE handler in `satisfied`, so sending one would be a no-op).
     const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, string>;
-    const final = await finalize(env, wardName, id, op, collectedSigs, requiredSigners);
+    const sigTimestamps = JSON.parse(row.sig_timestamps) as Record<Did, string>;
+    const final = await finalize(env, wardName, id, op, collectedSigs, requiredSigners, sigTimestamps);
     return { state: final.state, document: final.document };
   }
 
@@ -218,10 +222,12 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
 
   const newState = actor.getSnapshot().value as string;
   const newCollectedSigs = actor.getSnapshot().context.collectedSigs;
-  await updatePendingOperationState(env, id, newState, JSON.stringify(newCollectedSigs));
+  const sigTimestamps = { ...(JSON.parse(row.sig_timestamps) as Record<Did, string>) };
+  if (signerDid in newCollectedSigs) sigTimestamps[signerDid] = new Date().toISOString();
+  await updatePendingOperationState(env, id, newState, JSON.stringify(newCollectedSigs), JSON.stringify(sigTimestamps));
 
   if (newState === "satisfied") {
-    const final = await finalize(env, wardName, id, op, newCollectedSigs, requiredSigners);
+    const final = await finalize(env, wardName, id, op, newCollectedSigs, requiredSigners, sigTimestamps);
     return { state: final.state, document: final.document };
   }
 
@@ -251,7 +257,7 @@ export async function declineOperation(env: Env, id: string, auth: ActorAuth): P
   const resolved = pendingOperationMachine.resolveState({ value: row.state, context: { collectedSigs, satisfiedAtPropose: false } });
   const actor = createActor(pendingOperationMachine, { snapshot: resolved, input: { collectedSigs, satisfiedAtPropose: false } }).start();
   actor.send({ type: "DECLINE" });
-  await updatePendingOperationState(env, id, actor.getSnapshot().value as string, row.collected_sigs);
+  await updatePendingOperationState(env, id, actor.getSnapshot().value as string, row.collected_sigs, row.sig_timestamps);
 
   const wardName = await nameForWardDid(env, row.ward_did as Did);
   const requiredSigners = JSON.parse(row.required_signers) as Did[];
@@ -278,7 +284,9 @@ export async function withdrawFromOperation(env: Env, id: string, auth: ActorAut
   const actor = createActor(pendingOperationMachine, { snapshot: resolved, input: { collectedSigs, satisfiedAtPropose: false } }).start();
   actor.send({ type: "WITHDRAW", did: actorDid });
   const newState = actor.getSnapshot().value as string;
-  await updatePendingOperationState(env, id, newState, JSON.stringify(actor.getSnapshot().context.collectedSigs));
+  const sigTimestamps = { ...(JSON.parse(row.sig_timestamps) as Record<Did, string>) };
+  delete sigTimestamps[actorDid];
+  await updatePendingOperationState(env, id, newState, JSON.stringify(actor.getSnapshot().context.collectedSigs), JSON.stringify(sigTimestamps));
 
   const wardName = await nameForWardDid(env, row.ward_did as Did);
   const requiredSigners = JSON.parse(row.required_signers) as Did[];
@@ -319,7 +327,7 @@ export async function listPendingForSigner(env: Env, signerDid: Did): Promise<Pe
   const active: PendingOperationRow[] = [];
   for (const row of rows) {
     if (new Date(row.expires_at).getTime() < Date.now()) {
-      await updatePendingOperationState(env, row.id, "expired", row.collected_sigs);
+      await updatePendingOperationState(env, row.id, "expired", row.collected_sigs, row.sig_timestamps);
       continue;
     }
     active.push(row);
@@ -334,11 +342,12 @@ async function finalize(
   op: Operation,
   collectedSigs: Record<Did, string>,
   requiredSigners: Did[],
+  sigTimestamps: Record<Did, string>,
 ): Promise<{ state: string; document?: unknown }> {
   const fullOp = { ...op, sigs: collectedSigs } as Operation;
-  const result = await submitOperation(env, name, fullOp);
+  const result = await submitOperation(env, name, fullOp, sigTimestamps);
   if (result.accepted) {
-    await updatePendingOperationState(env, id, "finalized", JSON.stringify(collectedSigs));
+    await updatePendingOperationState(env, id, "finalized", JSON.stringify(collectedSigs), JSON.stringify(sigTimestamps));
     const document = await resolveDocument(env, name);
     const wardName = name ?? "_";
     for (const signerDid of requiredSigners) {
@@ -347,7 +356,7 @@ async function finalize(
     return { state: "finalized", document };
   }
   // Retriable -- the signatures collected are still valid; only the append attempt failed (e.g. the log head moved).
-  await updatePendingOperationState(env, id, "satisfied", JSON.stringify(collectedSigs));
+  await updatePendingOperationState(env, id, "satisfied", JSON.stringify(collectedSigs), JSON.stringify(sigTimestamps));
   throw new RegistrarError(`collected enough signatures, but finalizing failed: ${result.reason}`, 409);
 }
 

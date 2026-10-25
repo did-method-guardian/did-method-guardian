@@ -167,6 +167,8 @@ export interface PendingOperationRow {
   partial_op: string; // JSON
   required_signers: string; // JSON array of DIDs
   collected_sigs: string; // JSON object, signer DID -> sig
+  /** JSON object, signer DID -> ISO timestamp of when THIS registrar collected that signer's own signature -- REQ-4-2's point-in-time key resolution needs this at finalize time, since a signer may have rotated their own key in the meantime (see rules.ts's VerificationContext.sigTimestamps). Mirrors collected_sigs' own keys exactly. */
+  sig_timestamps: string;
   state: string;
   created_at: string;
   expires_at: string;
@@ -174,9 +176,20 @@ export interface PendingOperationRow {
 
 export async function insertPendingOperation(env: Env, row: PendingOperationRow): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO pending_operations (id, ward_did, op_type, partial_op, required_signers, collected_sigs, state, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO pending_operations (id, ward_did, op_type, partial_op, required_signers, collected_sigs, sig_timestamps, state, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(row.id, row.ward_did, row.op_type, row.partial_op, row.required_signers, row.collected_sigs, row.state, row.created_at, row.expires_at)
+    .bind(
+      row.id,
+      row.ward_did,
+      row.op_type,
+      row.partial_op,
+      row.required_signers,
+      row.collected_sigs,
+      row.sig_timestamps,
+      row.state,
+      row.created_at,
+      row.expires_at,
+    )
     .run();
 }
 
@@ -185,8 +198,10 @@ export async function getPendingOperation(env: Env, id: string): Promise<Pending
   return row ?? null;
 }
 
-export async function updatePendingOperationState(env: Env, id: string, state: string, collectedSigs: string): Promise<void> {
-  await env.DB.prepare("UPDATE pending_operations SET state = ?, collected_sigs = ? WHERE id = ?").bind(state, collectedSigs, id).run();
+export async function updatePendingOperationState(env: Env, id: string, state: string, collectedSigs: string, sigTimestamps: string): Promise<void> {
+  await env.DB.prepare("UPDATE pending_operations SET state = ?, collected_sigs = ?, sig_timestamps = ? WHERE id = ?")
+    .bind(state, collectedSigs, sigTimestamps, id)
+    .run();
 }
 
 /** Every still-live (not finalized/declined/expired) proposal naming `signerDid` somewhere in its own `required_signers` -- advisory, same spirit as that column itself (rules.ts's own isSatisfied is the real gate, this is just who to show/notify). */

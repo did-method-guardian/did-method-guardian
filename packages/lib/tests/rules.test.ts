@@ -156,6 +156,37 @@ test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate w
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(opBoth, [], ctx), true);
 });
 
+test("REQ-4-2 regression: a guardian signature collected before that guardian's own later key rotation still verifies, via ctx.sigTimestamps's point-in-time resolution", async () => {
+  // g1 signs at T1 with its old key. Registered via pending_operations
+  // (registrar API spec §3), the operation doesn't finalize until T2 --
+  // by which point g1 has rotated its own, unrelated identity to a new
+  // key. A resolver that only ever reports "current" (ignoring asOf, the
+  // bug this fixes) would see the new key and reject g1's own, perfectly
+  // legitimate T1 signature.
+  const wardDid = "did:guardian:alice:example.com";
+  const g1Did = "did:guardian:g1:example.com";
+  const g1OldKey = await generateKeypair();
+  const g1NewKey = await generateKeypair();
+  const rotatedAt = new Date("2026-06-01T00:00:00Z");
+  const signedAt = "2026-05-01T00:00:00.000Z"; // before rotatedAt
+
+  const state = makeState({ did: wardDid, guardians: [g1Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } });
+  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
+  const sigs = await signMap(partial, { [g1Did]: g1OldKey.privateKey }, [g1Did]);
+  const op = { ...partial, sigs };
+
+  const asOfAwareResolver: KeyResolver = (did, asOf) => {
+    if (did !== g1Did) return undefined;
+    return asOf && asOf.getTime() < rotatedAt.getTime() ? [g1OldKey.publicKey] : [g1NewKey.publicKey];
+  };
+
+  const ctxNoTimestamp: VerificationContext = { wardDid, state, resolveKey: asOfAwareResolver, isGuardianLive: allLive() };
+  assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctxNoTimestamp), false, "with no sigTimestamps recorded, this resolves 'now' -- after rotation -- and the old-key signature correctly fails");
+
+  const ctxWithTimestamp: VerificationContext = { ...ctxNoTimestamp, sigTimestamps: { [g1Did]: signedAt } };
+  assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctxWithTimestamp), true, "with the real signing time recorded, this resolves to the key that was actually valid then, and the signature is honored");
+});
+
 test("REQ-4-4: a deactivated guardian's signature no longer counts toward recovery_threshold", async () => {
   const wardDid = "did:guardian:alice:example.com";
   const g1Did = "did:guardian:g1:example.com";

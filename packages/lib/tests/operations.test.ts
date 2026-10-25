@@ -9,6 +9,7 @@ import {
   signCustodialRotate,
   verifyCustodialRotate,
   signRegistrarAttestation,
+  verifySignerSig,
   cidFor,
 } from "../src/operations.js";
 import type { KeyResolver } from "../src/operations.js";
@@ -242,6 +243,33 @@ test("a guardian who rotated their own keys signs with their new key, verified l
 
   assert.equal((await verifyGuardianTransfer(op, WARD_DID, currentGuardians, resolveStale)).valid, false, "signed with the new key, so a resolver still reporting the old one must reject it");
   assert.equal((await verifyGuardianTransfer(op, WARD_DID, currentGuardians, resolveFresh)).valid, true, "the live, post-rotation resolver accepts it with no re-registration needed");
+});
+
+test("REQ-4-2: verifySignerSig's own asOf parameter resolves a signer's key as of a given time, not whatever the resolver reports as current", async () => {
+  // A signature collected asynchronously (registrar API spec §3) can
+  // outlive its own signer's later key rotation -- it was genuinely valid
+  // when produced, and REQ-4-2 requires it stay verifiable against the key
+  // that was actually valid at that moment, not whatever's current by the
+  // time a (possibly much later) verification happens. A resolver that's
+  // asOf-aware reports differently depending on the timestamp it's asked
+  // about; verifySignerSig must pass its own asOf argument through rather
+  // than silently ignoring it.
+  const oldKey = await generateKeypair();
+  const newKey = await generateKeypair();
+  const rotatedAt = new Date("2026-06-01T00:00:00Z");
+  const resolve: KeyResolver = (_did, asOf) => {
+    if (asOf && asOf.getTime() < rotatedAt.getTime()) return [oldKey.publicKey];
+    return [newKey.publicKey];
+  };
+
+  const op = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: ["did:key:zNew"], verificationMethods: {}, services: {}, prev: "cid0" },
+    oldKey.privateKey,
+  );
+  const signedAt = new Date("2026-05-01T00:00:00Z"); // before rotatedAt
+
+  assert.equal(await verifySignerSig(op, "did:guardian:g1:example.com", op.sig!, resolve, signedAt), true, "verified as of when it was actually signed, against the key valid then");
+  assert.equal(await verifySignerSig(op, "did:guardian:g1:example.com", op.sig!, resolve), false, "verified with no asOf (i.e. 'now', after rotation) against the signer's current key must fail -- it's genuinely a different key");
 });
 
 test("cidFor is deterministic for identical content", async () => {

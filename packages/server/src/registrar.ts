@@ -484,7 +484,21 @@ export async function resolveLog(env: Env, name: string | null): Promise<LogEntr
  * just not for new writes. `custodial_create` isn't reachable here at all --
  * genesis has its own path (registerWard).
  */
-export async function submitOperation(env: Env, name: string | null, op: Operation): Promise<{ accepted: true } | { accepted: false; reason: string }> {
+/**
+ * `sigTimestamps`, when given (registrar API spec §3's own async collection,
+ * the only caller that has this information): REQ-4-2's own point-in-time
+ * key resolution for whichever signer each timestamp names, rather than
+ * verifying every signature against whatever's current right now -- see
+ * `makeExternalResolver`. A signer not named here is verified against its
+ * current key, correct for the ordinary direct-submit path, where every
+ * signature was necessarily just produced.
+ */
+export async function submitOperation(
+  env: Env,
+  name: string | null,
+  op: Operation,
+  sigTimestamps?: Record<Did, string>,
+): Promise<{ accepted: true } | { accepted: false; reason: string }> {
   const ward = await findWard(env, name);
   if (!ward) return { accepted: false, reason: `no such ward "${name}"` };
   const log = await loadLog(env, ward.did);
@@ -500,6 +514,7 @@ export async function submitOperation(env: Env, name: string | null, op: Operati
     state,
     resolveKey: makeExternalResolver(env),
     isGuardianLive: makeGuardianLivenessResolver(env),
+    sigTimestamps,
   };
 
   const opPrev = (op as { prev?: string | null }).prev ?? null;
@@ -591,25 +606,64 @@ export function makeGuardianLivenessResolver(env: Env): GuardianLivenessResolver
  * or an external DID at another registrar entirely -- a real did:guardian
  * deployment is federated (spec §5), so a guardian named in `incoming` need
  * not be custodied here.
+ *
+ * `asOf`, when given, resolves REQ-4-2's point-in-time question instead of
+ * "what's current right now": replays that DID's own log (local via
+ * `loadLog`, external via its own `/log`, same federation pattern
+ * `makeGuardianLivenessResolver` already uses) and returns whichever
+ * `operationalKeys` were in force at that moment -- an entry with no
+ * recorded `acceptedAt` (shouldn't happen for an already-accepted
+ * operation, but a replay-only verifier might hand this a bare log with
+ * none) is kept rather than dropped, since there's no acceptance time to
+ * compare against. Omitted, this returns the fast path: whatever's current
+ * right now, no log fetch needed.
  */
 export function makeExternalResolver(env: Env) {
-  return async (did: Did): Promise<string[] | undefined> => {
+  return async (did: Did, asOf?: Date): Promise<string[] | undefined> => {
     const local = await getWardByDid(env, did);
-    if (local) return [local.public_key];
-    // External DID: resolve via its own registrar's .well-known endpoint --
-    // the same deterministic, single-parse split used everywhere else in
-    // this method (spec §5), not a bespoke re-implementation of it.
-    let name: string | null, domain: string;
-    try {
-      ({ name, domain } = parseDid(did));
-    } catch {
-      return undefined;
+    if (!asOf) {
+      if (local) return [local.public_key];
+      // External DID: resolve via its own registrar's .well-known endpoint --
+      // the same deterministic, single-parse split used everywhere else in
+      // this method (spec §5), not a bespoke re-implementation of it.
+      let name: string | null, domain: string;
+      try {
+        ({ name, domain } = parseDid(did));
+      } catch {
+        return undefined;
+      }
+      try {
+        const resp = await fetch(`https://${domain}${wellKnownPath(name)}`);
+        if (!resp.ok) return undefined;
+        const doc = (await resp.json()) as { verificationMethod?: { publicKeyMultibase: string }[] };
+        return doc.verificationMethod?.map((vm) => vm.publicKeyMultibase);
+      } catch {
+        return undefined;
+      }
     }
+
+    let log: LogEntry[];
+    if (local) {
+      log = await loadLog(env, local.did);
+    } else {
+      let name: string | null, domain: string;
+      try {
+        ({ name, domain } = parseDid(did));
+      } catch {
+        return undefined;
+      }
+      try {
+        const resp = await fetch(`https://${domain}${wellKnownPath(name)}/log`);
+        if (!resp.ok) return undefined;
+        log = (await resp.json()) as LogEntry[];
+      } catch {
+        return undefined;
+      }
+    }
+    const asOfMs = asOf.getTime();
+    const logAsOf = log.filter((e) => !e.acceptedAt || new Date(e.acceptedAt).getTime() <= asOfMs);
     try {
-      const resp = await fetch(`https://${domain}${wellKnownPath(name)}`);
-      if (!resp.ok) return undefined;
-      const doc = (await resp.json()) as { verificationMethod?: { publicKeyMultibase: string }[] };
-      return doc.verificationMethod?.map((vm) => vm.publicKeyMultibase);
+      return replay(did, logAsOf).operationalKeys;
     } catch {
       return undefined;
     }

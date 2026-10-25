@@ -15,12 +15,21 @@ import type {
 } from "./types.js";
 
 /**
- * Resolves a DID's current, authoritative public key(s) at verification time
- * -- live, never a frozen snapshot (spec §4.8). Async: a real deployment
- * resolves external DIDs over the network (spec §5), not just from local
- * state.
+ * Resolves a DID's authoritative public key(s) -- live, never a frozen
+ * snapshot (spec §4.8). Async: a real deployment resolves external DIDs
+ * over the network (spec §5), not just from local state.
+ *
+ * `asOf`, when given, asks for whichever key(s) were valid for that DID at
+ * that point in time -- REQ-4-2's own point-in-time requirement for a
+ * guardian signature, determined by replaying that guardian's own log up to
+ * `asOf` rather than asking what its key is right now. Omitted means "now"
+ * -- the ordinary case for a signature that's verified immediately, in the
+ * same call it was produced in (every self-contained convenience endpoint).
+ * A signature collected asynchronously (registrar API spec §3) and verified
+ * again later, after its own signer has since rotated, is exactly the case
+ * this parameter exists for.
  */
-export type KeyResolver = (did: Did) => string[] | undefined | Promise<string[] | undefined>;
+export type KeyResolver = (did: Did, asOf?: Date) => string[] | undefined | Promise<string[] | undefined>;
 
 function payloadWithoutSig<T extends { sig?: unknown; sigs?: unknown }>(op: T): Omit<T, "sig" | "sigs"> {
   const { sig: _sig, sigs: _sigs, ...rest } = op;
@@ -33,9 +42,9 @@ function payloadWithoutSigOrRegistrar<T extends { sig?: unknown; sigs?: unknown;
   return rest;
 }
 
-/** Verifies one party's signature over an operation, checked against that party's own resolved keys. */
-export async function verifySignerSig(op: Operation, signerDid: Did, sigB64: string, resolve: KeyResolver): Promise<boolean> {
-  const keys = await resolve(signerDid);
+/** Verifies one party's signature over an operation, checked against that party's own resolved keys -- as of `asOf` if given, see `KeyResolver`. */
+export async function verifySignerSig(op: Operation, signerDid: Did, sigB64: string, resolve: KeyResolver, asOf?: Date): Promise<boolean> {
+  const keys = await resolve(signerDid, asOf);
   if (!keys || keys.length === 0) return false;
   const payload = payloadWithoutSig(op as any);
   for (const pk of keys) {
