@@ -222,3 +222,22 @@ export const OPERATION_RULES = {
   policy_update: policyUpdateRule,
   custodial_tombstone: tombstoneRule,
 } as const;
+
+export type RuleGovernedOpType = keyof typeof OPERATION_RULES;
+
+/**
+ * Generic verify entrypoint, driven entirely by OPERATION_RULES -- the one
+ * place this table actually gets exercised by real verification code, not
+ * just by rules.test.ts. Does not handle `custodial_create` (no rule entry;
+ * see checkGenesisShape) or the v0.1 `guardian_transfer` (superseded, kept
+ * in operations.ts only for replaying already-accepted history).
+ */
+export async function verifyByRules(op: { type: string }, ctx: VerificationContext): Promise<{ valid: boolean; reason?: string }> {
+  const rule = (OPERATION_RULES as Record<string, OperationRule<any>>)[op.type];
+  if (!rule) return { valid: false, reason: `operation type "${op.type}" has no rules-table entry` };
+  const shape = await rule.checkShape(op, ctx);
+  if (!shape.valid) return shape;
+  const satisfied = await rule.isSatisfied(op, [], ctx);
+  if (!satisfied) return { valid: false, reason: `signer requirement not met for ${op.type}` };
+  return { valid: true };
+}

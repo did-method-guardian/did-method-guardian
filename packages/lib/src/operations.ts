@@ -5,10 +5,13 @@ import type {
   CustodialRotateOp,
   CustodialTombstoneOp,
   Did,
+  GuardianAddOp,
   GuardianPolicy,
   GuardianRelinquishOp,
+  GuardianRemoveOp,
   GuardianTransferOp,
   Operation,
+  PolicyUpdateOp,
 } from "./types.js";
 
 /**
@@ -76,6 +79,22 @@ export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyR
 export async function signCustodialRotate(partial: Omit<CustodialRotateOp, "sig">, privateKey: string): Promise<CustodialRotateOp> {
   const payload = payloadWithoutSig(partial as any);
   return { ...partial, sig: await signPayload(payload, privateKey) };
+}
+
+/** REQ-7.2-1(b): guardian-initiated recovery rotation -- signed by `sigs` (guardian DIDs), never the ward's own key. Nullification eligibility (REQ-6-8) is checked at the log/registrar level (see document.ts), not here. */
+export async function signCustodialRotateByGuardians(
+  partial: Omit<CustodialRotateOp, "sig" | "sigs">,
+  signerKeys: Record<Did, string>,
+  signers: Did[],
+): Promise<CustodialRotateOp> {
+  const payload = payloadWithoutSig(partial as any);
+  const sigs: Record<Did, string> = {};
+  for (const did of signers) {
+    const pk = signerKeys[did];
+    if (!pk) throw new Error(`missing private key for required signer ${did}`);
+    sigs[did] = await signPayload(payload, pk);
+  }
+  return { ...partial, sigs };
 }
 
 export async function verifyCustodialRotate(op: CustodialRotateOp, currentOperationalKeys: string[], resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
@@ -146,6 +165,30 @@ export async function verifyGuardianRelinquish(
     return { valid: false, reason: "removal_threshold not met for guardian_relinquish" };
   }
   return { valid: true };
+}
+
+/** v0.2. Shared by guardian_add/guardian_remove/policy_update -- each just needs a `sigs` map over whichever signers it names, same shape signGuardianRelinquish already uses. */
+async function signSigsMap<Op extends { sigs?: Record<Did, string> }>(partial: Omit<Op, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<Op> {
+  const payload = payloadWithoutSig(partial as any);
+  const sigs: Record<Did, string> = {};
+  for (const did of signers) {
+    const pk = signerKeys[did];
+    if (!pk) throw new Error(`missing private key for required signer ${did}`);
+    sigs[did] = await signPayload(payload, pk);
+  }
+  return { ...partial, sigs } as Op;
+}
+
+export function signGuardianAdd(partial: Omit<GuardianAddOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<GuardianAddOp> {
+  return signSigsMap(partial, signerKeys, signers);
+}
+
+export function signGuardianRemove(partial: Omit<GuardianRemoveOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<GuardianRemoveOp> {
+  return signSigsMap(partial, signerKeys, signers);
+}
+
+export function signPolicyUpdate(partial: Omit<PolicyUpdateOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<PolicyUpdateOp> {
+  return signSigsMap(partial, signerKeys, signers);
 }
 
 export async function signCustodialTombstone(partial: Omit<CustodialTombstoneOp, "sigs">, signerKeys: Record<Did, string>, signers: Did[]): Promise<CustodialTombstoneOp> {

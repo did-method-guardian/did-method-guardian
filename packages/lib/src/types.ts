@@ -122,6 +122,8 @@ export type Operation =
 export interface LogEntry {
   cid: string;
   op: Operation;
+  /** When a registrar accepted this operation -- REQ-6-8/6-9's nullification window is evaluated against this. Optional: a verifier replaying a bare log with no registrar-side acceptance metadata can still resolve state; it just can't itself originate a new nullification. */
+  acceptedAt?: string;
 }
 
 /** The method-internal state derived by replaying a log -- a superset of the presented DID Document. */
