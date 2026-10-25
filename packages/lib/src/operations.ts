@@ -79,6 +79,7 @@ export async function signCustodialRotate(partial: Omit<CustodialRotateOp, "sig"
 }
 
 export async function verifyCustodialRotate(op: CustodialRotateOp, currentOperationalKeys: string[], resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
+  if (!op.sig) return { valid: false, reason: "rotation not signed by a current operational key" };
   const payload = payloadWithoutSig(op as any);
   for (const pk of currentOperationalKeys) {
     if (await verifyPayload(payload, op.sig, pk)) return { valid: true };

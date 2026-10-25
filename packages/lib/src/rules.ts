@@ -1,0 +1,224 @@
+// Declarative description of every v0.2 operation's own acceptance rule --
+// required shape, signer formula, which GuardianPolicy field (if any)
+// governs it, and its replay() state-transition effect. One source,
+// checkable line-by-line against the formal spec
+// (website/content/docs/did-guardian-spec-v0.2.0/), imported by both this
+// package's own tests (rules.test.ts) and, eventually, by operations.ts
+// once task #107 wires real sign/verify functions through it.
+//
+// Deliberately NOT wired into operations.ts/document.ts yet -- this file
+// and its tests stand alone so the existing (v0.1, guardian_transfer-based)
+// implementation and its own test suite keep passing unmodified. Task #107
+// is where this table actually replaces today's per-operation functions.
+
+import { verifySignerSig } from "./operations.js";
+import type { KeyResolver } from "./operations.js";
+import { meetsThreshold } from "./quorum.js";
+import type {
+  CustodialRotateOp,
+  CustodialTombstoneOp,
+  Did,
+  GuardianAddOp,
+  GuardianPolicy,
+  GuardianRelinquishOp,
+  GuardianRemoveOp,
+  PolicyUpdateOp,
+  ResolvedState,
+} from "./types.js";
+
+/** REQ-6-9: 72 hours, matching did:plc's own recovery window exactly. */
+export const RECOVERY_WINDOW_MS = 72 * 60 * 60 * 1000;
+
+/** REQ-6-8: whether a guardian-signed recovery rotation may still nullify the operation that followed `nulledOpAcceptedAt`. */
+export function withinRecoveryWindow(nulledOpAcceptedAt: Date, now: Date): boolean {
+  return now.getTime() - nulledOpAcceptedAt.getTime() < RECOVERY_WINDOW_MS;
+}
+
+/**
+ * REQ-4-4: a guardian whose own identity is currently deactivated is excluded
+ * from the current guardian set for every purpose this document defines.
+ * `isGuardianLive` resolves that live, per-signer -- a stand-in for actually
+ * replaying each guardian's own log, which is cross-DID and out of scope for
+ * a single ward's own `replay()`.
+ */
+export type GuardianLivenessResolver = (did: Did) => boolean | Promise<boolean>;
+
+export async function liveGuardians(state: ResolvedState, isGuardianLive: GuardianLivenessResolver): Promise<Did[]> {
+  const live: Did[] = [];
+  for (const g of state.guardians) {
+    if (await isGuardianLive(g)) live.push(g);
+  }
+  return live;
+}
+
+export interface VerificationContext {
+  wardDid: Did;
+  /** Resolved state as of this operation's own `prev` -- never post-application. */
+  state: ResolvedState;
+  resolveKey: KeyResolver;
+  isGuardianLive: GuardianLivenessResolver;
+}
+
+async function validSignersOf(op: { sigs?: Record<Did, string> }, ctx: VerificationContext): Promise<Did[]> {
+  const sigs = op.sigs ?? {};
+  const valid: Did[] = [];
+  for (const did of Object.keys(sigs)) {
+    if (await verifySignerSig(op as any, did, sigs[did], ctx.resolveKey)) valid.push(did);
+  }
+  return valid;
+}
+
+export interface ShapeResult {
+  valid: boolean;
+  reason?: string;
+}
+
+/** REQ-7.1-1/7.1-2/7.1-3/7.1-4/7.1-7: genesis's own structural requirements -- no signer formula, since `incoming` MUST be `[]` (nothing to sign). */
+export function checkGenesisShape(op: {
+  incoming: Did[];
+  prev: unknown;
+  operationalKeys: unknown[];
+  verificationMethods: Record<string, unknown>;
+  services: Record<string, unknown>;
+  creator?: Did;
+}): ShapeResult {
+  if (op.incoming.length !== 0) return { valid: false, reason: "REQ-7.1-1: incoming must be [] -- establish a guardian via guardian_add instead" };
+  if (op.prev !== null) return { valid: false, reason: "REQ-7.1-2: genesis prev must be null" };
+  if (!op.operationalKeys || !op.verificationMethods || !op.services) {
+    return { valid: false, reason: "REQ-7.1-3: operationalKeys/verificationMethods/services must be present" };
+  }
+  if (!op.creator) return { valid: false, reason: "REQ-7.1-4: creator must be present" };
+  return { valid: true };
+}
+
+/** REQ-2-1: name syntax -- lowercase ALPHA/DIGIT/"-", 3-32 chars, starts/ends ALPHA/DIGIT, no "--". Availability (REQ-7.1-6) is registrar-level, not checkable here. */
+export const NAME_RE = /^[a-z0-9](?:-?[a-z0-9])*$/;
+export function isValidName(name: string): boolean {
+  return name.length >= 3 && name.length <= 32 && NAME_RE.test(name);
+}
+
+interface OperationRule<Op> {
+  reqIds: string[];
+  governingPolicyField: keyof GuardianPolicy | null;
+  checkShape(op: Op, ctx: VerificationContext): Promise<ShapeResult> | ShapeResult;
+  /** The actual acceptance gate. Some formulas are an OR of independently-satisfiable sets (rotate, guardian_add) -- a flat "required signers" list can't express that, so this is the one source of truth, not `requiredSigners` below. */
+  isSatisfied(op: Op, validSigners: Did[], ctx: VerificationContext): Promise<boolean> | boolean;
+  /** Documentation/signing-helper aid only -- a sufficient signer set, not necessarily the only one `isSatisfied` would accept. */
+  requiredSigners(op: Op, ctx: VerificationContext): Promise<Did[]> | Did[];
+  applyToState(op: Op, state: ResolvedState): ResolvedState;
+}
+
+export const rotateRule: OperationRule<CustodialRotateOp> = {
+  reqIds: ["REQ-7.2-1", "REQ-7.2-2", "REQ-5-2"],
+  governingPolicyField: "recovery_threshold",
+  checkShape: () => ({ valid: true }), // REQ-7.2-2 holds by construction -- the type carries no guardian/policy fields
+  async isSatisfied(op, _validSigners, ctx) {
+    if (op.sig) {
+      const wardSigned = await verifySignerSig(op as any, ctx.wardDid, op.sig, ctx.resolveKey);
+      if (wardSigned) return true; // REQ-7.2-1(a)
+    }
+    if (op.sigs) {
+      const validGuardianSigs = await validSignersOf(op, ctx);
+      const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+      if (meetsThreshold(ctx.state.guardianPolicy.recovery_threshold, validGuardianSigs, live)) return true; // REQ-7.2-1(b)
+    }
+    return false;
+  },
+  requiredSigners: (_op, ctx) => [ctx.wardDid],
+  applyToState: (op, state) => ({
+    ...state,
+    operationalKeys: [...op.operationalKeys],
+    verificationMethods: { ...op.verificationMethods },
+    services: { ...op.services },
+  }),
+};
+
+export const guardianAddRule: OperationRule<GuardianAddOp> = {
+  reqIds: ["REQ-7.2-3", "REQ-7.2-4", "REQ-7.2-5", "REQ-5-5", "REQ-4-4"],
+  governingPolicyField: "addition_threshold",
+  checkShape(op, ctx) {
+    // Checked against the LIVE set -- REQ-4-4's "every purpose this document defines" covers this check too.
+    return { valid: true }; // live-membership check needs ctx, done in isSatisfied's own live computation below to avoid double resolution
+  },
+  async isSatisfied(op, _validSigners, ctx) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    if (live.includes(op.incoming)) return false; // REQ-7.2-3
+    const validSigners = await validSignersOf(op, ctx);
+    if (!validSigners.includes(op.incoming)) return false;
+    if (live.length === 0) return validSigners.includes(ctx.wardDid); // REQ-7.2-5
+    return meetsThreshold(ctx.state.guardianPolicy.addition_threshold, validSigners, live); // REQ-7.2-4
+  },
+  requiredSigners: (op, ctx) => [op.incoming, ctx.wardDid],
+  applyToState: (op, state) => ({ ...state, guardians: [...state.guardians, op.incoming] }),
+};
+
+export const guardianRemoveRule: OperationRule<GuardianRemoveOp> = {
+  reqIds: ["REQ-7.2-6", "REQ-7.2-7", "REQ-5-4", "REQ-5-7", "REQ-4-4"],
+  governingPolicyField: "removal_threshold",
+  checkShape: () => ({ valid: true }), // membership/min_guardian_count checks need live state -- folded into isSatisfied
+  async isSatisfied(op, _validSigners, ctx) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    if (!live.includes(op.outgoing)) return false; // REQ-7.2-6
+    if (live.length <= 1) return false; // REQ-7.2-6: can't remove the only guardian
+    if (live.length - 1 < ctx.state.guardianPolicy.min_guardian_count) return false; // REQ-5-7/REQ-7.2-7's own min_guardian_count clause
+    const validSigners = await validSignersOf(op, ctx);
+    if (validSigners.includes(op.outgoing)) return true; // REQ-7.2-7(a) voluntary
+    return meetsThreshold(ctx.state.guardianPolicy.removal_threshold, validSigners, live); // REQ-7.2-7(b), evaluated against the FULL live set, not live-minus-outgoing
+  },
+  requiredSigners: (op) => [op.outgoing],
+  applyToState: (op, state) => ({ ...state, guardians: state.guardians.filter((d) => d !== op.outgoing) }),
+};
+
+export const guardianRelinquishRule: OperationRule<GuardianRelinquishOp> = {
+  reqIds: ["REQ-7.2-8", "REQ-5-4", "REQ-4-4"],
+  governingPolicyField: "removal_threshold",
+  checkShape: () => ({ valid: true }),
+  async isSatisfied(op, _validSigners, ctx) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    const validSigners = await validSignersOf(op, ctx);
+    return meetsThreshold(ctx.state.guardianPolicy.removal_threshold, validSigners, live);
+  },
+  requiredSigners: async (_op, ctx) => liveGuardians(ctx.state, ctx.isGuardianLive),
+  applyToState: (_op, state) => ({ ...state, guardians: [] }),
+};
+
+export const policyUpdateRule: OperationRule<PolicyUpdateOp> = {
+  reqIds: ["REQ-7.2-9", "REQ-7.2-10", "REQ-5-6"],
+  governingPolicyField: "policy_threshold",
+  async checkShape(op, ctx) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    if (live.length === 0) return { valid: false, reason: "REQ-7.2-10: policy_update rejected while the current guardian set is empty" };
+    return { valid: true };
+  },
+  async isSatisfied(op, _validSigners, ctx) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    const validSigners = await validSignersOf(op, ctx);
+    // REQ-5-6: evaluated against the CURRENT policy_threshold, never the proposed op.policy's own value.
+    return meetsThreshold(ctx.state.guardianPolicy.policy_threshold, validSigners, live);
+  },
+  requiredSigners: async (_op, ctx) => liveGuardians(ctx.state, ctx.isGuardianLive),
+  applyToState: (op, state) => ({ ...state, guardianPolicy: { ...op.policy } }),
+};
+
+export const tombstoneRule: OperationRule<CustodialTombstoneOp> = {
+  reqIds: ["REQ-7.3-1", "REQ-5-3", "REQ-4-4"],
+  governingPolicyField: "tombstone_threshold",
+  checkShape: () => ({ valid: true }),
+  async isSatisfied(op, _validSigners, ctx) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    const eligible = [ctx.wardDid, ...live];
+    const validSigners = await validSignersOf(op, ctx);
+    return meetsThreshold(ctx.state.guardianPolicy.tombstone_threshold, validSigners, eligible);
+  },
+  requiredSigners: (_op, ctx) => [ctx.wardDid],
+  applyToState: (_op, state) => ({ ...state, deactivated: true }),
+};
+
+export const OPERATION_RULES = {
+  custodial_rotate: rotateRule,
+  guardian_add: guardianAddRule,
+  guardian_remove: guardianRemoveRule,
+  guardian_relinquish: guardianRelinquishRule,
+  policy_update: policyUpdateRule,
+  custodial_tombstone: tombstoneRule,
+} as const;
