@@ -40,6 +40,8 @@ For anything needing more than one signature collected over more than one reques
 
 Modeled as a state machine per pending proposal: `proposed -> collecting -> satisfied -> finalized`, with `expired` and `declined` as terminal alternatives. `finalized` is entered automatically the instant `satisfied` is reached (the registrar submits the now-complete operation to §1's own `/operations` itself) -- a caller never finalizes by hand.
 
+A proposal can stay `collecting` for up to 7 days, long enough that a signer might rotate their own, unrelated operational key before everyone else has signed. This registrar records when it collected each signature and, at finalize time, verifies each one against whichever key its own signer held *then* (REQ-4-2) -- never against whatever's current by the time the last signature finally arrives. A signer rotating their own key mid-vote never invalidates a signature they already gave.
+
 `decline` and `withdraw` are two distinct operations with different authority, not one action with a policy-configurable effect:
 
 - **`decline` is a veto.** Any current, live guardian of the ward -- checked live, not just whoever this registrar's own advisory "required signers" guess happened to list -- can kill the proposal outright by declining, whether or not they'd already signed. Unconditional: it doesn't matter how many others had already approved. Allowed from `collecting` *or* `satisfied` (nothing is actually irreversible until it's truly in the log -- `satisfied` can still be sitting there unfinalized in the rare case a prior finalize attempt failed and is awaiting retry). Rejected once `finalized`/`declined`/`expired` -- none of those have an undo.
