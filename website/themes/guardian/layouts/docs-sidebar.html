@@ -5,10 +5,12 @@
 </head>
 <body>
 <header ht-include='fragments/header.html'></header>
-<main class='container docs-layout'>
+<div class='layout'>
 <aside ht-include='fragments/docs-nav.html'></aside>
-<article ht-content='markdown:page.content'></article>
+<main class='content'>
+<article class='prose' ht-content='markdown:page.content'></article>
 </main>
+</div>
 <footer ht-include='fragments/footer.html'></footer>
 </body>
 </html>

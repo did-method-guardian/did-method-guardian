@@ -1,11 +1,11 @@
 ---
-layout: docs
+layout: docs-sidebar
 title: "DID Guardian Method Specification, v0.2"
 description: "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements."
 ---
 # DID Guardian Method Specification
 
-`did:guardian` is a self-authenticating DID method that adds group guardianship -- a configurable, cryptographically-enforced set of parties able to recover, revoke, or transfer an identity -- on top of the self-rotation [`did:plc`](https://github.com/did-method-plc/did-method-plc) already provides.
+`did:guardian` merges [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s own operation log and key-rotation model with [`did:web`](https://w3c-ccg.github.io/did-method-web/)'s domain-scoped, directory-free resolution, adding group guardianship on top of both -- a configurable, cryptographically-enforced set of parties able to recover, revoke, or transfer an identity.
 
 The key words *MUST*, *MUST NOT*, *REQUIRED*, *SHALL*, *SHALL NOT*, *SHOULD*, *SHOULD NOT*, *RECOMMENDED*, *MAY*, and *OPTIONAL* in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
@@ -13,7 +13,7 @@ Each normative rule carries a stable requirement ID (`REQ-<section>-<n>`); an ID
 
 ## 1. Target system
 
-A registrar: an HTTP server operating one or more `did:guardian` namespaces, one per domain it controls. Unlike `did:plc`, there is no single central directory -- each registrar operates independently, resolved by domain ([§8](#8-resolution)).
+A registrar: an HTTP server operating one or more `did:guardian` namespaces, one per domain it controls, resolved by domain ([§8](#8-resolution)) the same way `did:web` is -- unlike `did:plc`, there is no single central directory; each registrar operates independently.
 
 ## 2. Identifier syntax
 
