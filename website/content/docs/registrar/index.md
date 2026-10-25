@@ -31,7 +31,7 @@ Each of these corresponds to an operation whose formal signer requirement can be
 | `POST` | `.../remove-self` | `guardian_remove`, voluntary (`outgoing = [caller]`) | needs only the caller's own consent (REQ-7.2-7a) |
 | `POST` | `.../remove` | `guardian_remove`, forced | self-contained **only** when the *other* current guardians (excluding the one being removed) are custodied entirely by this registrar **and** that custodied subset alone meets `removal_threshold` (REQ-7.2-7b); otherwise rejected, directing the caller to §3 |
 | `POST` | `.../relinquish` | `guardian_relinquish` | self-contained **only** when the current guardian set is custodied entirely by this registrar **and** that custodied subset alone meets `removal_threshold` (e.g. a sole guardian, trivially); otherwise rejected with a clear reason directing the caller to §3 |
-| `POST` | `.../tombstone` | `custodial_tombstone`, ward-signed | `tombstone_threshold` defaults to `any`; the ward's own key alone always suffices |
+| `POST` | `.../tombstone` | `custodial_tombstone`, ward-signed | `tombstone_threshold` defaults to `any`; the ward's own key alone always suffices. If the identity is itself a current guardian of anything, see §4's own acceptance/cascade policy first |
 | `POST` | `.../adopt` | `guardian_add`, zero-to-one case only | needs only the incoming party's own consent plus the ward's own key (REQ-7.2-5) -- rejected if the ward already has any current guardian; use §3 for a non-empty guardian set |
 
 ## 3. Asynchronous signature collection (`pending_operations`)
@@ -50,14 +50,22 @@ Modeled as a state machine per pending proposal: `proposed -> collecting -> sati
 
 A proposal not reaching `satisfied` within 7 days moves to `expired`. A required signer discovers a pending proposal either by polling `/api/me/pending-signatures` or by the email notification in §5.
 
-## 4. Login / OIDC
+## 4. Guardian deactivation policy
+
+Entirely this registrar's own operational choice -- the formal spec (REQ-4-4) only requires that a deactivated guardian stop counting toward any threshold once its own `custodial_tombstone` lands; it says nothing about whether this registrar *accepts* that submission in the first place, or what else it does in response. Reused across both `.../tombstone` and any `pending_operations`-collected `custodial_tombstone` for a current guardian.
+
+- **Acceptance**: this registrar's own configuration determines whether a `custodial_tombstone` for an identity that is still a current guardian of one or more wards is accepted outright, or rejected (directing the caller to first issue `guardian_remove`/`guardian_relinquish` against each ward it guards) -- a referential-integrity-style block, same spirit as a SQL foreign key.
+- **Cascade, if offered**: when acceptance is configured to allow the tombstone through, any automatic follow-up action this registrar takes on an affected ward's behalf *MUST* consult that ward's own `GuardianPolicy.min_guardian_count` and `on_orphan` (formal spec REQ-5-7/REQ-5-8) individually -- never one blanket behavior applied to every affected ward alike. Concretely: if removing this guardian would leave a ward below its own `min_guardian_count`, that ward's own removal is refused even if the overall tombstone is otherwise accepted for the guardian's other wards; if it would leave a ward with zero guardians, that ward's own `on_orphan` decides what this registrar does next for it specifically (nothing further for `"sovereign"`, a self-signed `custodial_tombstone` for `"tombstone"`, an ordinary zero-to-one `guardian_add` naming the stated DID for `{"transfer_to": ...}`) -- each only possible, as ever, when this registrar custodies the key material the resulting operation needs.
+- **Creation-time policy defaults**: this registrar's own configured default `GuardianPolicy` (including its own default `on_orphan`/`min_guardian_count`) applies to any field a creator leaves unset in `custodial_create`'s own optional `policy` (formal spec REQ-7.1-7); unconfigured fields fall back to the formal spec's own stated defaults.
+
+## 5. Login / OIDC
 
 Unchanged by this plan -- `/authorize`, `/token`, `/userinfo`, `/.well-known/openid-configuration`, `/.well-known/jwks.json`, plus this registrar's own `gw_session`-cookie login flow. See `packages/server/src/oidc.ts` and `login.ts`; not re-documented here since nothing in this plan touches it.
 
-## 5. Email forwarding
+## 6. Email forwarding
 
 Unchanged -- `POST .../email` (set up forwarding), `GET /verify-email` (confirm a forwarding address). See `packages/server/src/email.ts`. Reused, not modified, by §3's own signer-notification need.
 
-## 6. Login secret
+## 7. Login secret
 
 Unchanged -- `POST .../login-secret` (reissue a lost or leaked one). See `packages/server/src/registrar.ts`'s `reissueLoginSecret`.

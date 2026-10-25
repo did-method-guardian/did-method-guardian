@@ -53,7 +53,9 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
   "tombstone_threshold": "any",
   "removal_threshold": "majority",
   "addition_threshold": "majority",
-  "policy_threshold": "majority"
+  "policy_threshold": "majority",
+  "min_guardian_count": 0,
+  "on_orphan": "sovereign"
 }
 ```
 
@@ -63,6 +65,8 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - <a id="req-5-4"></a>**REQ-5-4**: `removal_threshold` governs both a forced `guardian_remove` and `guardian_relinquish` ([§7.2](#72-update)). Default `majority`.
 - <a id="req-5-5"></a>**REQ-5-5**: `addition_threshold` governs `guardian_add` ([§7.2](#72-update)). Default `majority`.
 - <a id="req-5-6"></a>**REQ-5-6**: `policy_threshold` governs `policy_update` itself, evaluated against its own currently-effective value, never the proposed new one. Default `majority`.
+- <a id="req-5-7"></a>**REQ-5-7**: `min_guardian_count` (a non-negative integer, default `0` meaning no minimum) *MUST* be enforced on `guardian_remove` ([REQ-7.2-7](#req-7.2-7)) only: a registrar *MUST* reject a `guardian_remove` that would leave the guardian set smaller than this value. It *MUST NOT* be enforced on `guardian_relinquish` -- full dissolution (REQ-7.2-8) remains available at any guardian-set size regardless of a stated minimum, since it is a deliberate choice by enough of the guardians to end the relationship entirely, not a departure the ward's own policy is positioned to second-guess.
+- <a id="req-5-8"></a>**REQ-5-8**: `on_orphan` (one of `"sovereign"`, `"tombstone"`, or `{"transfer_to": <DID>}`, default `"sovereign"`) states the ward's own standing preference for what should happen if its effective guardian set becomes empty other than through an explicit `guardian_relinquish` -- e.g. via REQ-4-4's own cascading exclusion when a sole guardian is deactivated. This field is declarative, portable state: this document does not itself require any registrar to act on it automatically. A registrar that does offer automatic handling (see the registrar API specification) reads this field to decide what, if anything, to do on the affected ward's behalf.
 
 ## 6. The operation log
 
@@ -102,6 +106,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - <a id="req-7.1-4"></a>**REQ-7.1-4**: `creator` *MUST* be present -- the DID of whichever party initiated this registration. It carries no signature requirement and makes no guardianship or consent claim. A registrar accepting a self-service signup with no other initiating party *MUST* set `creator` to its own bare-domain identity.
 - <a id="req-7.1-5"></a>**REQ-7.1-5**: `registrar` *MAY* be present -- an attestation `{did, sig}` from the accepting registrar's own key. If present, a verifier *MUST* check it against the named `did`'s own resolved key.
 - <a id="req-7.1-6"></a>**REQ-7.1-6**: A name's own validity ([REQ-2-1](#req-2-1)) and availability within the accepting registrar's own namespace *MUST* both hold for the operation to be accepted.
+- <a id="req-7.1-7"></a>**REQ-7.1-7**: `policy` *MAY* be present -- a full or partial `GuardianPolicy` ([§5](#5-guardianpolicy)) the creator proposes for this ward from genesis, carrying no signature requirement of its own (same standing as `creator`, REQ-7.1-4: a fact about how this ward was set up, not a guardian-tier consent claim). Any field left unset *MUST* resolve to the accepting registrar's own configured creation-time default for that field, which itself *MUST* resolve to this document's own stated default ([§5](#5-guardianpolicy)) if the registrar has not configured one. This is the only point at which `GuardianPolicy` may differ from those stated defaults before any guardian exists to approve a `policy_update` ([REQ-7.2-10](#req-7.2-10)).
 
 ### 7.2 Update
 
@@ -119,7 +124,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 **`guardian_remove`** -- removes exactly one current guardian, named in `outgoing`.
 
 - <a id="req-7.2-6"></a>**REQ-7.2-6**: A registrar *MUST* reject this operation if `outgoing` is not a current guardian, or is the only current guardian (use `guardian_relinquish` to end the relationship entirely).
-- <a id="req-7.2-7"></a>**REQ-7.2-7**: Required signers are either (a) `outgoing`'s own key, alone, or (b) enough of the *other* current guardians (current minus `outgoing`) to meet `removal_threshold` -- *evaluated against the full current guardian set's own size*, the same `N` `guardian_relinquish` (REQ-7.2-8) uses, never against the smaller remaining-guardians pool those signers are drawn from. At exactly two current guardians this makes (b) unreachable: `majority` of `N=2` is `2`, and only one other guardian is ever available to draw from. This is deliberate, not an oversight -- see [§10](#10-security-considerations).
+- <a id="req-7.2-7"></a>**REQ-7.2-7**: Required signers are either (a) `outgoing`'s own key, alone, or (b) enough of the *other* current guardians (current minus `outgoing`) to meet `removal_threshold` -- *evaluated against the full current guardian set's own size*, the same `N` `guardian_relinquish` (REQ-7.2-8) uses, never against the smaller remaining-guardians pool those signers are drawn from. At exactly two current guardians this makes (b) unreachable: `majority` of `N=2` is `2`, and only one other guardian is ever available to draw from. This is deliberate, not an oversight -- see [§10](#10-security-considerations). A registrar *MUST* additionally reject this operation under either path if it would bring the guardian count below `min_guardian_count` ([REQ-5-7](#req-5-7)).
 
 **`guardian_relinquish`** -- sets the guardian set to `[]`.
 

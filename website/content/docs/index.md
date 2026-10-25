@@ -150,7 +150,9 @@ Guardian actions are gated by a small, explicit, per-ward policy, not one hardco
   "tombstone_threshold": "any",
   "removal_threshold": "majority",
   "addition_threshold": "majority",
-  "policy_threshold": "majority"
+  "policy_threshold": "majority",
+  "min_guardian_count": 0,
+  "on_orphan": "sovereign"
 }
 ```
 
@@ -166,6 +168,10 @@ Each threshold is one of:
 **The policy governs changes to itself, via `policy_update` (new in v0.2).** `{ "type": "policy_update", "prev": ..., "sigs": {...} }` replaces `GuardianPolicy` wholesale, meeting whichever threshold `policy_threshold` *currently* names -- evaluated against its own value immediately before this update, never the new one it's changing to. (v0.1 described this governing relationship in prose but defined no operation that could ever actually change the policy; every ward was permanently stuck on the defaults above until this operation existed.) This gates weakening your own bar (e.g. dropping `removal_threshold` to `any` right before exploiting a single compromised guardian key) exactly like any other guardian action, never a free unilateral move -- a policy is never editable more loosely than its own current rule allows. A `policy_update` is rejected outright if the current guardian set is empty, since there's nobody eligible to meet any threshold at all.
 
 **Verification is a simple count-and-check, not an enumeration.** For any signed operation, take the signatures actually submitted, check each is valid and from a DID currently eligible under the relevant set, count them, and compare to the threshold. `O(N)`, never a search over possible cohorts -- the quorum-intersection property above is a structural guarantee that makes reasoning about *other* cohorts unnecessary at verification time.
+
+**Two more policy fields, both new, that aren't thresholds at all.** `min_guardian_count` (default `0`, no minimum) is enforced on `guardian_remove` only -- a ward can require it never drop below some floor (e.g. `3`, specifically to stay clear of the N=2/N=1 risk above), and `guardian_relinquish` stays exempt, since full dissolution is a deliberate choice this method already protects regardless of any stated floor. `on_orphan` (`"sovereign"`, `"tombstone"`, or `{"transfer_to": <DID>}`, default `"sovereign"`) states a ward's own preference for what *should* happen if its guardian set is ever emptied some way other than an explicit `guardian_relinquish` -- most notably §4.8's own cascading exclusion of a deactivated sole guardian. This field is declarative only: the method doesn't require any registrar to act on it, just gives every ward a portable, cross-registrar-legible way to say what it wants. Whether, and how, a given registrar actually honors it (self-tombstoning the orphan, auto-adding a stated fallback guardian like a domain's own bare root identity -- modeling the same "ward of the state" idea a legally incapacitated person with no family guardian already has a real-world analogue for) is that registrar's own choice -- see the registrar API spec's own §4.
+
+**Where the initial policy comes from.** `custodial_create` can now optionally carry a `policy` -- any subset of `GuardianPolicy`'s own fields the creator wants to set from genesis, with no signature requirement of its own (same standing as `creator`: a fact about setup, not a guardian-tier consent claim, since there's no guardian yet to ask). Anything left unset falls back to whatever the accepting registrar's own configured creation-time defaults are, which themselves fall back to the defaults stated above if the registrar hasn't configured anything different. This is the only time `GuardianPolicy` can differ from its own defaults before a guardian exists to approve a `policy_update`.
 
 ### 4.7 Key rotation authority and recovery
 
