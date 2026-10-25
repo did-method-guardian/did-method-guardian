@@ -38,6 +38,10 @@
     { "pattern": "zzmq.dev/verify-email*", "zone_name": "zzmq.dev" },
     { "pattern": "zzmq.dev/authorize*", "zone_name": "zzmq.dev" },
     { "pattern": "zzmq.dev/token*", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/userinfo*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/userinfo*", "zone_name": "zzmq.dev" },
+    // pending_operations (v0.2, task #108): .../pending/<id>/... is under
+    // /.well-known/guardian/* already, but "list pending for me" is
+    // signer-scoped, not ward-scoped, so it's its own top-level path.
+    { "pattern": "zzmq.dev/api/me/pending-signatures*", "zone_name": "zzmq.dev" }
   ]
 }
