@@ -34,5 +34,9 @@
     { "pattern": "guardianspec.org/token*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/userinfo*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/api/me/pending-signatures*", "zone_name": "guardianspec.org" }
-  ]
+  ],
+  // Daily reminder sweep for still-collecting proposals (task #113).
+  "triggers": {
+    "crons": ["0 12 * * *"]
+  }
 }

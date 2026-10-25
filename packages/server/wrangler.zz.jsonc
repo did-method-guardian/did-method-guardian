@@ -43,5 +43,9 @@
     // /.well-known/guardian/* already, but "list pending for me" is
     // signer-scoped, not ward-scoped, so it's its own top-level path.
     { "pattern": "zzmq.dev/api/me/pending-signatures*", "zone_name": "zzmq.dev" }
-  ]
+  ],
+  // Daily reminder sweep for still-collecting proposals (task #113).
+  "triggers": {
+    "crons": ["0 12 * * *"]
+  }
 }

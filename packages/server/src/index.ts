@@ -1,7 +1,7 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
-import { proposeOperation, contributeToOperation, declineOperation, getPendingOperationStatus, listPendingForSigner } from "./pendingOps.js";
+import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders } from "./pendingOps.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -13,6 +13,10 @@ function json(data: unknown, status = 200): Response {
 
 function error(message: string, status: number): Response {
   return json({ error: message }, status);
+}
+
+function html(body: string, status = 200): Response {
+  return new Response(`<!doctype html><meta charset="utf-8"><title>did:guardian</title>${body}`, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
 export default {
@@ -219,7 +223,7 @@ export default {
     // trusted-client gate on /sign or /decline, same reasoning as /propose:
     // the attached signature is the authorization, and a required signer
     // may be an external guardian with no account on this registrar at all.
-    const pendingMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)\/pending\/([^/]+)(\/sign|\/decline)?$/);
+    const pendingMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)\/pending\/([^/]+)(\/sign|\/decline|\/withdraw)?$/);
     if (pendingMatch) {
       const [, rawName, id, pendingSuffix] = pendingMatch;
       const name = rawName === "_" ? null : rawName;
@@ -235,9 +239,45 @@ export default {
           const result = await contributeToOperation(env, id, body.signer_did, body.sig);
           return json(result);
         }
+        // /decline and /withdraw each accept either a signed POST body
+        // (signer_did + sig -- works for anyone who can produce a
+        // signature) or a token-based GET (?token=... -- a plain, clickable
+        // email link, proof by verified-email possession rather than a
+        // signature; see email.ts's own header comment on why that's an
+        // equally valid proof for this specific action).
         if (pendingSuffix === "/decline" && request.method === "POST") {
-          const result = await declineOperation(env, id);
+          const body = (await request.json()) as { signer_did?: string; sig?: string };
+          if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
+          const result = await declineOperation(env, id, { signerDid: body.signer_did, sig: body.sig });
           return json(result);
+        }
+        if (pendingSuffix === "/decline" && request.method === "GET") {
+          const token = url.searchParams.get("token");
+          if (!token) return html(`<p>A token query parameter is required.</p>`, 400);
+          try {
+            await declineOperation(env, id, { token });
+            return html(`<p>Declined (vetoed). This proposal will not proceed.</p>`);
+          } catch (e) {
+            if (e instanceof RegistrarError) return html(`<p>${e.message}</p>`, e.status);
+            throw e;
+          }
+        }
+        if (pendingSuffix === "/withdraw" && request.method === "POST") {
+          const body = (await request.json()) as { signer_did?: string; sig?: string };
+          if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
+          const result = await withdrawFromOperation(env, id, { signerDid: body.signer_did, sig: body.sig });
+          return json(result);
+        }
+        if (pendingSuffix === "/withdraw" && request.method === "GET") {
+          const token = url.searchParams.get("token");
+          if (!token) return html(`<p>A token query parameter is required.</p>`, 400);
+          try {
+            await withdrawFromOperation(env, id, { token });
+            return html(`<p>Withdrawn. You're no longer being waited on; this doesn't block anyone else.</p>`);
+          } catch (e) {
+            if (e instanceof RegistrarError) return html(`<p>${e.message}</p>`, e.status);
+            throw e;
+          }
         }
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);
@@ -303,5 +343,10 @@ export default {
 
   async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
     await handleEmail(message, env);
+  },
+
+  /** Daily reminder sweep for still-collecting proposals -- see pendingOps.ts's own sendDailyReminders. Cron schedule set in each deployment's own wrangler config (triggers.crons). */
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    await sendDailyReminders(env);
   },
 };

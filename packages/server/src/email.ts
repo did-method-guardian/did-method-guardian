@@ -1,6 +1,15 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { getWardByName, upsertEmailForwarding, getEmailForwardingByToken, markEmailForwardingVerified, getVerifiedForwardingByDid } from "./db.js";
+import {
+  getWardByName,
+  upsertEmailForwarding,
+  getEmailForwardingByToken,
+  markEmailForwardingVerified,
+  getVerifiedForwardingByDid,
+  getPendingOperationToken,
+  insertPendingOperationToken,
+  touchPendingOperationToken,
+} from "./db.js";
 import { randomSecret } from "./secretBox.js";
 import { sendEmail } from "./mailchannels.js";
 
@@ -50,30 +59,177 @@ export async function requestEmailForwarding(env: Env, name: string, forwardTo: 
   return { ok: true };
 }
 
-/**
- * Best-effort notification that a pending multi-signer operation needs
- * `signerDid`'s own signature -- reuses the same verified-forwarding
- * infrastructure as everything else above, rather than a separate
- * notification channel. Silently a no-op if that DID isn't a ward this
- * registrar hosts, or hasn't set up (or verified) forwarding yet: this is a
- * convenience for discovery, never the thing that actually gates whether a
- * signature counts (rules.ts's own isSatisfied is that).
- */
-export async function notifyRequiredSigner(env: Env, signerDid: string, pendingOpId: string, opType: string): Promise<void> {
-  const forwarding = await getVerifiedForwardingByDid(env, signerDid);
-  if (!forwarding) return;
-  await sendEmail({
-    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
-    fromName: "did:guardian",
-    to: forwarding.forward_to,
-    subject: `Your signature is requested: ${opType}`,
-    text: `A ${opType} operation is waiting on your signature as ${signerDid}.\n\nPending operation id: ${pendingOpId}\n\nUse your client to review and either contribute your signature or decline it. If you don't recognize this request, you can safely ignore it -- it expires on its own if nobody completes it.`,
-  });
-}
-
 export async function confirmEmailForwarding(env: Env, token: string): Promise<{ ok: true; did: string } | { ok: false; reason: string }> {
   const row = await getEmailForwardingByToken(env, token);
   if (!row) return { ok: false, reason: "invalid or already-used verification token" };
   await markEmailForwardingVerified(env, row.did);
   return { ok: true, did: row.did };
+}
+
+// --- pending-operation ("voting") notifications ---------------------------
+//
+// One thread per proposal: every email about the same pending_operation id
+// carries the same References/In-Reply-To anchor so clients like Gmail
+// group them (Message-ID itself is reserved by MailChannels' own Send API,
+// so this is a stable synthetic value, not any real prior message's own
+// Message-ID -- threading only needs every email in the thread to agree on
+// the same value, not for it to correspond to something that really exists).
+
+function threadHeaders(env: Env, pendingOpId: string): Record<string, string> {
+  const anchor = `<pending-op-${pendingOpId}@${env.REGISTRAR_DOMAIN}>`;
+  return { References: anchor, "In-Reply-To": anchor };
+}
+
+/**
+ * The token proving email possession for (pendingOpId, signerDid) -- same
+ * trust model as this registrar's own email-verification-link flow above.
+ * Issued lazily, the first time this signer is ever notified about this
+ * proposal, then reused for every later email about it so earlier links
+ * keep working. Always also refreshes last_notified_at, the daily reminder
+ * cron's own per-signer clock.
+ */
+async function getOrIssueToken(env: Env, pendingOpId: string, signerDid: string): Promise<string> {
+  const existing = await getPendingOperationToken(env, pendingOpId, signerDid);
+  const now = new Date().toISOString();
+  if (existing) {
+    await touchPendingOperationToken(env, pendingOpId, signerDid, now);
+    return existing.token;
+  }
+  const token = randomSecret();
+  await insertPendingOperationToken(env, { pending_op_id: pendingOpId, signer_did: signerDid, token, created_at: now, last_notified_at: now });
+  return token;
+}
+
+function actionLinks(env: Env, wardName: string, pendingOpId: string, token: string): { declineUrl: string; withdrawUrl: string } {
+  const base = `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${wardName}/pending/${pendingOpId}`;
+  return { declineUrl: `${base}/decline?token=${token}`, withdrawUrl: `${base}/withdraw?token=${token}` };
+}
+
+const ACTION_LINKS_BLURB = (declineUrl: string, withdrawUrl: string) =>
+  `Changed your mind? These links work until this vote is no longer pending (once it finalizes, declines, or expires, they stop working -- there's no undo after that):\n` +
+  `  Veto this (blocks it outright, no matter how many others approve): ${declineUrl}\n` +
+  `  Withdraw (just stop waiting on me -- doesn't block anyone else): ${withdrawUrl}`;
+
+/** A signer's own signature is needed -- sent once, when a proposal is created or when it's still collecting and this signer hasn't contributed yet. */
+export async function notifyAwaitingSignature(env: Env, wardName: string, signerDid: string, pendingOpId: string, opType: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, signerDid);
+  if (!forwarding) return;
+  const token = await getOrIssueToken(env, pendingOpId, signerDid);
+  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Your signature is requested: ${opType}`,
+    text:
+      `A ${opType} operation is waiting on your signature as ${signerDid}.\n\nPending operation id: ${pendingOpId}\n\n` +
+      `Use your client to review and contribute your signature.\n\n${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}\n\n` +
+      `If nobody completes this, it expires on its own -- it never passes automatically.`,
+    headers: threadHeaders(env, pendingOpId),
+  });
+}
+
+/** Confirms a signature was recorded, and gives the signer a way to change their mind while this is still pending. */
+export async function notifyVoteRecorded(env: Env, wardName: string, signerDid: string, pendingOpId: string, opType: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, signerDid);
+  if (!forwarding) return;
+  const token = await getOrIssueToken(env, pendingOpId, signerDid);
+  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Your signature was recorded: ${opType}`,
+    text: `Your signature as ${signerDid} was recorded for the ${opType} operation (id ${pendingOpId}).\n\n${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+    headers: threadHeaders(env, pendingOpId),
+  });
+}
+
+/** Someone else contributed, but the threshold isn't met yet -- tells a still-needed signer they're still being waited on. */
+export async function notifyProgress(env: Env, wardName: string, recipientDid: string, pendingOpId: string, opType: string, actorDid: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
+  if (!forwarding) return;
+  const token = await getOrIssueToken(env, pendingOpId, recipientDid);
+  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Still waiting on your signature: ${opType}`,
+    text:
+      `${actorDid} just signed the ${opType} operation (id ${pendingOpId}), but it still needs your own signature as ${recipientDid}.\n\n` +
+      `${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+    headers: threadHeaders(env, pendingOpId),
+  });
+}
+
+/** A current guardian vetoed the proposal -- notifies everyone else who was involved that it's dead, no undo. */
+export async function notifyDeclined(env: Env, _wardName: string, recipientDid: string, pendingOpId: string, opType: string, actorDid: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
+  if (!forwarding) return;
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Declined: ${opType}`,
+    text: `${actorDid} declined (vetoed) the ${opType} operation (id ${pendingOpId}). It will not proceed -- a decline blocks it outright, regardless of how many others had already signed.`,
+    headers: threadHeaders(env, pendingOpId),
+  });
+}
+
+/** A signer withdrew (opted out, not a veto) -- tells the others not to wait on that one person, without implying anything is blocked. */
+export async function notifyWithdrawn(env: Env, wardName: string, recipientDid: string, pendingOpId: string, opType: string, actorDid: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
+  if (!forwarding) return;
+  const token = await getOrIssueToken(env, pendingOpId, recipientDid);
+  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Update: ${opType}`,
+    text:
+      `${actorDid} withdrew from the ${opType} operation (id ${pendingOpId}) -- they're opting out, not blocking it. It's still pending.\n\n` +
+      `${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+    headers: threadHeaders(env, pendingOpId),
+  });
+}
+
+/** It passed and is now part of the log. */
+export async function notifyFinalized(env: Env, _wardName: string, recipientDid: string, pendingOpId: string, opType: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
+  if (!forwarding) return;
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Finalized: ${opType}`,
+    text: `The ${opType} operation (id ${pendingOpId}) collected enough signatures and is now part of the permanent record. No further action is needed.`,
+    headers: threadHeaders(env, pendingOpId),
+  });
+}
+
+/**
+ * Daily reminder for a signer who hasn't yet acted on a still-collecting
+ * proposal -- plain-language consequences, since expiry only ever means
+ * failure (never an automatic pass): if you do nothing, this fails once it
+ * expires. The reminder cron (index.ts's own scheduled handler) is what
+ * calls this, gated on this signer's own last_notified_at being stale.
+ */
+export async function notifyReminder(env: Env, wardName: string, signerDid: string, pendingOpId: string, opType: string, expiresAt: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, signerDid);
+  if (!forwarding) return;
+  const token = await getOrIssueToken(env, pendingOpId, signerDid);
+  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Reminder: your signature is still needed: ${opType}`,
+    text:
+      `This is a reminder -- the ${opType} operation (id ${pendingOpId}) is still waiting on your signature as ${signerDid}.\n\n` +
+      `If nobody completes this by ${expiresAt}, it simply expires and fails -- it does not pass automatically, and does not need your signature to fail safely. Doing nothing is a safe default if you don't want this to happen.\n\n` +
+      `${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+    headers: threadHeaders(env, pendingOpId),
+  });
 }
