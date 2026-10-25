@@ -42,7 +42,11 @@
     // pending_operations (v0.2, task #108): .../pending/<id>/... is under
     // /.well-known/guardian/* already, but "list pending for me" is
     // signer-scoped, not ward-scoped, so it's its own top-level path.
-    { "pattern": "zzmq.dev/api/me/pending-signatures*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/api/me/pending-signatures*", "zone_name": "zzmq.dev" },
+    // Named "/guardian-login", not "/login" -- zz-maintainer's own catch-all
+    // already serves a "/login" of its own (its human-facing sign-in page);
+    // confirmed by reading its route table directly, not assumed.
+    { "pattern": "zzmq.dev/guardian-login*", "zone_name": "zzmq.dev" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

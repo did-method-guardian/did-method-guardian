@@ -77,7 +77,7 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
     if (sessionWardDid && sessionIsRequired && !alreadySigned) {
       actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/sign-as-self"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}</button></form>`;
     } else if (!sessionWardDid) {
-      actions += `<p><a href="/login?return_to=${encodeURIComponent(selfUrl)}">Log in to sign</a></p>`;
+      actions += `<p><a href="/guardian-login?return_to=${encodeURIComponent(selfUrl)}">Log in to sign</a></p>`;
     } else if (!sessionIsRequired) {
       actions += `<p class="hint">Signed in as ${escapeHtml(sessionWardDid)}, which isn't a required signer for this proposal.</p>`;
     } else {
@@ -136,7 +136,7 @@ async function nameForUrl(env: Env, wardDid: string): Promise<string> {
   return ward && ward.name !== "" ? ward.name : "_";
 }
 
-/** GET/POST /login?return_to=<path> -- this registrar's own first-party login, distinct from the OIDC /authorize relying-party flow (oidc.ts): no client_id/redirect_uri registration, just "I am this identity, take me back to the page I came from." Same credential (login_secret) and session cookie either way. */
+/** GET/POST /guardian-login?return_to=<path> -- this registrar's own first-party login, distinct from the OIDC /authorize relying-party flow (oidc.ts): no client_id/redirect_uri registration, just "I am this identity, take me back to the page I came from." Same credential (login_secret) and session cookie either way. */
 export async function handleDirectLogin(request: Request, env: Env, url: URL): Promise<Response> {
   const returnTo = url.searchParams.get("return_to") ?? "/";
   const safeReturnTo = isSafeReturnTo(returnTo) ? returnTo : "/";
@@ -169,7 +169,7 @@ function loginFormBody(returnTo: string, opts: { nameValue?: string; error?: str
     <h1>Sign in with your Guardian ID</h1>
     <p class="hint">Enter just the name part of your id (not the domain), and the login secret you were shown once when it was created.</p>
     ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
-    <form method="post" action="/login">
+    <form method="post" action="/guardian-login">
       <input type="hidden" name="return_to" value="${escapeHtml(returnTo)}">
       <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
       <label>Login secret <small>(shown once, at creation)</small><input name="login_secret" type="password" required></label>

@@ -314,7 +314,7 @@ export default {
       return json({ pending: rows.map((r) => ({ id: r.id, ward_did: r.ward_did, op_type: r.op_type, state: r.state, created_at: r.created_at, expires_at: r.expires_at })) });
     }
 
-    if (path === "/login" && (request.method === "GET" || request.method === "POST")) {
+    if (path === "/guardian-login" && (request.method === "GET" || request.method === "POST")) {
       // This registrar's own first-party login (votingPage.ts) -- distinct
       // from the OIDC relying-party flow (/authorize, oidc.ts): no
       // client_id/redirect_uri registration, just "sign in, then take me
