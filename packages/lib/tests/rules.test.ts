@@ -245,6 +245,55 @@ test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's
 
   const sigsBoth = await signMap(partial, { [incomingDid]: incoming.privateKey, [g1Did]: g1.privateKey }, [incomingDid, g1Did]);
   assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs: sigsBoth }, [], ctx), true);
+
+  // Regression: requiredSigners (used for notification/voting-UI purposes,
+  // not the actual gate above) must list the REAL existing committee for
+  // the non-empty case, never the ward itself -- a real bug this caught:
+  // it used to always return [incoming, wardDid] regardless, so the
+  // existing guardian whose approval this actually needs was never
+  // notified and never offered a sign option.
+  const required = await OPERATION_RULES.guardian_add.requiredSigners({ ...partial, sigs: {} }, ctx);
+  assert.ok(required.includes(g1Did), "the real existing guardian must be listed as a required signer");
+  assert.ok(!required.includes(wardDid), "the ward itself is never a signer for the non-empty guardian_add case");
+});
+
+test("REQ-7.2-5: guardian_add's requiredSigners lists the ward itself only for the zero-to-one case", async () => {
+  const wardDid = "did:guardian:alice:example.com";
+  const incomingDid = "did:guardian:newguy:example.com";
+  const state = makeState({ did: wardDid, guardians: [] });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
+  const required = await OPERATION_RULES.guardian_add.requiredSigners({ type: "guardian_add", incoming: incomingDid, prev: "cid0", sigs: {} }, ctx);
+  assert.deepEqual([...required].sort(), [incomingDid, wardDid].sort());
+});
+
+test("REQ-7.2-7(b) regression: guardian_remove's requiredSigners lists the OTHER current guardians, not just outgoing -- the forced path's real signers", async () => {
+  const wardDid = "did:guardian:alice:example.com";
+  const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
+  const state = makeState({ did: wardDid, guardians: [g1Did, g2Did] });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
+  const required = await OPERATION_RULES.guardian_remove.requiredSigners({ type: "guardian_remove", outgoing: g1Did, prev: "cid0", sigs: {} }, ctx);
+  assert.ok(required.includes(g2Did), "the other current guardian, whose approval the forced path needs, must be listed");
+});
+
+test("REQ-7.2-1 regression: custodial_rotate's requiredSigners lists the live guardian committee too, not just the ward", async () => {
+  const wardDid = "did:guardian:alice:example.com";
+  const g1Did = "did:guardian:g1:example.com";
+  const state = makeState({ did: wardDid, guardians: [g1Did] });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
+  const required = await OPERATION_RULES.custodial_rotate.requiredSigners(
+    { type: "custodial_rotate", operationalKeys: [], verificationMethods: {}, services: {}, prev: "cid0" },
+    ctx,
+  );
+  assert.ok(required.includes(g1Did), "the guardian committee, whose approval a recovery rotation can use, must be listed");
+});
+
+test("REQ-7.3-1 regression: custodial_tombstone's requiredSigners lists the live guardian committee too, not just the ward", async () => {
+  const wardDid = "did:guardian:alice:example.com";
+  const g1Did = "did:guardian:g1:example.com";
+  const state = makeState({ did: wardDid, guardians: [g1Did] });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
+  const required = await OPERATION_RULES.custodial_tombstone.requiredSigners({ type: "custodial_tombstone", prev: "cid0", sigs: {} }, ctx);
+  assert.ok(required.includes(g1Did), "a guardian able to sign a tombstone under a stricter-than-default threshold must be listed");
 });
 
 test("REQ-7.2-3: guardian_add naming an already-current guardian is rejected", async () => {

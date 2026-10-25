@@ -124,7 +124,15 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
     }
     return false;
   },
-  requiredSigners: (_op, ctx) => [ctx.wardDid],
+  // Either the ward's own key (REQ-7.2-1a) OR enough of the guardian
+  // committee (REQ-7.2-1b) can satisfy this -- listing only the ward here
+  // (as a previous version of this rule did) meant the real guardian
+  // committee, when that's the path actually in use, was never a "required
+  // signer" at all: never notified, never shown a sign option on the
+  // voting page. Over-inclusive (lists everyone who COULD be part of a
+  // satisfying set, not just however many the threshold strictly needs) is
+  // the safe direction to err in here.
+  requiredSigners: async (_op, ctx) => [ctx.wardDid, ...(await liveGuardians(ctx.state, ctx.isGuardianLive))],
   applyToState: (op, state) => ({
     ...state,
     operationalKeys: [...op.operationalKeys],
@@ -148,7 +156,16 @@ export const guardianAddRule: OperationRule<GuardianAddOp> = {
     if (live.length === 0) return validSigners.includes(ctx.wardDid); // REQ-7.2-5
     return meetsThreshold(ctx.state.guardianPolicy.addition_threshold, validSigners, live); // REQ-7.2-4
   },
-  requiredSigners: (op, ctx) => [op.incoming, ctx.wardDid],
+  // Zero-to-one (REQ-7.2-5) needs the ward's own key; the ordinary,
+  // non-empty case (REQ-7.2-4) needs enough of the CURRENT committee
+  // instead, never the ward itself -- a previous version of this rule
+  // always listed [incoming, wardDid] regardless, which meant the real
+  // committee was never notified and never shown a sign option on the
+  // voting page for the (much more common) non-empty case.
+  requiredSigners: async (op, ctx) => {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    return live.length === 0 ? [op.incoming, ctx.wardDid] : [op.incoming, ...live];
+  },
   applyToState: (op, state) => ({ ...state, guardians: [...state.guardians, op.incoming] }),
 };
 
@@ -165,7 +182,12 @@ export const guardianRemoveRule: OperationRule<GuardianRemoveOp> = {
     if (validSigners.includes(op.outgoing)) return true; // REQ-7.2-7(a) voluntary
     return meetsThreshold(ctx.state.guardianPolicy.removal_threshold, validSigners, live); // REQ-7.2-7(b), evaluated against the FULL live set, not live-minus-outgoing
   },
-  requiredSigners: (op) => [op.outgoing],
+  // Voluntary (REQ-7.2-7a) needs only outgoing's own key; forced
+  // (REQ-7.2-7b) needs enough of the OTHERS instead -- listing only
+  // outgoing (as a previous version of this rule did) meant the other
+  // guardians, whose approval the forced path actually needs, were never
+  // notified or shown a sign option.
+  requiredSigners: async (op, ctx) => [op.outgoing, ...(await liveGuardians(ctx.state, ctx.isGuardianLive))],
   applyToState: (op, state) => ({ ...state, guardians: state.guardians.filter((d) => d !== op.outgoing) }),
 };
 
@@ -210,7 +232,13 @@ export const tombstoneRule: OperationRule<CustodialTombstoneOp> = {
     const validSigners = await validSignersOf(op, ctx);
     return meetsThreshold(ctx.state.guardianPolicy.tombstone_threshold, validSigners, eligible);
   },
-  requiredSigners: (_op, ctx) => [ctx.wardDid],
+  // REQ-7.3-1's own union (ward's own key(s) OR current guardians) --
+  // listing only the ward (as a previous version of this rule did) meant a
+  // guardian-initiated tombstone (a real guardian wanting to end a ward it
+  // guards, when tombstone_threshold is stricter than the default "any")
+  // never notified or offered a sign option to the guardians whose
+  // approval that path actually needs.
+  requiredSigners: async (_op, ctx) => [ctx.wardDid, ...(await liveGuardians(ctx.state, ctx.isGuardianLive))],
   applyToState: (_op, state) => ({ ...state, deactivated: true }),
 };
 
