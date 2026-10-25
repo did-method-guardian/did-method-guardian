@@ -50,6 +50,27 @@ export async function requestEmailForwarding(env: Env, name: string, forwardTo: 
   return { ok: true };
 }
 
+/**
+ * Best-effort notification that a pending multi-signer operation needs
+ * `signerDid`'s own signature -- reuses the same verified-forwarding
+ * infrastructure as everything else above, rather than a separate
+ * notification channel. Silently a no-op if that DID isn't a ward this
+ * registrar hosts, or hasn't set up (or verified) forwarding yet: this is a
+ * convenience for discovery, never the thing that actually gates whether a
+ * signature counts (rules.ts's own isSatisfied is that).
+ */
+export async function notifyRequiredSigner(env: Env, signerDid: string, pendingOpId: string, opType: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, signerDid);
+  if (!forwarding) return;
+  await sendEmail({
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Your signature is requested: ${opType}`,
+    text: `A ${opType} operation is waiting on your signature as ${signerDid}.\n\nPending operation id: ${pendingOpId}\n\nUse your client to review and either contribute your signature or decline it. If you don't recognize this request, you can safely ignore it -- it expires on its own if nobody completes it.`,
+  });
+}
+
 export async function confirmEmailForwarding(env: Env, token: string): Promise<{ ok: true; did: string } | { ok: false; reason: string }> {
   const row = await getEmailForwardingByToken(env, token);
   if (!row) return { ok: false, reason: "invalid or already-used verification token" };

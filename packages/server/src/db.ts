@@ -159,3 +159,40 @@ export async function getVerifiedForwardingByDid(env: Env, did: string): Promise
   const row = await env.DB.prepare("SELECT * FROM email_forwarding WHERE did = ? AND verified = 1").bind(did).first<EmailForwardingRow>();
   return row ?? null;
 }
+
+export interface PendingOperationRow {
+  id: string;
+  ward_did: string;
+  op_type: string;
+  partial_op: string; // JSON
+  required_signers: string; // JSON array of DIDs
+  collected_sigs: string; // JSON object, signer DID -> sig
+  state: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export async function insertPendingOperation(env: Env, row: PendingOperationRow): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO pending_operations (id, ward_did, op_type, partial_op, required_signers, collected_sigs, state, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  )
+    .bind(row.id, row.ward_did, row.op_type, row.partial_op, row.required_signers, row.collected_sigs, row.state, row.created_at, row.expires_at)
+    .run();
+}
+
+export async function getPendingOperation(env: Env, id: string): Promise<PendingOperationRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM pending_operations WHERE id = ?").bind(id).first<PendingOperationRow>();
+  return row ?? null;
+}
+
+export async function updatePendingOperationState(env: Env, id: string, state: string, collectedSigs: string): Promise<void> {
+  await env.DB.prepare("UPDATE pending_operations SET state = ?, collected_sigs = ? WHERE id = ?").bind(state, collectedSigs, id).run();
+}
+
+/** Every still-live (not finalized/declined/expired) proposal naming `signerDid` somewhere in its own `required_signers` -- advisory, same spirit as that column itself (rules.ts's own isSatisfied is the real gate, this is just who to show/notify). */
+export async function listPendingOperationsForSigner(env: Env, signerDid: string): Promise<PendingOperationRow[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM pending_operations WHERE state NOT IN ('finalized', 'declined', 'expired') ORDER BY created_at ASC",
+  ).all<PendingOperationRow>();
+  return result.results.filter((row) => (JSON.parse(row.required_signers) as string[]).includes(signerDid));
+}

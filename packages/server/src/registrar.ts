@@ -309,13 +309,13 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
   return ward;
 }
 
-async function loadLog(env: Env, did: string): Promise<LogEntry[]> {
+export async function loadLog(env: Env, did: string): Promise<LogEntry[]> {
   const rows = await getOperationLog(env, did);
   return rows.map((r) => ({ cid: r.cid, op: JSON.parse(r.payload) as Operation, acceptedAt: r.created_at }));
 }
 
 /** `name: null` auto-provisions the bare-domain root identity (never missing); a real name that isn't registered yet stays a plain miss. */
-async function findWard(env: Env, name: string | null): Promise<WardRow | null> {
+export async function findWard(env: Env, name: string | null): Promise<WardRow | null> {
   return name === null ? await getOrCreateRootWard(env) : await getWardByName(env, name);
 }
 
@@ -431,7 +431,7 @@ export async function submitOperation(env: Env, name: string | null, op: Operati
  * permanently exclude a legitimate, merely-unreachable guardian from every
  * threshold it's part of.
  */
-function makeGuardianLivenessResolver(env: Env): GuardianLivenessResolver {
+export function makeGuardianLivenessResolver(env: Env): GuardianLivenessResolver {
   return async (did: Did): Promise<boolean> => {
     const local = await getWardByDid(env, did);
     if (local) {
@@ -461,7 +461,7 @@ function makeGuardianLivenessResolver(env: Env): GuardianLivenessResolver {
  * deployment is federated (spec §5), so a guardian named in `incoming` need
  * not be custodied here.
  */
-function makeExternalResolver(env: Env) {
+export function makeExternalResolver(env: Env) {
   return async (did: Did): Promise<string[] | undefined> => {
     const local = await getWardByDid(env, did);
     if (local) return [local.public_key];

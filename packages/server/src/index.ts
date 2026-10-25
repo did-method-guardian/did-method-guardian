@@ -1,6 +1,7 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, submitOperation, RegistrarError } from "./registrar.js";
+import { proposeOperation, contributeToOperation, declineOperation, listPendingForSigner } from "./pendingOps.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -19,7 +20,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/operations\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone)?$/);
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -39,6 +40,16 @@ export default {
           const op = await request.json();
           const result = await submitOperation(env, name, op as any);
           return result.accepted ? json({ accepted: true }) : error(result.reason, 400);
+        }
+        if (suffix === "/operations/propose" && request.method === "POST") {
+          // No session/trusted-client gate, deliberately -- same trust model
+          // as plain /operations: the operation's own attached signature is
+          // the authorization, not a cookie, since a required signer (an
+          // external guardian with no account here at all) must be able to
+          // propose or contribute without ever logging in to this registrar.
+          const op = await request.json();
+          const result = await proposeOperation(env, name, op as any);
+          return json(result, 201);
         }
         if (suffix === "/email" && request.method === "POST") {
           // Out of scope for the bare-domain root identity in this pass --
@@ -140,6 +151,40 @@ export default {
         return error("internal error", 500);
       }
       return error("not found", 404);
+    }
+
+    const pendingContributeMatch = path.match(/^\/pending\/([^/]+)\/contribute$/);
+    if (pendingContributeMatch && request.method === "POST") {
+      try {
+        const [, id] = pendingContributeMatch;
+        const body = (await request.json()) as { signer_did?: string; sig?: string };
+        if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
+        const result = await contributeToOperation(env, id, body.signer_did, body.sig);
+        return json(result);
+      } catch (e) {
+        if (e instanceof RegistrarError) return error(e.message, e.status);
+        console.error("contribute error:", e);
+        return error("internal error", 500);
+      }
+    }
+
+    const pendingDeclineMatch = path.match(/^\/pending\/([^/]+)\/decline$/);
+    if (pendingDeclineMatch && request.method === "POST") {
+      try {
+        const [, id] = pendingDeclineMatch;
+        const result = await declineOperation(env, id);
+        return json(result);
+      } catch (e) {
+        if (e instanceof RegistrarError) return error(e.message, e.status);
+        return error("internal error", 500);
+      }
+    }
+
+    if (path === "/pending" && request.method === "GET") {
+      const signer = url.searchParams.get("signer");
+      if (!signer) return error("signer query parameter is required", 400);
+      const rows = await listPendingForSigner(env, signer);
+      return json({ pending: rows.map((r) => ({ id: r.id, ward_did: r.ward_did, op_type: r.op_type, state: r.state, created_at: r.created_at, expires_at: r.expires_at })) });
     }
 
     if (path === "/verify-email" && request.method === "GET") {
