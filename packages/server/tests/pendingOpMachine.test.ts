@@ -14,6 +14,7 @@ import type { PendingOpEvent } from "../src/pendingOpMachine.js";
 const EVENT_CASES: PendingOpEvent[] = [
   { type: "CONTRIBUTE", did: "did:guardian:g1:example.com", sig: "s1", satisfiedNow: false },
   { type: "CONTRIBUTE", did: "did:guardian:g2:example.com", sig: "s2", satisfiedNow: true },
+  { type: "WITHDRAW", did: "did:guardian:g1:example.com" },
   { type: "DECLINE" },
   { type: "EXPIRE" },
   { type: "FINALIZED" },
@@ -86,6 +87,34 @@ test("FINALIZE_FAILED keeps a satisfied proposal retriable rather than dead-endi
   assert.equal(actor.getSnapshot().value, "satisfied");
   actor.send({ type: "FINALIZED" });
   assert.equal(actor.getSnapshot().value, "finalized");
+});
+
+test("WITHDRAW removes the withdrawing party's own signature and stays in collecting, never blocking others", () => {
+  const actor = createActor(pendingOperationMachine, { input: { collectedSigs: {}, satisfiedAtPropose: false } }).start();
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g1:example.com", sig: "s1", satisfiedNow: false });
+  assert.equal(actor.getSnapshot().value, "collecting");
+  actor.send({ type: "WITHDRAW", did: "did:guardian:g1:example.com" });
+  assert.equal(actor.getSnapshot().value, "collecting");
+  assert.deepEqual(actor.getSnapshot().context.collectedSigs, {});
+  // a later signer can still bring it to satisfied -- withdrawing never blocks anyone else
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g2:example.com", sig: "s2", satisfiedNow: true });
+  assert.equal(actor.getSnapshot().value, "satisfied");
+});
+
+test("WITHDRAW for a DID with no existing signature is a safe no-op on context", () => {
+  const actor = createActor(pendingOperationMachine, { input: { collectedSigs: { "did:guardian:g2:example.com": "s2" }, satisfiedAtPropose: false } }).start();
+  actor.send({ type: "WITHDRAW", did: "did:guardian:g1:example.com" });
+  assert.equal(actor.getSnapshot().value, "collecting");
+  assert.deepEqual(actor.getSnapshot().context.collectedSigs, { "did:guardian:g2:example.com": "s2" });
+});
+
+test("DECLINE from satisfied (the retry-after-finalize-failure window) still vetoes -- nothing is irreversible until actually finalized", () => {
+  const actor = createActor(pendingOperationMachine, { input: { collectedSigs: {}, satisfiedAtPropose: true } }).start();
+  assert.equal(actor.getSnapshot().value, "satisfied");
+  actor.send({ type: "FINALIZE_FAILED" });
+  assert.equal(actor.getSnapshot().value, "satisfied");
+  actor.send({ type: "DECLINE" });
+  assert.equal(actor.getSnapshot().value, "declined");
 });
 
 test("machine.resolveState reconstructs a valid, resumable snapshot from plain {value, context} alone -- the shape pendingOps.ts persists to D1", () => {

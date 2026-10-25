@@ -196,3 +196,45 @@ export async function listPendingOperationsForSigner(env: Env, signerDid: string
   ).all<PendingOperationRow>();
   return result.results.filter((row) => (JSON.parse(row.required_signers) as string[]).includes(signerDid));
 }
+
+/** Every still-pending (any state, including satisfied/finalized -- a caller deciding whether to send a reminder filters that itself) proposal naming `wardDid`, newest first. Used by the daily reminder cron (task #113) to scan every ward's own pending_operations without needing a signer to filter by. */
+export async function listPendingOperationsCollecting(env: Env): Promise<PendingOperationRow[]> {
+  const result = await env.DB.prepare("SELECT * FROM pending_operations WHERE state = 'collecting'").all<PendingOperationRow>();
+  return result.results;
+}
+
+export interface PendingOperationTokenRow {
+  pending_op_id: string;
+  signer_did: string;
+  token: string;
+  created_at: string;
+  last_notified_at: string;
+}
+
+/** The existing token for (pendingOpId, signerDid), if one has already been issued -- reused across every notification about the same proposal so earlier email links keep working. */
+export async function getPendingOperationToken(env: Env, pendingOpId: string, signerDid: string): Promise<PendingOperationTokenRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE pending_op_id = ? AND signer_did = ?").bind(pendingOpId, signerDid).first<PendingOperationTokenRow>();
+  return row ?? null;
+}
+
+export async function insertPendingOperationToken(env: Env, row: PendingOperationTokenRow): Promise<void> {
+  await env.DB.prepare("INSERT INTO pending_operation_tokens (pending_op_id, signer_did, token, created_at, last_notified_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(row.pending_op_id, row.signer_did, row.token, row.created_at, row.last_notified_at)
+    .run();
+}
+
+export async function touchPendingOperationToken(env: Env, pendingOpId: string, signerDid: string, now: string): Promise<void> {
+  await env.DB.prepare("UPDATE pending_operation_tokens SET last_notified_at = ? WHERE pending_op_id = ? AND signer_did = ?").bind(now, pendingOpId, signerDid).run();
+}
+
+/** Resolves a one-click email link's token back to which proposal and which signer it was issued for -- the token itself is the proof (email possession), no signature needed. */
+export async function getPendingOperationByToken(env: Env, token: string): Promise<PendingOperationTokenRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE token = ?").bind(token).first<PendingOperationTokenRow>();
+  return row ?? null;
+}
+
+/** Every token row for a pending op whose last_notified_at is more than `olderThanMs` ago -- the daily reminder cron's own candidate set. */
+export async function listStaleTokensForPendingOp(env: Env, pendingOpId: string, olderThanIso: string): Promise<PendingOperationTokenRow[]> {
+  const result = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE pending_op_id = ? AND last_notified_at < ?").bind(pendingOpId, olderThanIso).all<PendingOperationTokenRow>();
+  return result.results;
+}

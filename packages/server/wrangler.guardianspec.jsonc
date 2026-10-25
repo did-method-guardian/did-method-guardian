@@ -1,0 +1,38 @@
+// This did:guardian project's own second registrar deployment, on
+// guardianspec.org -- a real, independent instance (separate D1 database,
+// separate domain) used for cross-registrar federation testing (an
+// external guardian hosted here, guarding a ward on zzmq.dev, and vice
+// versa) and as a live, publicly resolvable reference alongside the
+// method's own docs site on this same domain. Same code as wrangler.jsonc
+// (the generic self-hosting template) and wrangler.zz.jsonc (zz's own
+// deployment); nothing in this package depends on this domain specifically.
+// Deploy with:
+//   wrangler deploy -c wrangler.guardianspec.jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "guardian-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-19",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "guardian-server", "database_id": "57833a7f-2dc7-4f88-808d-2c0079e6dd53", "migrations_dir": "migrations" }
+  ],
+  "vars": {
+    "REGISTRAR_DOMAIN": "guardianspec.org"
+  },
+  // Explicit routes (not a wildcard catch-all on the zone) -- this domain
+  // also hosts the method's own docs site (website/), which this registrar
+  // must not shadow. Trailing "*" on every pattern for the same reason
+  // wrangler.zz.jsonc's own routes do -- confirmed live there that a
+  // non-wildcard exact path stops matching once a query string is present.
+  "routes": [
+    { "pattern": "guardianspec.org/.well-known/guardian/*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/.well-known/openid-configuration*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/.well-known/jwks.json*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/register*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/verify-email*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/authorize*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/token*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/userinfo*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/api/me/pending-signatures*", "zone_name": "guardianspec.org" }
+  ]
+}

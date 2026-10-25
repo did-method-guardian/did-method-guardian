@@ -20,7 +20,10 @@ export interface PendingOpContext {
 
 export type PendingOpEvent =
   | { type: "CONTRIBUTE"; did: Did; sig: string; satisfiedNow: boolean }
+  /** Veto -- any current guardian, whether or not they'd already signed, unconditionally kills the proposal. Allowed from `collecting` or `satisfied`: anything short of actually reaching the log is still reversible. */
   | { type: "DECLINE" }
+  /** Opt-out -- "don't wait on me." Never blocks; only valid from `collecting`, since once satisfied nobody's waiting on anyone. Removes the withdrawing party's own signature from consideration if they'd already contributed one. */
+  | { type: "WITHDRAW"; did: Did }
   | { type: "EXPIRE" }
   | { type: "FINALIZED" }
   | { type: "FINALIZE_FAILED" };
@@ -63,6 +66,15 @@ export const pendingOperationMachine = createMachine({
           },
         ],
         DECLINE: { target: "declined" },
+        WITHDRAW: {
+          target: "collecting",
+          actions: assign({
+            collectedSigs: ({ context, event }) => {
+              const { [event.did]: _removed, ...rest } = context.collectedSigs;
+              return rest;
+            },
+          }),
+        },
         EXPIRE: { target: "expired" },
       },
     },
@@ -74,6 +86,11 @@ export const pendingOperationMachine = createMachine({
         // than dead-ending, since the signatures already collected are
         // still valid; only the attempt to append failed.
         FINALIZE_FAILED: { target: "satisfied" },
+        // A guardian can still veto right up until something is actually
+        // irreversible -- `satisfied` isn't that yet (it's usually followed
+        // synchronously by finalization in the same request, but the retry
+        // window above means it can sit here for real).
+        DECLINE: { target: "declined" },
       },
     },
     finalized: { type: "final" },
