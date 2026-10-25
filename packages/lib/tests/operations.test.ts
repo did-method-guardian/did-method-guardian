@@ -8,13 +8,64 @@ import {
   verifyGuardianTransfer,
   signCustodialRotate,
   verifyCustodialRotate,
+  signRegistrarAttestation,
   cidFor,
 } from "../src/operations.js";
 import type { KeyResolver } from "../src/operations.js";
+import type { CustodialCreateOp } from "../src/types.js";
 
 function makeResolver(keys: Record<string, string>): KeyResolver {
   return (did) => (keys[did] ? [keys[did]] : undefined);
 }
+
+test("REQ-7.1-5: a registrar attestation signs over genesis's own content without covering its own not-yet-computed signature value", async () => {
+  const ward = await generateKeypair();
+  const registrar = await generateKeypair();
+  const registrarDid = "did:guardian:registrar.example.com";
+  const resolve = makeResolver({ [registrarDid]: registrar.publicKey });
+
+  const partial: Omit<CustodialCreateOp, "sigs" | "registrar"> = {
+    type: "custodial_create",
+    name: "alice",
+    operationalKeys: [ward.publicKey],
+    verificationMethods: { "key-1": ward.publicKey },
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    creator: registrarDid,
+  };
+  const attestation = await signRegistrarAttestation(partial, registrarDid, registrar.privateKey);
+  const genesis = await signCustodialCreate({ ...partial, registrar: attestation }, {});
+
+  const result = await verifyCustodialCreate(genesis, resolve);
+  assert.equal(result.valid, true, result.reason);
+});
+
+test("REQ-7.1-5: a forged registrar attestation (wrong key) is rejected", async () => {
+  const ward = await generateKeypair();
+  const registrarDid = "did:guardian:registrar.example.com";
+  const impostor = await generateKeypair();
+  const realRegistrarKey = await generateKeypair();
+  const resolve = makeResolver({ [registrarDid]: realRegistrarKey.publicKey }); // verifier resolves the REAL key, not the impostor's
+
+  const partial: Omit<CustodialCreateOp, "sigs" | "registrar"> = {
+    type: "custodial_create",
+    name: "alice",
+    operationalKeys: [ward.publicKey],
+    verificationMethods: { "key-1": ward.publicKey },
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    creator: registrarDid,
+  };
+  const forgedAttestation = await signRegistrarAttestation(partial, registrarDid, impostor.privateKey);
+  const genesis = await signCustodialCreate({ ...partial, registrar: forgedAttestation }, {});
+
+  const result = await verifyCustodialCreate(genesis, resolve);
+  assert.equal(result.valid, false);
+});
 
 test("genesis with one consenting guardian verifies", async () => {
   const ward = await generateKeypair();

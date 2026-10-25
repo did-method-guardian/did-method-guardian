@@ -27,6 +27,12 @@ function payloadWithoutSig<T extends { sig?: unknown; sigs?: unknown }>(op: T): 
   return rest;
 }
 
+/** Registrar attestation (REQ-7.1-5) has to exclude its own field entirely, not just `sig`/`sigs` -- a signature can't cover its own not-yet-computed value. */
+function payloadWithoutSigOrRegistrar<T extends { sig?: unknown; sigs?: unknown; registrar?: unknown }>(op: T): Omit<T, "sig" | "sigs" | "registrar"> {
+  const { sig: _sig, sigs: _sigs, registrar: _registrar, ...rest } = op;
+  return rest;
+}
+
 /** Verifies one party's signature over an operation, checked against that party's own resolved keys. */
 export async function verifySignerSig(op: Operation, signerDid: Did, sigB64: string, resolve: KeyResolver): Promise<boolean> {
   const keys = await resolve(signerDid);
@@ -61,6 +67,24 @@ export async function signCustodialCreate(
   return { ...partial, sigs };
 }
 
+/**
+ * REQ-7.1-4: who initiated this registration -- a plain fact, carries no
+ * signature requirement of its own (same standing as genesis's optional
+ * `policy`, REQ-7.1-7). Signs a registrar attestation
+ * (`signRegistrarAttestation`) for the exact same op content a consuming
+ * caller will build, including `creator` -- genesis's own payload is
+ * otherwise complete the moment `operationalKeys`/`verificationMethods`/
+ * `services`/`creator` are decided, before an attestation even exists.
+ */
+export async function signRegistrarAttestation(
+  partial: Omit<CustodialCreateOp, "sigs" | "registrar">,
+  registrarDid: Did,
+  registrarPrivateKey: string,
+): Promise<{ did: Did; sig: string }> {
+  const payload = payloadWithoutSigOrRegistrar(partial as any);
+  return { did: registrarDid, sig: await signPayload(payload, registrarPrivateKey) };
+}
+
 export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
   if (op.prev !== null) return { valid: false, reason: "genesis must have prev: null" };
   for (const did of op.incoming) {
@@ -70,7 +94,9 @@ export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyR
     }
   }
   if (op.registrar) {
-    const ok = await verifySignerSig(op, op.registrar.did, op.registrar.sig, resolve);
+    const keys = await resolve(op.registrar.did);
+    const payload = payloadWithoutSigOrRegistrar(op as any);
+    const ok = !!keys && (await Promise.all(keys.map((pk) => verifyPayload(payload, op.registrar!.sig, pk)))).some(Boolean);
     if (!ok) return { valid: false, reason: "invalid registrar attestation signature" };
   }
   return { valid: true };
