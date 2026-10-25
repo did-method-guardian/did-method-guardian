@@ -206,6 +206,7 @@ export default {
         }
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);
+        console.error("well-known guardian route error:", e);
         return error("internal error", 500);
       }
       return error("not found", 404);
