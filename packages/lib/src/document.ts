@@ -145,6 +145,7 @@ export function toDidDocument(state: ResolvedState) {
     })),
     authentication: vmIds,
     assertionMethod: vmIds,
+    capabilityInvocation: vmIds, // REQ-3-2: an operational key is exactly what invokes the capability to update this document
     service: Object.entries(state.services).map(([id, svc]) => ({
       id: `${state.did}#${id}`,
       type: svc.type,

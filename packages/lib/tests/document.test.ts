@@ -30,6 +30,26 @@ test("replay resolves genesis correctly, guardians kept method-internal", () => 
   assert.equal((doc as any).guardians, undefined, "guardians must never appear in the presented DID Document");
 });
 
+test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all reference every operational key's own verificationMethod", () => {
+  const genesis: CustodialCreateOp = {
+    type: "custodial_create",
+    name: "fred",
+    operationalKeys: ["did:key:op1"],
+    verificationMethods: { "key-1": "did:key:op1" },
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    sigs: {},
+  };
+  const state = replay("did:guardian:fred:example:com", [entry(genesis, "cid0")]);
+  const doc = toDidDocument(state);
+  const vmId = "did:guardian:fred:example:com#key-1";
+  assert.deepEqual(doc.authentication, [vmId]);
+  assert.deepEqual(doc.assertionMethod, [vmId]);
+  assert.deepEqual(doc.capabilityInvocation, [vmId]);
+});
+
 test("replay applies a rotation and a guardian transfer in order", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
