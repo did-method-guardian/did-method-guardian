@@ -38,17 +38,28 @@ Each of these corresponds to an operation whose formal signer requirement can be
 
 For anything needing more than one signature collected over more than one request -- `guardian_add` against a non-empty guardian set (REQ-7.2-4), a forced `guardian_remove` (REQ-7.2-7b), `policy_update` (REQ-7.2-9), or a `guardian_relinquish`/guardian-initiated `custodial_rotate` whose required signers aren't all custodied by (or available in the same call to) this registrar.
 
-Modeled as a state machine per pending proposal: `proposed -> collecting -> satisfied -> finalized`, with `expired` and `declined` as terminal alternatives from `collecting`. `finalized` is entered automatically the instant `satisfied` is reached (the registrar submits the now-complete operation to §1's own `/operations` itself) -- a caller never finalizes by hand.
+Modeled as a state machine per pending proposal: `proposed -> collecting -> satisfied -> finalized`, with `expired` and `declined` as terminal alternatives. `finalized` is entered automatically the instant `satisfied` is reached (the registrar submits the now-complete operation to §1's own `/operations` itself) -- a caller never finalizes by hand.
+
+`decline` and `withdraw` are two distinct operations with different authority, not one action with a policy-configurable effect:
+
+- **`decline` is a veto.** Any current, live guardian of the ward -- checked live, not just whoever this registrar's own advisory "required signers" guess happened to list -- can kill the proposal outright by declining, whether or not they'd already signed. Unconditional: it doesn't matter how many others had already approved. Allowed from `collecting` *or* `satisfied` (nothing is actually irreversible until it's truly in the log -- `satisfied` can still be sitting there unfinalized in the rare case a prior finalize attempt failed and is awaiting retry). Rejected once `finalized`/`declined`/`expired` -- none of those have an undo.
+- **`withdraw` is a non-binding opt-out.** "Don't wait on me" -- removes the withdrawing party's own signature from consideration if they'd already contributed one, but never blocks anyone else from still reaching the threshold through some other combination. Only valid from `collecting` (once satisfied, nobody's waiting on anyone). A signer who withdrew can still change their mind and sign later; withdrawing isn't a lockout.
+
+Both accept two different kinds of proof, either is equally valid:
+
+- A **signed request** (`POST`, body `{signer_did, sig}`) -- `sig` over the canonical payload `{action: "decline"|"withdraw", pending_operation_id: <id>}`. Works for anyone who can produce a signature, local or external to this registrar.
+- A **token-based link** (`GET`, `?token=...`) -- the same trust model this registrar's own email-verification-link flow already uses: a random, unguessable token issued the first time a given signer is notified about a given proposal, usable by anyone who received it (possession of the verified email is the proof, not a signature). This is what makes the one-click links in the notification emails below work without needing real browser-side cryptography, and it works for an externally-hosted guardian too -- the limiting factor was always whether this registrar has a verified way to reach them, never who custodies their key.
 
 | Method | Path | |
 |---|---|---|
 | `POST` | `.../propose` | create a pending proposal for one operation type + its intended content, with the proposer's own signature attached if they're a required signer |
 | `POST` | `.../pending/<id>/sign` | a required signer not yet counted adds their own signature |
-| `POST` | `.../pending/<id>/decline` | a required signer refuses; moves the proposal to `declined` |
+| `POST` or `GET` | `.../pending/<id>/decline` | veto -- POST with a signed body, or GET with `?token=...` |
+| `POST` or `GET` | `.../pending/<id>/withdraw` | opt-out -- same two proof options |
 | `GET` | `.../pending/<id>` | current status: required signers, who has signed, state |
 | `GET` | `/api/me/pending-signatures` | every pending proposal naming the caller as a required signer who hasn't yet signed |
 
-A proposal not reaching `satisfied` within 7 days moves to `expired`. A required signer discovers a pending proposal either by polling `/api/me/pending-signatures` or by the email notification in §5.
+A proposal not reaching `satisfied` within 7 days moves to `expired` -- always a failure, never an automatic pass; nothing in this method or this registrar advances a proposal just because time ran out. A required signer discovers a pending proposal by polling `/api/me/pending-signatures` or by email (§6) -- every state-moving event (propose, each signature, decline, withdraw, finalize) sends one, plus a daily reminder for anyone who still hasn't acted on a `collecting` proposal, explaining that consequence in plain terms.
 
 ## 4. Guardian deactivation policy
 
