@@ -3,6 +3,7 @@ import {
   signCustodialCreate,
   signCustodialRotate,
   signGuardianAdd,
+  signGuardianRemove,
   signGuardianRelinquish,
   signCustodialTombstone,
   signRegistrarAttestation,
@@ -281,6 +282,111 @@ export async function relinquishWard(env: Env, name: string): Promise<{ did: str
   const op = await signGuardianRelinquish({ type: "guardian_relinquish", prev: latestCid }, signerKeys, signers);
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`relinquish failed: ${result.reason}`, 500);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document };
+}
+
+/**
+ * A guardian voluntarily steps down from one ward's guardian set
+ * (REQ-7.2-7a) -- self-contained because the only signer this needs is the
+ * departing guardian's own key, which this registrar custodies exactly
+ * when `callerDid` names one of its own wards. Unlike every other
+ * convenience endpoint above, the "target identity" for auth purposes
+ * (index.ts) is the CALLER (the departing guardian), never the `name` in
+ * the URL (the ward being left) -- the ward's own session has no say in
+ * whether one of its guardians steps down.
+ */
+export async function removeSelfAsGuardian(env: Env, name: string, callerDid: Did): Promise<{ did: string; document: unknown }> {
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const callerWard = await getWardByDid(env, callerDid);
+  if (!callerWard) throw new RegistrarError(`"${callerDid}" is not a ward this registrar custodies -- it can't produce that guardian's signature`, 400);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to remove a guardian from`, 500);
+
+  const callerPrivateKey = await decryptSecret(callerWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const op = await signGuardianRemove({ type: "guardian_remove", outgoing: callerDid, prev: latestCid }, { [callerDid]: callerPrivateKey }, [callerDid]);
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`remove-self failed: ${result.reason}`, 400);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document };
+}
+
+/**
+ * Forced removal of a named guardian (REQ-7.2-7b) -- self-contained only
+ * when the *other* current guardians (excluding `outgoingDid` itself) this
+ * registrar can sign for, among themselves, already meet `removal_threshold`
+ * evaluated against the full current guardian set (REQ-7.2-7's own
+ * correction -- never the shrunken remaining-guardians pool). Same shape as
+ * relinquishWard, just excluding one specific guardian from both the signer
+ * pool and the eligible set computed for display.
+ */
+export async function forceRemoveGuardian(env: Env, name: string, outgoingDid: Did): Promise<{ did: string; document: unknown }> {
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to remove a guardian from`, 500);
+  const state = replay(ward.did as Did, log);
+  const live = await liveGuardians(state, makeGuardianLivenessResolver(env));
+  if (!live.includes(outgoingDid)) throw new RegistrarError(`"${outgoingDid}" is not a current guardian of "${name}"`, 400);
+
+  const others = live.filter((d) => d !== outgoingDid);
+  const signerKeys: Record<string, string> = {};
+  for (const guardianDid of others) {
+    const guardianWard = await getWardByDid(env, guardianDid);
+    if (guardianWard) signerKeys[guardianDid] = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  }
+  const signers = Object.keys(signerKeys);
+  if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, live)) {
+    throw new RegistrarError(
+      `not enough of "${name}"'s OTHER current guardians are custodied by this registrar to meet its own removal_threshold against the full guardian set -- use the asynchronous collection endpoints instead`,
+      400,
+    );
+  }
+
+  const op = await signGuardianRemove({ type: "guardian_remove", outgoing: outgoingDid, prev: latestCid }, signerKeys, signers);
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`forced removal failed: ${result.reason}`, 400);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document };
+}
+
+/**
+ * The zero-to-one `guardian_add` case (REQ-7.2-5) as a standalone
+ * convenience, for a ward that's already guardian-less and wasn't adopted
+ * at creation time -- self-contained because the only two required
+ * signers are the incoming guardian's own key and the ward's own
+ * operational key, both producible server-side when both are this
+ * registrar's own wards. Rejected outright if the ward already has any
+ * current guardian (that's an ordinary REQ-7.2-4 addition, needing the
+ * EXISTING committee's own approval -- see §3).
+ */
+export async function adoptWard(env: Env, name: string, incomingDid: Did): Promise<{ did: string; document: unknown }> {
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const incomingWard = await getWardByDid(env, incomingDid);
+  if (!incomingWard) throw new RegistrarError(`"${incomingDid}" is not a ward this registrar custodies -- it can't produce that guardian's signature`, 400);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to adopt from`, 500);
+  const state = replay(ward.did as Did, log);
+  const live = await liveGuardians(state, makeGuardianLivenessResolver(env));
+  if (live.length > 0) throw new RegistrarError(`"${name}" already has a current guardian -- adding another needs the existing committee's own approval (see §3)`, 400);
+
+  const incomingPrivateKey = await decryptSecret(incomingWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const wardPrivateKey = await decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const op = await signGuardianAdd(
+    { type: "guardian_add", incoming: incomingDid, prev: latestCid },
+    { [incomingDid]: incomingPrivateKey, [ward.did]: wardPrivateKey },
+    [incomingDid, ward.did],
+  );
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`adopt failed: ${result.reason}`, 400);
 
   const document = await resolveDocument(env, name);
   return { did: ward.did, document };

@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, submitOperation, RegistrarError } from "./registrar.js";
+import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
 import { proposeOperation, contributeToOperation, declineOperation, getPendingOperationStatus, listPendingForSigner } from "./pendingOps.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
@@ -20,7 +20,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt)?$/);
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -144,6 +144,64 @@ export default {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to tombstone it", 403);
           }
           const result = await tombstoneWard(env, name);
+          return json({ ok: true, did: result.did, document: result.document });
+        }
+        if (suffix === "/remove-self" && request.method === "POST") {
+          // Unlike every endpoint above, the "target identity" for auth
+          // purposes is the CALLER (the departing guardian), never `name`
+          // (the ward being left) -- the ward's own session has no say in
+          // whether one of its guardians steps down. A session identifies
+          // the caller directly; a trusted client must name one explicitly
+          // via guardian_did in the body, same split /api/me/pending-
+          // signatures uses for the same underlying reason.
+          if (name === null) return error("remove-self does not apply to the bare-domain identity", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+          let callerDid = sessionDid;
+          if (!callerDid) {
+            const trustedClient = await authenticateOidcClient(request, env);
+            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to remove yourself as a guardian", 403);
+            const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
+            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
+            callerDid = body.guardian_did;
+          }
+          const result = await removeSelfAsGuardian(env, name, callerDid);
+          return json({ ok: true, did: result.did, document: result.document });
+        }
+        if (suffix === "/remove" && request.method === "POST") {
+          // Forced removal -- same two-way trust as /relinquish: the ward's
+          // own session or a trusted client may trigger the attempt, but
+          // the real authority comes from whichever OTHER guardians this
+          // registrar can sign for actually meeting removal_threshold.
+          if (name === null) return error("the bare-domain identity's own guardians aren't forcibly removable through this path", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to force-remove one of its guardians", 403);
+          }
+          const body = (await request.json()) as { outgoing_did?: string };
+          if (!body.outgoing_did) return error("outgoing_did is required", 400);
+          const result = await forceRemoveGuardian(env, name, body.outgoing_did);
+          return json({ ok: true, did: result.did, document: result.document });
+        }
+        if (suffix === "/adopt" && request.method === "POST") {
+          // Same auth split as /remove-self: the caller adopting the ward
+          // is a different identity than `name` (the ward being adopted),
+          // so a session identifies the caller directly, and a trusted
+          // client must name one explicitly via guardian_did.
+          if (name === null) return error("adopt does not apply to the bare-domain identity", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+          let incomingDid = sessionDid;
+          if (!incomingDid) {
+            const trustedClient = await authenticateOidcClient(request, env);
+            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to adopt a ward", 403);
+            const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
+            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
+            incomingDid = body.guardian_did;
+          }
+          const result = await adoptWard(env, name, incomingDid);
           return json({ ok: true, did: result.did, document: result.document });
         }
       } catch (e) {
