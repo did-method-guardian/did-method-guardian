@@ -100,22 +100,30 @@ async function getOrIssueToken(env: Env, pendingOpId: string, signerDid: string)
   return token;
 }
 
-function actionLinks(env: Env, wardName: string, pendingOpId: string, token: string): { declineUrl: string; withdrawUrl: string } {
-  const base = `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${wardName}/pending/${pendingOpId}`;
-  return { declineUrl: `${base}/decline?token=${token}`, withdrawUrl: `${base}/withdraw?token=${token}` };
+/**
+ * One link, to the status page (votingPage.ts) with the token attached --
+ * never a link that performs the action itself. A bare GET actions link is
+ * a real hazard here: an email client's own security scanner (Safe Links,
+ * a corporate proxy, antivirus) prefetches links the instant a message
+ * arrives, before anyone reads it -- if that GET itself declined or
+ * withdrew, the scanner would be the one voting, not the person it was
+ * addressed to. Landing on a page that still needs an explicit button
+ * click (a real POST) is the fix.
+ */
+function voteUrl(env: Env, wardName: string, pendingOpId: string, token: string): string {
+  return `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${wardName}/pending/${pendingOpId}?token=${token}`;
 }
 
-const ACTION_LINKS_BLURB = (declineUrl: string, withdrawUrl: string) =>
-  `Changed your mind? These links work until this vote is no longer pending (once it finalizes, declines, or expires, they stop working -- there's no undo after that):\n` +
-  `  Veto this (blocks it outright, no matter how many others approve): ${declineUrl}\n` +
-  `  Withdraw (just stop waiting on me -- doesn't block anyone else): ${withdrawUrl}`;
+const ACTION_LINKS_BLURB = (link: string) =>
+  `Review or change your mind: ${link}\n` +
+  `This page lets you sign (if you're signed in as a required signer), veto (blocks it outright, no matter how many others approve), or withdraw (just stop waiting on you -- doesn't block anyone else) -- it works until this is no longer pending; once it finalizes, declines, or expires, there's no undo.`;
 
 /** A signer's own signature is needed -- sent once, when a proposal is created or when it's still collecting and this signer hasn't contributed yet. */
 export async function notifyAwaitingSignature(env: Env, wardName: string, signerDid: string, pendingOpId: string, opType: string): Promise<void> {
   const forwarding = await getVerifiedForwardingByDid(env, signerDid);
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, signerDid);
-  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  const link = voteUrl(env, wardName, pendingOpId, token);
   await sendEmail({
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
@@ -123,7 +131,7 @@ export async function notifyAwaitingSignature(env: Env, wardName: string, signer
     subject: `Your signature is requested: ${opType}`,
     text:
       `A ${opType} operation is waiting on your signature as ${signerDid}.\n\nPending operation id: ${pendingOpId}\n\n` +
-      `Use your client to review and contribute your signature.\n\n${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}\n\n` +
+      `Use your client to review and contribute your signature.\n\n${ACTION_LINKS_BLURB(link)}\n\n` +
       `If nobody completes this, it expires on its own -- it never passes automatically.`,
     headers: threadHeaders(env, pendingOpId),
   });
@@ -134,13 +142,13 @@ export async function notifyVoteRecorded(env: Env, wardName: string, signerDid: 
   const forwarding = await getVerifiedForwardingByDid(env, signerDid);
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, signerDid);
-  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  const link = voteUrl(env, wardName, pendingOpId, token);
   await sendEmail({
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
     subject: `Your signature was recorded: ${opType}`,
-    text: `Your signature as ${signerDid} was recorded for the ${opType} operation (id ${pendingOpId}).\n\n${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+    text: `Your signature as ${signerDid} was recorded for the ${opType} operation (id ${pendingOpId}).\n\n${ACTION_LINKS_BLURB(link)}`,
     headers: threadHeaders(env, pendingOpId),
   });
 }
@@ -150,7 +158,7 @@ export async function notifyProgress(env: Env, wardName: string, recipientDid: s
   const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, recipientDid);
-  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  const link = voteUrl(env, wardName, pendingOpId, token);
   await sendEmail({
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
@@ -158,7 +166,7 @@ export async function notifyProgress(env: Env, wardName: string, recipientDid: s
     subject: `Still waiting on your signature: ${opType}`,
     text:
       `${actorDid} just signed the ${opType} operation (id ${pendingOpId}), but it still needs your own signature as ${recipientDid}.\n\n` +
-      `${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+      `${ACTION_LINKS_BLURB(link)}`,
     headers: threadHeaders(env, pendingOpId),
   });
 }
@@ -182,7 +190,7 @@ export async function notifyWithdrawn(env: Env, wardName: string, recipientDid: 
   const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, recipientDid);
-  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  const link = voteUrl(env, wardName, pendingOpId, token);
   await sendEmail({
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
@@ -190,7 +198,7 @@ export async function notifyWithdrawn(env: Env, wardName: string, recipientDid: 
     subject: `Update: ${opType}`,
     text:
       `${actorDid} withdrew from the ${opType} operation (id ${pendingOpId}) -- they're opting out, not blocking it. It's still pending.\n\n` +
-      `${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+      `${ACTION_LINKS_BLURB(link)}`,
     headers: threadHeaders(env, pendingOpId),
   });
 }
@@ -220,7 +228,7 @@ export async function notifyReminder(env: Env, wardName: string, signerDid: stri
   const forwarding = await getVerifiedForwardingByDid(env, signerDid);
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, signerDid);
-  const { declineUrl, withdrawUrl } = actionLinks(env, wardName, pendingOpId, token);
+  const link = voteUrl(env, wardName, pendingOpId, token);
   await sendEmail({
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
@@ -229,7 +237,7 @@ export async function notifyReminder(env: Env, wardName: string, signerDid: stri
     text:
       `This is a reminder -- the ${opType} operation (id ${pendingOpId}) is still waiting on your signature as ${signerDid}.\n\n` +
       `If nobody completes this by ${expiresAt}, it simply expires and fails -- it does not pass automatically, and does not need your signature to fail safely. Doing nothing is a safe default if you don't want this to happen.\n\n` +
-      `${ACTION_LINKS_BLURB(declineUrl, withdrawUrl)}`,
+      `${ACTION_LINKS_BLURB(link)}`,
     headers: threadHeaders(env, pendingOpId),
   });
 }

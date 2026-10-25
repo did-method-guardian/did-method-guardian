@@ -4,6 +4,7 @@ import { getOidcClient, getSigningKey, insertSigningKey, insertAuthCode, consume
 import { encryptSecret, decryptSecret, randomSecret } from "./secretBox.js";
 import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, type SigningKeypair } from "./jwt.js";
 import { verifyLogin, createLoginSession, resolveSession, readCookie } from "./login.js";
+import { html, escapeHtml, pageStyles } from "./htmlPage.js";
 
 const SESSION_COOKIE = "gw_session";
 const AUTH_CODE_TTL_MS = 1000 * 60 * 5; // 5 minutes
@@ -22,9 +23,6 @@ async function getOrCreateSigningKeypair(env: Env): Promise<SigningKeypair> {
   return importSigningKeypair(keypair.publicKey, keypair.privateKey, kid);
 }
 
-function html(body: string, status = 200): Response {
-  return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
-}
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
@@ -33,30 +31,15 @@ function err(message: string, status: number): Response {
 }
 
 /**
- * This is the one page in the whole registrar a real end user actually
- * looks at directly (every other response here is JSON, consumed by a
- * relying party's own code) -- confirmed live it was previously bare,
- * unstyled HTML with no visual continuity from whatever relying-party
- * page sent someone here, which reads as a broken/wrong page rather
- * than a real step in the same flow. Kept deliberately generic/neutral
- * (not any one relying party's own branding) since this is a self-
- * hostable component -- any operator's users land here.
+ * This is one of the few pages in the whole registrar a real end user
+ * actually looks at directly (everything else here is JSON, consumed by a
+ * relying party's own code, or the voting UI in votingPage.ts) --
+ * confirmed live it was previously bare, unstyled HTML with no visual
+ * continuity from whatever relying-party page sent someone here, which
+ * reads as a broken/wrong page rather than a real step in the same flow.
+ * pageStyles/html/escapeHtml now live in htmlPage.ts, shared with
+ * votingPage.ts's own login form -- same look, one definition.
  */
-function pageStyles(): string {
-  return `<style>
-  :root { color-scheme: light dark; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 360px; margin: 10vh auto 0; padding: 0 1.25rem; line-height: 1.5; }
-  h1 { font-size: 1.25rem; margin-bottom: .25rem; }
-  p.hint { color: #767676; font-size: .9rem; margin-top: 0; }
-  label { display: block; font-size: .85rem; font-weight: 600; margin: 1rem 0 .3rem; }
-  label small { font-weight: 400; color: #767676; }
-  input { display: block; width: 100%; box-sizing: border-box; padding: .6rem .7rem; font-size: 1rem; border: 1px solid #888; border-radius: 6px; background: Canvas; color: CanvasText; }
-  button { display: block; width: 100%; margin-top: 1.25rem; padding: .7rem; font-size: 1rem; border: none; border-radius: 6px; background: #2962ff; color: white; cursor: pointer; }
-  button:hover { background: #1e4fd6; }
-  p.error { color: #c0392b; font-size: .9rem; }
-</style>`;
-}
-
 function loginForm(action: string, hidden: Record<string, string>, opts: { nameValue?: string; error?: string } = {}): string {
   const hiddenInputs = Object.entries(hidden)
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
@@ -72,10 +55,6 @@ ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
   <button type="submit">Sign in</button>
 </form>
 </body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export async function handleOidcRequest(request: Request, env: Env): Promise<Response> {

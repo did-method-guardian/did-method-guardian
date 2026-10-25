@@ -6,6 +6,7 @@ import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
+import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -223,12 +224,24 @@ export default {
     // trusted-client gate on /sign or /decline, same reasoning as /propose:
     // the attached signature is the authorization, and a required signer
     // may be an external guardian with no account on this registrar at all.
-    const pendingMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)\/pending\/([^/]+)(\/sign|\/decline|\/withdraw)?$/);
+    const pendingMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)\/pending\/([^/]+)(\/sign|\/sign-as-self|\/decline|\/withdraw)?$/);
     if (pendingMatch) {
       const [, rawName, id, pendingSuffix] = pendingMatch;
       const name = rawName === "_" ? null : rawName;
       try {
         if (!pendingSuffix && request.method === "GET") {
+          // Content-negotiated: a browser (clicking an email link, or
+          // navigating here directly) gets the real voting page; an API
+          // caller gets the same JSON this has always returned. Never
+          // GET-triggers-an-action here, deliberately -- see votingPage.ts's
+          // own header comment for why (email link prefetching/scanning).
+          const accept = request.headers.get("accept") ?? "";
+          if (accept.includes("text/html")) {
+            const token = url.searchParams.get("token");
+            const sessionId = readCookie(request, "gw_session");
+            const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+            return await renderPendingOpPage(env, rawName, id, token, sessionWardDid);
+          }
           const wardDid = didFor(name, env.REGISTRAR_DOMAIN);
           const status = await getPendingOperationStatus(env, wardDid, id);
           return json(status);
@@ -239,43 +252,38 @@ export default {
           const result = await contributeToOperation(env, id, body.signer_did, body.sig);
           return json(result);
         }
-        // /decline and /withdraw each accept either a signed POST body
+        if (pendingSuffix === "/sign-as-self" && request.method === "POST") {
+          // gw_session-gated, server signs with the key it already custodies -- see votingPage.ts.
+          return await signAsSelf(request, env, id);
+        }
+        // /decline and /withdraw each accept either a signed body
         // (signer_did + sig -- works for anyone who can produce a
-        // signature) or a token-based GET (?token=... -- a plain, clickable
-        // email link, proof by verified-email possession rather than a
-        // signature; see email.ts's own header comment on why that's an
-        // equally valid proof for this specific action).
-        if (pendingSuffix === "/decline" && request.method === "POST") {
-          const body = (await request.json()) as { signer_did?: string; sig?: string };
-          if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
-          const result = await declineOperation(env, id, { signerDid: body.signer_did, sig: body.sig });
-          return json(result);
-        }
-        if (pendingSuffix === "/decline" && request.method === "GET") {
-          const token = url.searchParams.get("token");
-          if (!token) return html(`<p>A token query parameter is required.</p>`, 400);
+        // signature) or a token (?token=... in a JSON body, or a form
+        // field from the voting page's own buttons) -- proof by verified-
+        // email possession rather than a signature; see email.ts's own
+        // header comment on why that's an equally valid proof for this
+        // specific action. A form submission (the voting page's own
+        // buttons) redirects back to the status page; a JSON request gets
+        // JSON back.
+        if ((pendingSuffix === "/decline" || pendingSuffix === "/withdraw") && request.method === "POST") {
+          const contentType = request.headers.get("content-type") ?? "";
+          const isForm = contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data");
+          const auth = isForm
+            ? { token: String((await request.formData()).get("token") ?? "") }
+            : await (async () => {
+                const body = (await request.json()) as { signer_did?: string; sig?: string; token?: string };
+                return body.token ? { token: body.token } : { signerDid: body.signer_did ?? "", sig: body.sig ?? "" };
+              })();
+          const act = pendingSuffix === "/decline" ? declineOperation : withdrawFromOperation;
           try {
-            await declineOperation(env, id, { token });
-            return html(`<p>Declined (vetoed). This proposal will not proceed.</p>`);
+            const result = await act(env, id, auth as any);
+            if (isForm) return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/${rawName}/pending/${id}` } });
+            return json(result);
           } catch (e) {
-            if (e instanceof RegistrarError) return html(`<p>${e.message}</p>`, e.status);
-            throw e;
-          }
-        }
-        if (pendingSuffix === "/withdraw" && request.method === "POST") {
-          const body = (await request.json()) as { signer_did?: string; sig?: string };
-          if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
-          const result = await withdrawFromOperation(env, id, { signerDid: body.signer_did, sig: body.sig });
-          return json(result);
-        }
-        if (pendingSuffix === "/withdraw" && request.method === "GET") {
-          const token = url.searchParams.get("token");
-          if (!token) return html(`<p>A token query parameter is required.</p>`, 400);
-          try {
-            await withdrawFromOperation(env, id, { token });
-            return html(`<p>Withdrawn. You're no longer being waited on; this doesn't block anyone else.</p>`);
-          } catch (e) {
-            if (e instanceof RegistrarError) return html(`<p>${e.message}</p>`, e.status);
+            if (e instanceof RegistrarError) {
+              if (isForm) return html(`<p>${e.message}</p>`, e.status);
+              return error(e.message, e.status);
+            }
             throw e;
           }
         }
@@ -304,6 +312,15 @@ export default {
       }
       const rows = await listPendingForSigner(env, did);
       return json({ pending: rows.map((r) => ({ id: r.id, ward_did: r.ward_did, op_type: r.op_type, state: r.state, created_at: r.created_at, expires_at: r.expires_at })) });
+    }
+
+    if (path === "/login" && (request.method === "GET" || request.method === "POST")) {
+      // This registrar's own first-party login (votingPage.ts) -- distinct
+      // from the OIDC relying-party flow (/authorize, oidc.ts): no
+      // client_id/redirect_uri registration, just "sign in, then take me
+      // back to whatever first-party page sent me here" (the voting page,
+      // today; any future first-party HTML page this registrar grows).
+      return handleDirectLogin(request, env, url);
     }
 
     if (path === "/verify-email" && request.method === "GET") {
