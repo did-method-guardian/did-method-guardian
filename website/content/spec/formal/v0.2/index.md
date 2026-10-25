@@ -41,7 +41,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 ## 4. Key material
 
 - **REQ-4-1**: `operationalKeys` is the ward's own, lowest-authority, self-rotatable tier. Any single current operational key suffices to authorize an ordinary rotation ([§7.2](#72-update)).
-- **REQ-4-2**: The guardian tier is, at any point in the log, exactly the current guardian set as derived by replay -- a live reference, never a value fixed at the moment guardianship was established. A signature from a guardian DID *MUST* be checked against that DID's own currently-resolved keys at verification time, not a cached key.
+- **REQ-4-2**: The guardian tier is, at any point in the log, exactly the current guardian set as derived by replay -- a live reference, never a value fixed at the moment guardianship was established. A signature from a guardian DID *MUST* be checked against a key that was valid for that guardian's own identity at the time the signing operation was created -- determined by replaying the guardian's own operation log up to that point, not necessarily its currently-resolved key. Every key a guardian has ever rotated away from remains permanently present in its own log ([§9](#9-deactivation-and-data-permanence)), so this check is always independently verifiable, even after that key is no longer current.
 - **REQ-4-3**: A guardian action *MUST* always be signed by the guardian's own distinct key, never the ward's.
 
 ## 5. GuardianPolicy
@@ -66,12 +66,16 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 ## 6. The operation log
 
 - **REQ-6-1**: Every identity *MUST* be defined by an append-only, hash-chained, signed log of operations; the DID Document *MUST* always be derived by replaying this log, never stored or trusted directly.
-- **REQ-6-2**: Every operation except genesis *MUST* name the CID of the immediately preceding operation (`prev`); a registrar *MUST* reject any operation whose `prev` does not equal the current log head for that identity.
+- **REQ-6-2**: Every operation except genesis *MUST* name the CID of the immediately preceding operation (`prev`); a registrar *MUST* reject any operation whose `prev` does not equal the current log head for that identity, except as permitted by REQ-6-8 (nullification).
 - **REQ-6-3**: The identifier *MUST* be derived from the genesis operation's own content hash, never assigned independently by a registrar.
 - **REQ-6-4**: Serialization, hashing, and signing follow `did:plc`: DAG-CBOR encoding, ECDSA signatures (low-S form, base64url-encoded), `prev` as CIDv1 (base32 multibase, dag-cbor codec, sha-256 multihash).
 - **REQ-6-5**: Once an identity's `deactivated` state is true ([§7.3](#73-deactivate)), a registrar *MUST* reject every subsequent operation against it.
-- **REQ-6-6**: A registrar (or any independent verifier) *MUST* derive current state only by replaying the full log from genesis, verifying every operation's signatures against whichever keys/guardians had authority at that point in the log.
+- **REQ-6-6**: A registrar (or any independent verifier) *MUST* derive current state only by replaying the full log from genesis, verifying every operation's signatures against whichever keys/guardians had authority at that point in the log, and applying REQ-6-8's nullification rule where it occurs.
 - **REQ-6-7**: Every operation's `sigs` map is keyed by signer DID; each signature *MUST* be checked against that DID's own independently-resolved keys, never the ward's, and *MUST* cover the full operation content, binding it to this exact operation.
+- **REQ-6-8** (nullification): A guardian-signed `custodial_rotate` meeting `recovery_threshold` ([§7.2](#72-update)) *MAY* name a `prev` earlier than the current log head, provided the operation immediately following the named `prev` (the operation being nullified) was accepted by the registrar less than the recovery window (REQ-6-9) ago.
+- **REQ-6-9** (recovery window): The recovery window is 72 hours, matching `did:plc`'s own value.
+- **REQ-6-10**: Once a nullifying operation (REQ-6-8) is accepted, every operation that followed the named `prev` in the now-superseded branch *MUST* be excluded from replay (REQ-6-6); the nullifying operation becomes the new log head, and REQ-6-2 applies normally from that point forward.
+- **REQ-6-11**: A nullifying operation *MAY* itself later be nullified by a further guardian-signed recovery rotation, under REQ-6-8, evaluated against its own acceptance time -- a reversal is the same mechanism applied again, not a distinct operation type.
 
 ## 7. Operations
 
@@ -151,12 +155,5 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - **Guardian key compromise**: a single compromised guardian key cannot act alone in a guardian set held to anything stricter than `any`. `guardian_remove`'s voluntary path (REQ-7.2-7a) only ever lets a compromised key remove that same guardian, never another. A compromised sole guardian, or a guardian set deliberately held at `any`, is a real, unmitigated risk.
 - **Name squatting**: names are permanent within a registrar ([§9](#9-deactivation-and-data-permanence)); claiming a name ahead of its likely owner is possible, bounded to one registrar's own namespace.
 - **Sybil creation**: nothing in this method limits how many identities one party may register, within a registrar or across many.
-- **Cross-registrar identity unification**: not specified by this version ([§11](#11-open-questions)).
-
-## 11. Open questions
-
-- Whether nullification of a rotation within a bounded recovery window (`did:plc`'s own model) should be added -- REQ-6-2's strict `prev`-equals-head rule forecloses it for now.
-- Precisely which of a guardian's own keys a signature is checked against if the guardian rotates mid-flight, beyond REQ-4-2's general "at the time of signing" principle.
-- Cross-registrar identity unification.
-- Rate limits, field size constraints, and DoS-resistance at a registrar.
-- Interoperability with an identity under a different DID method entirely.
+- **Cross-registrar identity unification**: two `did:guardian` identities under different registrars are never provably the same party by this method alone, including when they share a name.
+- **Nullification window**: for 72 hours after any operation (REQ-6-9), a verifier *SHOULD* treat current state as provisional, not final -- a guardian-signed recovery rotation can still rewrite history back to that point. A compromised guardian set that also meets `recovery_threshold` can itself abuse nullification within the same window; this is the same class of risk as any other guardian-key compromise ([§10](#10-security-and-privacy-considerations), above), not a new one.

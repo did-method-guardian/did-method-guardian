@@ -48,3 +48,43 @@
   border-top: 1px solid var(--pico-muted-border-color);
   text-align: center;
 }
+
+.docs-layout {
+  display: flex;
+  gap: 2.5rem;
+  align-items: flex-start;
+}
+.docs-nav {
+  flex: 0 0 12rem;
+  position: sticky;
+  top: 1.5rem;
+}
+.docs-nav strong {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  color: var(--pico-muted-color);
+  margin-bottom: 0.5rem;
+}
+.docs-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.docs-nav li {
+  margin-bottom: 0.4rem;
+}
+.docs-layout > article {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+@media (max-width: 55rem) {
+  .docs-layout {
+    flex-direction: column;
+  }
+  .docs-nav {
+    position: static;
+    flex: none;
+  }
+}

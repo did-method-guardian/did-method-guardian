@@ -1,5 +1,5 @@
 ---
-layout: docs
+layout: docs-sidebar
 title: "did:guardian Registrar API, v1 (zzmq.dev's own registrar)"
 description: "This registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint and signature-collection mechanism this specific registrar adds on top."
 ---
