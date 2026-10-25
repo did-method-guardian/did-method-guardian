@@ -1,6 +1,6 @@
 ---
 layout: docs-sidebar
-title: "DID Guardian Method Specification, v0.2"
+title: "DID Guardian Method Specification, v0.2.0"
 description: "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements."
 ---
 # DID Guardian Method Specification
