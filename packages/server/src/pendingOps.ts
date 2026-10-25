@@ -195,6 +195,31 @@ export async function declineOperation(env: Env, id: string): Promise<{ state: s
   return { state: actor.getSnapshot().value as string };
 }
 
+export interface PendingOperationStatus {
+  id: string;
+  op_type: string;
+  state: string;
+  required_signers: Did[];
+  signed: Did[];
+  created_at: string;
+  expires_at: string;
+}
+
+/** GET .../pending/<id> (registrar API spec §3) -- ward-scoped: `wardDid` must match the proposal's own, same defensive check every other ward-path endpoint makes. */
+export async function getPendingOperationStatus(env: Env, wardDid: Did, id: string): Promise<PendingOperationStatus> {
+  const row = await getPendingOperation(env, id);
+  if (!row || row.ward_did !== wardDid) throw new RegistrarError(`no pending operation "${id}" for this ward`, 404);
+  return {
+    id: row.id,
+    op_type: row.op_type,
+    state: row.state,
+    required_signers: JSON.parse(row.required_signers) as Did[],
+    signed: Object.keys(JSON.parse(row.collected_sigs) as Record<Did, string>),
+    created_at: row.created_at,
+    expires_at: row.expires_at,
+  };
+}
+
 export async function listPendingForSigner(env: Env, signerDid: Did): Promise<PendingOperationRow[]> {
   const rows = await listPendingOperationsForSigner(env, signerDid);
   const active: PendingOperationRow[] = [];

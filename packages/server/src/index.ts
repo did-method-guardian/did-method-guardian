@@ -1,7 +1,7 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, submitOperation, RegistrarError } from "./registrar.js";
-import { proposeOperation, contributeToOperation, declineOperation, listPendingForSigner } from "./pendingOps.js";
+import { proposeOperation, contributeToOperation, declineOperation, getPendingOperationStatus, listPendingForSigner } from "./pendingOps.js";
 import { handleOidcRequest } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -20,7 +20,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/operations\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone)?$/);
+    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone)?$/);
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -41,7 +41,7 @@ export default {
           const result = await submitOperation(env, name, op as any);
           return result.accepted ? json({ accepted: true }) : error(result.reason, 400);
         }
-        if (suffix === "/operations/propose" && request.method === "POST") {
+        if (suffix === "/propose" && request.method === "POST") {
           // No session/trusted-client gate, deliberately -- same trust model
           // as plain /operations: the operation's own attached signature is
           // the authorization, not a cookie, since a required signer (an
@@ -153,37 +153,57 @@ export default {
       return error("not found", 404);
     }
 
-    const pendingContributeMatch = path.match(/^\/pending\/([^/]+)\/contribute$/);
-    if (pendingContributeMatch && request.method === "POST") {
+    // Ward-scoped, per the registrar API spec's own §3 table -- the ward's
+    // name is just a routing namespace here (consistent with every other
+    // .well-known path), not a claim about who's involved; the pending
+    // operation's own id is what actually identifies it. No session/
+    // trusted-client gate on /sign or /decline, same reasoning as /propose:
+    // the attached signature is the authorization, and a required signer
+    // may be an external guardian with no account on this registrar at all.
+    const pendingMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)\/pending\/([^/]+)(\/sign|\/decline)?$/);
+    if (pendingMatch) {
+      const [, rawName, id, pendingSuffix] = pendingMatch;
+      const name = rawName === "_" ? null : rawName;
       try {
-        const [, id] = pendingContributeMatch;
-        const body = (await request.json()) as { signer_did?: string; sig?: string };
-        if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
-        const result = await contributeToOperation(env, id, body.signer_did, body.sig);
-        return json(result);
+        if (!pendingSuffix && request.method === "GET") {
+          const wardDid = didFor(name, env.REGISTRAR_DOMAIN);
+          const status = await getPendingOperationStatus(env, wardDid, id);
+          return json(status);
+        }
+        if (pendingSuffix === "/sign" && request.method === "POST") {
+          const body = (await request.json()) as { signer_did?: string; sig?: string };
+          if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
+          const result = await contributeToOperation(env, id, body.signer_did, body.sig);
+          return json(result);
+        }
+        if (pendingSuffix === "/decline" && request.method === "POST") {
+          const result = await declineOperation(env, id);
+          return json(result);
+        }
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);
-        console.error("contribute error:", e);
+        console.error("pending operation error:", e);
         return error("internal error", 500);
       }
+      return error("not found", 404);
     }
 
-    const pendingDeclineMatch = path.match(/^\/pending\/([^/]+)\/decline$/);
-    if (pendingDeclineMatch && request.method === "POST") {
-      try {
-        const [, id] = pendingDeclineMatch;
-        const result = await declineOperation(env, id);
-        return json(result);
-      } catch (e) {
-        if (e instanceof RegistrarError) return error(e.message, e.status);
-        return error("internal error", 500);
+    if (path === "/api/me/pending-signatures" && request.method === "GET") {
+      // "me" resolves from an active gw_session; a trusted OIDC client has
+      // no single identity of its own, so it must name one explicitly via
+      // ?did=, asserting it's authorized to act for that DID -- same split
+      // as every ward-name-scoped endpoint above, just without a name in
+      // the URL to carry that role here.
+      const sessionId = readCookie(request, "gw_session");
+      const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+      let did = sessionWardDid;
+      if (!did) {
+        const trustedClient = await authenticateOidcClient(request, env);
+        if (!trustedClient) return error("must be signed in, or a trusted client naming ?did=, to list pending signatures", 403);
+        did = url.searchParams.get("did");
+        if (!did) return error("did query parameter is required for a trusted client", 400);
       }
-    }
-
-    if (path === "/pending" && request.method === "GET") {
-      const signer = url.searchParams.get("signer");
-      if (!signer) return error("signer query parameter is required", 400);
-      const rows = await listPendingForSigner(env, signer);
+      const rows = await listPendingForSigner(env, did);
       return json({ pending: rows.map((r) => ({ id: r.id, ward_did: r.ward_did, op_type: r.op_type, state: r.state, created_at: r.created_at, expires_at: r.expires_at })) });
     }
 
