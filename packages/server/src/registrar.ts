@@ -6,23 +6,21 @@ import {
   signCustodialTombstone,
   cidFor,
   replay,
+  checkNullification,
   toDidDocument,
-  verifyCustodialRotate,
-  verifyGuardianTransfer,
-  verifyGuardianRelinquish,
-  verifyCustodialTombstone,
+  liveGuardians,
+  verifyByRules,
+  isValidName,
   meetsThreshold,
   parseDid,
   wellKnownPath,
   DEFAULT_GUARDIAN_POLICY,
 } from "@did-guardian/lib";
-import type { Did, LogEntry, Operation, ResolvedState } from "@did-guardian/lib";
+import type { Did, GuardianLivenessResolver, LogEntry, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, randomSecret } from "./secretBox.js";
-
-const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 
 export class RegistrarError extends Error {
   constructor(message: string, public status: number) {
@@ -30,8 +28,9 @@ export class RegistrarError extends Error {
   }
 }
 
+/** REQ-2-1, via the single source of truth in @did-guardian/lib -- registrar.ts previously had its own copy that let a double-hyphen and even a single-character name through. */
 export function assertValidName(name: string): void {
-  if (!NAME_RE.test(name)) {
+  if (!isValidName(name)) {
     throw new RegistrarError(`invalid name "${name}" -- must be 3-32 lowercase alphanumeric/hyphen characters, no leading/trailing/double hyphens`, 400);
   }
 }
@@ -243,17 +242,18 @@ export async function relinquishWard(env: Env, name: string): Promise<{ did: str
   const latestCid = log[log.length - 1]?.cid;
   if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to relinquish from`, 500);
   const state = replay(ward.did as Did, log);
-  if (state.guardians.length === 0) throw new RegistrarError(`"${name}" has no guardians to relinquish -- it's already ownerless`, 400);
+  const live = await liveGuardians(state, makeGuardianLivenessResolver(env)); // REQ-4-4 -- a deactivated guardian never counts toward removal_threshold, nor is it worth attempting to sign for
+  if (live.length === 0) throw new RegistrarError(`"${name}" has no guardians to relinquish -- it's already ownerless`, 400);
 
   const signerKeys: Record<string, string> = {};
-  for (const guardianDid of state.guardians) {
+  for (const guardianDid of live) {
     const guardianWard = await getWardByDid(env, guardianDid);
     if (guardianWard) signerKeys[guardianDid] = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
   }
   const signers = Object.keys(signerKeys);
-  if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, state.guardians)) {
+  if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, live)) {
     throw new RegistrarError(
-      `not enough of "${name}"'s current guardians (${state.guardians.join(", ")}) are custodied by this registrar to meet its own removal_threshold -- a guardian on a different registrar has to relinquish through that registrar directly`,
+      `not enough of "${name}"'s current guardians (${live.join(", ")}) are custodied by this registrar to meet its own removal_threshold -- a guardian on a different registrar has to relinquish through that registrar directly`,
       400,
     );
   }
@@ -311,7 +311,7 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
 
 async function loadLog(env: Env, did: string): Promise<LogEntry[]> {
   const rows = await getOperationLog(env, did);
-  return rows.map((r) => ({ cid: r.cid, op: JSON.parse(r.payload) as Operation }));
+  return rows.map((r) => ({ cid: r.cid, op: JSON.parse(r.payload) as Operation, acceptedAt: r.created_at }));
 }
 
 /** `name: null` auto-provisions the bare-domain root identity (never missing); a real name that isn't registered yet stays a plain miss. */
@@ -342,7 +342,16 @@ export async function resolveLog(env: Env, name: string | null): Promise<LogEntr
  * Verifies and appends one externally-signed operation. The one real write
  * path external callers have -- every signature is checked against live-
  * resolved keys (own wards, or external DIDs resolved via fetch, see
- * resolveExternal below), never a cached snapshot (spec §4.8).
+ * makeExternalResolver below), never a cached snapshot (spec §4.2).
+ *
+ * `custodial_rotate`/`guardian_add`/`guardian_remove`/`guardian_relinquish`/
+ * `policy_update`/`custodial_tombstone` all go through rules.ts's
+ * verifyByRules -- one shared, spec-traced acceptance gate rather than a
+ * bespoke per-type call. `guardian_transfer` (v0.1) is no longer accepted
+ * for new submissions -- superseded by guardian_add/guardian_remove; it
+ * stays supported for REPLAYING any already-accepted history (document.ts),
+ * just not for new writes. `custodial_create` isn't reachable here at all --
+ * genesis has its own path (registerWard).
  */
 export async function submitOperation(env: Env, name: string | null, op: Operation): Promise<{ accepted: true } | { accepted: false; reason: string }> {
   const ward = await findWard(env, name);
@@ -351,27 +360,48 @@ export async function submitOperation(env: Env, name: string | null, op: Operati
   const state = replay(ward.did, log);
   const latestCid = log[log.length - 1]?.cid ?? null;
 
-  if ((op as { prev?: string | null }).prev !== latestCid) {
-    return { accepted: false, reason: `prev must be the current log head (${latestCid})` };
+  if (state.deactivated) {
+    return { accepted: false, reason: "this identity is deactivated -- no further operations are accepted (REQ-6-5)" };
   }
 
-  const resolve = makeExternalResolver(env);
+  const ctx: VerificationContext = {
+    wardDid: ward.did,
+    state,
+    resolveKey: makeExternalResolver(env),
+    isGuardianLive: makeGuardianLivenessResolver(env),
+  };
+
+  const opPrev = (op as { prev?: string | null }).prev ?? null;
+  let alreadyVerifiedAsNullification = false;
+  if (opPrev !== latestCid) {
+    if (op.type !== "custodial_rotate") {
+      return { accepted: false, reason: `prev must be the current log head (${latestCid})` };
+    }
+    const nullCheck = await checkNullification(log, op, ctx);
+    if (!nullCheck.ok) {
+      return { accepted: false, reason: nullCheck.reason ?? `prev must be the current log head (${latestCid})` };
+    }
+    alreadyVerifiedAsNullification = true; // checkNullification already confirmed the guardian signer requirement
+  }
+
   let result: { valid: boolean; reason?: string };
-  switch (op.type) {
-    case "custodial_rotate":
-      result = await verifyCustodialRotate(op, state.operationalKeys, resolve);
-      break;
-    case "guardian_transfer":
-      result = await verifyGuardianTransfer(op, ward.did, state.guardians, resolve);
-      break;
-    case "guardian_relinquish":
-      result = await verifyGuardianRelinquish(op, state.guardians, state.guardianPolicy.removal_threshold, resolve);
-      break;
-    case "custodial_tombstone":
-      result = await verifyCustodialTombstone(op, [ward.did, ...state.guardians], state.guardianPolicy.tombstone_threshold, resolve);
-      break;
-    default:
-      return { accepted: false, reason: `operation type "${(op as { type: string }).type}" is not appendable this way` };
+  if (alreadyVerifiedAsNullification) {
+    result = { valid: true };
+  } else {
+    switch (op.type) {
+      case "custodial_rotate":
+      case "guardian_add":
+      case "guardian_remove":
+      case "guardian_relinquish":
+      case "policy_update":
+      case "custodial_tombstone":
+        result = await verifyByRules(op, ctx);
+        break;
+      case "guardian_transfer":
+        return { accepted: false, reason: "guardian_transfer is superseded in v0.2 -- submit guardian_add and/or guardian_remove instead" };
+      default:
+        return { accepted: false, reason: `operation type "${(op as { type: string }).type}" is not appendable this way` };
+    }
   }
 
   if (!result.valid) return { accepted: false, reason: result.reason ?? "verification failed" };
@@ -380,12 +410,49 @@ export async function submitOperation(env: Env, name: string | null, op: Operati
   await appendOperation(env, {
     cid,
     did: ward.did,
-    prev_cid: latestCid,
+    prev_cid: opPrev,
     op_type: op.type,
     payload: JSON.stringify(op),
     created_at: new Date().toISOString(),
   });
   return { accepted: true };
+}
+
+/**
+ * REQ-4-4: whether a guardian DID is currently excluded from every ward it
+ * guards, because its OWN identity has been deactivated. A local guardian
+ * (this registrar's own ward) is checked directly against its own replayed
+ * state, no network involved. An external guardian's deactivation status is
+ * method-internal (REQ-3-3 keeps it out of the plain DID Document), so it
+ * has to be resolved from that guardian's own operation log, fetched from
+ * its own registrar, and replayed here -- mirrors makeExternalResolver's
+ * own federation pattern exactly. Fails open (treated as live) on a parse
+ * or network failure: a transient unreachability shouldn't silently and
+ * permanently exclude a legitimate, merely-unreachable guardian from every
+ * threshold it's part of.
+ */
+function makeGuardianLivenessResolver(env: Env): GuardianLivenessResolver {
+  return async (did: Did): Promise<boolean> => {
+    const local = await getWardByDid(env, did);
+    if (local) {
+      const log = await loadLog(env, local.did);
+      return !replay(local.did as Did, log).deactivated;
+    }
+    let name: string | null, domain: string;
+    try {
+      ({ name, domain } = parseDid(did));
+    } catch {
+      return true;
+    }
+    try {
+      const resp = await fetch(`https://${domain}${wellKnownPath(name)}/log`);
+      if (!resp.ok) return true;
+      const log = (await resp.json()) as LogEntry[];
+      return !replay(did, log).deactivated;
+    } catch {
+      return true;
+    }
+  };
 }
 
 /**
