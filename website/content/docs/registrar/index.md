@@ -54,12 +54,18 @@ Both accept two different kinds of proof, either is equally valid:
 |---|---|---|
 | `POST` | `.../propose` | create a pending proposal for one operation type + its intended content, with the proposer's own signature attached if they're a required signer |
 | `POST` | `.../pending/<id>/sign` | a required signer not yet counted adds their own signature |
-| `POST` or `GET` | `.../pending/<id>/decline` | veto -- POST with a signed body, or GET with `?token=...` |
-| `POST` or `GET` | `.../pending/<id>/withdraw` | opt-out -- same two proof options |
-| `GET` | `.../pending/<id>` | current status: required signers, who has signed, state |
+| `POST` | `.../pending/<id>/sign-as-self` | `gw_session`-gated: signs server-side with the key this registrar already custodies for the logged-in identity, same model as `.../adopt`/`.../rotate` |
+| `POST` or `GET` | `.../pending/<id>/decline` | veto -- POST with a signed or form body, or GET with `?token=...` |
+| `POST` or `GET` | `.../pending/<id>/withdraw` | opt-out -- same proof options |
+| `GET` | `.../pending/<id>` | content-negotiated: `Accept: text/html` renders the browser voting page below; anything else returns the same status JSON as always (required signers, who has signed, state) |
 | `GET` | `/api/me/pending-signatures` | every pending proposal naming the caller as a required signer who hasn't yet signed |
 
 A proposal not reaching `satisfied` within 7 days moves to `expired` -- always a failure, never an automatic pass; nothing in this method or this registrar advances a proposal just because time ran out. A required signer discovers a pending proposal by polling `/api/me/pending-signatures` or by email (§6) -- every state-moving event (propose, each signature, decline, withdraw, finalize) sends one, plus a daily reminder for anyone who still hasn't acted on a `collecting` proposal, explaining that consequence in plain terms.
+
+**The browser voting page.** Every notification email links here (with a token, if one was issued) rather than to an action endpoint directly -- deliberately: an email client's own link-prefetching security scanner (Microsoft Safe Links, a corporate proxy, antivirus) visits a link the instant a message arrives, long before a person reads it, so a link that performed the action itself could be "voted" by the scanner, never by the person it was addressed to. The page shows state, required signers (with who's signed), and expiry, and -- only while `collecting` -- real buttons that each `POST`:
+
+- **Decline / Withdraw**, shown whenever a valid `?token=` is present in the URL -- the token itself is the proof, same as the API's own token path.
+- **Sign**, shown only when the viewer is authenticated (§5's own `gw_session`) as a required signer who hasn't yet signed -- signing is held to a higher bar than decline/withdraw because it grants real authority (e.g. a new guardian), so the email token alone isn't treated as sufficient; a logged-out viewer instead sees a link to §5's own login page. Only ever available for a locally-custodied identity, same limit every session-gated convenience endpoint already has.
 
 ## 4. Guardian deactivation policy
 
@@ -77,7 +83,12 @@ Entirely this registrar's own operational choice -- the formal spec (REQ-4-4) on
 
 ## 5. Login / OIDC
 
-Unchanged by this plan -- `/authorize`, `/token`, `/userinfo`, `/.well-known/openid-configuration`, `/.well-known/jwks.json`, plus this registrar's own `gw_session`-cookie login flow. See `packages/server/src/oidc.ts` and `login.ts`; not re-documented here since nothing in this plan touches it.
+Two independent flows share the same underlying credential (`login_secret`) and the same `gw_session` cookie, for two different purposes:
+
+- `/authorize`, `/token`, `/userinfo`, `/.well-known/openid-configuration`, `/.well-known/jwks.json` -- the OIDC relying-party flow, for a third-party application that wants to let someone sign in with their Guardian ID. Requires a pre-registered `client_id`/`redirect_uri`. See `packages/server/src/oidc.ts`.
+- `GET`/`POST /guardian-login?return_to=<path>` -- this registrar's own first-party login, for this registrar's own pages (currently just §3's browser voting page). No client registration: it's just "sign in, then take me back to the same-origin path that sent me here" (`return_to` is restricted to a relative path -- no open redirect to an external target). See `votingPage.ts`.
+
+Named `/guardian-login`, not the shorter `/login` -- a real collision, not a style choice: a registrar is commonly deployed on a domain that already has its own, unrelated human-facing `/login` (zz's own deployment on zzmq.dev does, for its own web app). Worth checking your own host application's routes before adding any new top-level path here, not just this one.
 
 ## 6. Email forwarding
 
