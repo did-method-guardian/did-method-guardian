@@ -2,7 +2,7 @@ import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
 import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders } from "./pendingOps.js";
-import { handleOidcRequest } from "./oidc.js";
+import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
@@ -382,15 +382,29 @@ export default {
         return handleRegisterForm(request, env);
       }
       try {
-        const body = (await request.json()) as { name?: string; guardian_did?: string };
+        const body = (await request.json()) as { name?: string };
         if (!body.name) return error("name is required", 400);
-        // guardian_did is only ever honored for a trusted OIDC client (the
-        // same credential already used at /token) -- an unauthenticated
-        // caller's guardian_did is silently ignored, not an error, since
-        // plain self-service registration (no guardian) is still a normal,
-        // valid request shape.
-        const client = await authenticateOidcClient(request, env);
-        const result = await registerWard(env, body.name, client ? body.guardian_did : null);
+        // The Managed Identity API (registrar API spec's own §9): a new
+        // ward's guardian is never a free-text field a caller supplies --
+        // it's derived from a real, scope-checked access token's own sub,
+        // the authenticated end user who actually consented (on the
+        // ordinary /authorize consent screen, scope=create:managed-
+        // identity) to becoming a guardian, not an arbitrary string some
+        // client typed in. A caller with no bearer token at all still gets
+        // plain self-service registration, no guardian -- the ordinary,
+        // valid case this endpoint has always served.
+        const auth = request.headers.get("authorization") ?? "";
+        const bearerToken = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+        let guardianDid: string | null = null;
+        if (bearerToken) {
+          const verified = await verifyAccessToken(env, bearerToken);
+          if (!verified) return error("invalid, expired, or revoked access token", 401);
+          if (!verified.scope.includes("create:managed-identity")) {
+            return error('this access token was not granted the "create:managed-identity" scope', 403);
+          }
+          guardianDid = verified.sub;
+        }
+        const result = await registerWard(env, body.name, guardianDid);
         return json(result, 201);
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);

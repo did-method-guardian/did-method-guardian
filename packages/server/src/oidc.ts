@@ -84,7 +84,11 @@ function scopeSatisfied(granted: string, requested: string): boolean {
 
 /** The "App X wants access -- Allow/Deny" step handleAuthorize previously skipped entirely. POSTs back to the same /authorize URL (same query string) with just a consent decision -- the session cookie set when this page was rendered is what lets that follow-up POST resolve the ward without asking for credentials again. */
 function consentPage(action: string, clientName: string, scope: string): string {
-  const scopeLabels: Record<string, string> = { openid: "Your Guardian identity", email: "Your verified email address" };
+  const scopeLabels: Record<string, string> = {
+    openid: "Your Guardian identity",
+    email: "Your verified email address",
+    "create:managed-identity": "Create new identities with you as their real, signed guardian",
+  };
   const items = scope
     .split(/\s+/)
     .filter(Boolean)
@@ -122,7 +126,7 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
       subject_types_supported: ["public"],
       id_token_signing_alg_values_supported: ["ES256"],
       code_challenge_methods_supported: ["S256"],
-      scopes_supported: ["openid", "email"],
+      scopes_supported: ["openid", "email", "create:managed-identity"],
       token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post", "none"],
     });
   }
@@ -508,11 +512,19 @@ async function handleRevoke(request: Request, env: Env): Promise<Response> {
   return new Response(null, { status: 200 });
 }
 
-async function handleUserinfo(request: Request, env: Env): Promise<Response> {
-  const auth = request.headers.get("authorization") ?? "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return err("missing bearer token", 401);
+export interface VerifiedAccessToken {
+  sub: string;
+  scope: string[];
+}
 
+/**
+ * Shared bearer-token verification -- originally handleUserinfo's own
+ * inline logic, now also used by registerPage.ts's own managed-identity
+ * creation path (REQ: a managed identity's guardian must be derived from
+ * a real, scope-checked access token's own sub, never a client-supplied
+ * free-text field -- see that file's own header comment for why).
+ */
+export async function verifyAccessToken(env: Env, token: string): Promise<VerifiedAccessToken | null> {
   const keypair = await getOrCreateSigningKeypair(env);
   const publicKey = await crypto.subtle.importKey(
     "jwk",
@@ -522,15 +534,25 @@ async function handleUserinfo(request: Request, env: Env): Promise<Response> {
     ["verify"],
   );
   const payload = await verifyJwt(token, publicKey);
-  if (!payload || typeof payload.sub !== "string") return err("invalid or expired token", 401);
-  if (typeof payload.jti === "string" && (await isJtiRevoked(env, payload.jti))) return err("token has been revoked", 401);
+  if (!payload || typeof payload.sub !== "string") return null;
+  if (typeof payload.jti === "string" && (await isJtiRevoked(env, payload.jti))) return null;
+  const scope = typeof payload.scope === "string" ? payload.scope.split(/\s+/).filter(Boolean) : [];
+  return { sub: payload.sub, scope };
+}
 
-  const ward = await getWardByDid(env, payload.sub);
-  const claims: Record<string, unknown> = { sub: payload.sub, name: ward?.name };
+async function handleUserinfo(request: Request, env: Env): Promise<Response> {
+  const auth = request.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return err("missing bearer token", 401);
 
-  const scope = typeof payload.scope === "string" ? payload.scope.split(/\s+/) : [];
-  if (scope.includes("email")) {
-    const forwarding = await getVerifiedForwardingByDid(env, payload.sub);
+  const verified = await verifyAccessToken(env, token);
+  if (!verified) return err("invalid, expired, or revoked token", 401);
+
+  const ward = await getWardByDid(env, verified.sub);
+  const claims: Record<string, unknown> = { sub: verified.sub, name: ward?.name };
+
+  if (verified.scope.includes("email")) {
+    const forwarding = await getVerifiedForwardingByDid(env, verified.sub);
     if (forwarding) {
       claims.email = forwarding.forward_to;
       claims.email_verified = true;
