@@ -151,3 +151,21 @@ Unchanged -- `POST .../email` (set up forwarding), `GET /verify-email` (confirm 
 ## 7. Login secret
 
 Unchanged -- `POST .../login-secret` (reissue a lost or leaked one). See `packages/server/src/registrar.ts`'s `reissueLoginSecret`.
+
+## 8. Account dashboard
+
+Everything above this point is an API, consumed by a relying party's own code or an email client's link -- `GET /account` (after `/guardian-login`) is the one page where a person looks at and manages their own identity directly, the same first-party-HTML-page pattern §3's own voting page already established. See `packages/server/src/accountPage.ts`.
+
+Shows identity status, current guardians and the effective `GuardianPolicy` thresholds, the full activity log, anything still waiting on this identity's own signature (linked to §3's voting page), and every connected OAuth app (§5.2's own consent records) with a "Revoke access" button that also kills any live refresh tokens for that app, not just the consent record -- revoking actually revokes, not just "stop remembering."
+
+| Method | Path | |
+|---|---|---|
+| `GET` | `/account` | the dashboard itself |
+| `POST` | `/account/rotate` | rotate the operational key |
+| `POST` | `/account/login-secret/reissue` | reissue the login secret -- shown once, same convention every other one-time secret here follows |
+| `POST` | `/account/email` | set up forwarding (§6) |
+| `POST` | `/account/relinquish` | relinquish all guardians |
+| `GET`/`POST` | `/account/tombstone` | a real confirmation page -- requires typing the account's own name, not a bare button -- then deactivates |
+| `POST` | `/account/consents/revoke` | revoke a connected app's own access |
+
+Rotation, login-secret reissue, email forwarding, relinquishing, and deactivation are all unreachable for the domain's own bare-domain root identity -- the same restriction §2's own convenience endpoints already enforce for that identity (each one's own header comment in `registrar.ts` explains why: those are more sensitive operations than anything a name-keyed identity needs). The dashboard hides those actions for that identity and refuses them server-side too, rather than exposing a path those endpoints deliberately withhold.
