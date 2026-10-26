@@ -147,6 +147,48 @@ export async function consumeAuthCode(env: Env, code: string): Promise<AuthCodeR
   return row;
 }
 
+export interface RefreshTokenRow {
+  token_hash: string;
+  client_id: string;
+  ward_did: string;
+  scope: string;
+  family_id: string;
+  created_at: string;
+  expires_at: string;
+  revoked: number;
+}
+
+export async function insertRefreshToken(env: Env, row: RefreshTokenRow): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO oidc_refresh_tokens (token_hash, client_id, ward_did, scope, family_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+  )
+    .bind(row.token_hash, row.client_id, row.ward_did, row.scope, row.family_id, row.created_at, row.expires_at)
+    .run();
+}
+
+export async function getRefreshToken(env: Env, tokenHash: string): Promise<RefreshTokenRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM oidc_refresh_tokens WHERE token_hash = ?").bind(tokenHash).first<RefreshTokenRow>();
+  return row ?? null;
+}
+
+export async function revokeRefreshToken(env: Env, tokenHash: string): Promise<void> {
+  await env.DB.prepare("UPDATE oidc_refresh_tokens SET revoked = 1 WHERE token_hash = ?").bind(tokenHash).run();
+}
+
+/** Reuse-detection response: an already-revoked refresh token being presented again means it was likely stolen -- revoke every token descended from the same original grant, not just the one reused. */
+export async function revokeRefreshTokenFamily(env: Env, familyId: string): Promise<void> {
+  await env.DB.prepare("UPDATE oidc_refresh_tokens SET revoked = 1 WHERE family_id = ?").bind(familyId).run();
+}
+
+export async function insertRevokedJti(env: Env, jti: string, revokedAt: string): Promise<void> {
+  await env.DB.prepare("INSERT INTO oidc_revoked_jti (jti, revoked_at) VALUES (?, ?) ON CONFLICT(jti) DO NOTHING").bind(jti, revokedAt).run();
+}
+
+export async function isJtiRevoked(env: Env, jti: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT 1 FROM oidc_revoked_jti WHERE jti = ?").bind(jti).first();
+  return row !== null;
+}
+
 export interface SigningKeyRow {
   kid: string;
   public_key: string;

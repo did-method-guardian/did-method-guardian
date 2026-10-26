@@ -10,6 +10,13 @@ import {
   insertOidcClient,
   getOidcConsent,
   upsertOidcConsent,
+  insertRefreshToken,
+  getRefreshToken,
+  revokeRefreshToken,
+  revokeRefreshTokenFamily,
+  insertRevokedJti,
+  isJtiRevoked,
+  getVerifiedForwardingByDid,
 } from "./db.js";
 import { encryptSecret, decryptSecret, randomSecret, hashSecret } from "./secretBox.js";
 import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, type SigningKeypair } from "./jwt.js";
@@ -19,6 +26,7 @@ import { html, escapeHtml, pageStyles } from "./htmlPage.js";
 const SESSION_COOKIE = "gw_session";
 const AUTH_CODE_TTL_MS = 1000 * 60 * 5; // 5 minutes
 const ID_TOKEN_TTL_S = 60 * 60; // 1 hour
+const REFRESH_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 async function getOrCreateSigningKeypair(env: Env): Promise<SigningKeypair> {
   const existing = await getSigningKey(env);
@@ -106,12 +114,15 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
       token_endpoint: `${base}/token`,
       userinfo_endpoint: `${base}/userinfo`,
       jwks_uri: `${base}/.well-known/jwks.json`,
+      revocation_endpoint: `${base}/revoke`,
+      registration_endpoint: `${base}/oauth/register-client`,
       response_types_supported: ["code"],
-      grant_types_supported: ["authorization_code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
       subject_types_supported: ["public"],
       id_token_signing_alg_values_supported: ["ES256"],
       code_challenge_methods_supported: ["S256"],
-      scopes_supported: ["openid"],
+      scopes_supported: ["openid", "email"],
+      token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post", "none"],
     });
   }
 
@@ -138,6 +149,10 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
 
   if (url.pathname === "/userinfo" && request.method === "GET") {
     return handleUserinfo(request, env);
+  }
+
+  if (url.pathname === "/revoke" && request.method === "POST") {
+    return handleRevoke(request, env);
   }
 
   return err("not found", 404);
@@ -334,21 +349,78 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
   });
 }
 
+/** Every access/id token gets its own jti -- the only way to revoke an otherwise-stateless JWT before its own natural expiry (RFC 7009, via POST /revoke -> oidc_revoked_jti, checked in handleUserinfo). */
+async function issueTokenPair(
+  env: Env,
+  wardDid: string,
+  clientId: string,
+  nonce: string | null | undefined,
+  scope: string,
+): Promise<{ idToken: string; accessToken: string }> {
+  const keypair = await getOrCreateSigningKeypair(env);
+  const now = Math.floor(Date.now() / 1000);
+  const idToken = await signJwt(
+    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud: clientId, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret() },
+    keypair,
+  );
+  // scope travels with the access token itself (not just the one-time auth
+  // code/refresh-token row) so handleUserinfo can gate which claims it
+  // returns without a second DB lookup.
+  const accessToken = await signJwt(
+    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud: clientId, iat: now, exp: now + ID_TOKEN_TTL_S, typ: "access", scope, jti: randomSecret() },
+    keypair,
+  );
+  return { idToken, accessToken };
+}
+
+/** Issues a fresh refresh token, same family as `familyId` if given (rotation) or a new family (first issuance) -- stored hashed, same pattern login_secret_hash already uses. */
+async function issueRefreshToken(env: Env, clientId: string, wardDid: string, scope: string, familyId?: string): Promise<string> {
+  const token = randomSecret();
+  const now = new Date();
+  await insertRefreshToken(env, {
+    token_hash: await hashSecret(token),
+    client_id: clientId,
+    ward_did: wardDid,
+    scope,
+    family_id: familyId ?? randomSecret(),
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS).toISOString(),
+    revoked: 0,
+  });
+  return token;
+}
+
+/** client_secret_basic (RFC 6749 §2.3.1, the Authorization header) or client_secret_post (the same value as a body param) -- either is accepted, matching discovery's own token_endpoint_auth_methods_supported claim. */
+function extractClientSecret(request: Request, b: Record<string, string>): string | undefined {
+  const auth = request.headers.get("authorization") ?? "";
+  if (auth.startsWith("Basic ")) {
+    try {
+      const [, secret] = atob(auth.slice(6)).split(":");
+      if (secret) return secret;
+    } catch {
+      // malformed Basic header -- fall through to the body param, if any
+    }
+  }
+  return b.client_secret;
+}
+
 async function handleToken(request: Request, env: Env): Promise<Response> {
   const contentType = request.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json") ? await request.json() : Object.fromEntries((await request.formData()).entries());
   const b = body as Record<string, string>;
+  const clientSecret = extractClientSecret(request, b);
 
-  if (b.grant_type !== "authorization_code") return err("only grant_type=authorization_code is supported", 400);
+  if (b.grant_type === "refresh_token") return handleRefreshGrant(b, clientSecret, env);
+  if (b.grant_type !== "authorization_code") return err("only grant_type=authorization_code and grant_type=refresh_token are supported", 400);
+
   const authCode = await consumeAuthCode(env, b.code ?? "");
   if (!authCode) return err("invalid or expired code", 400);
   if (authCode.redirect_uri !== b.redirect_uri) return err("redirect_uri mismatch", 400);
 
   const client = await getOidcClient(env, authCode.client_id);
   if (!client) return err("unknown client", 400);
-  if (b.client_secret) {
-    const { hashSecret } = await import("./secretBox.js");
-    if ((await hashSecret(b.client_secret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
+  if (clientSecret) {
+    if ((await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
   }
 
   // PKCE is mandatory (handleAuthorize refuses to issue a code without a
@@ -359,31 +431,80 @@ async function handleToken(request: Request, env: Env): Promise<Response> {
     return err("PKCE verification failed", 400);
   }
 
-  const keypair = await getOrCreateSigningKeypair(env);
-  const now = Math.floor(Date.now() / 1000);
-  const idToken = await signJwt(
-    {
-      iss: `https://${env.REGISTRAR_DOMAIN}`,
-      sub: authCode.ward_did,
-      aud: authCode.client_id,
-      iat: now,
-      exp: now + ID_TOKEN_TTL_S,
-      nonce: authCode.nonce ?? undefined,
-    },
-    keypair,
-  );
-  const accessToken = await signJwt(
-    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: authCode.ward_did, aud: authCode.client_id, iat: now, exp: now + ID_TOKEN_TTL_S, typ: "access" },
-    keypair,
-  );
+  const { idToken, accessToken } = await issueTokenPair(env, authCode.ward_did, authCode.client_id, authCode.nonce, authCode.scope);
+  const refreshToken = await issueRefreshToken(env, authCode.client_id, authCode.ward_did, authCode.scope);
 
   return json({
     access_token: accessToken,
     token_type: "Bearer",
     expires_in: ID_TOKEN_TTL_S,
     id_token: idToken,
+    refresh_token: refreshToken,
     scope: authCode.scope,
   });
+}
+
+/**
+ * grant_type=refresh_token -- rotates on every use (old token marked
+ * revoked, new one issued in the same family). Presenting an
+ * already-revoked token is the standard signal that one has been stolen
+ * (a legitimate client never reuses a rotated-away token), so the
+ * response is to revoke the WHOLE family, not just deny this one request.
+ */
+async function handleRefreshGrant(b: Record<string, string>, clientSecret: string | undefined, env: Env): Promise<Response> {
+  if (!b.refresh_token) return err("refresh_token is required", 400);
+  const tokenHash = await hashSecret(b.refresh_token);
+  const stored = await getRefreshToken(env, tokenHash);
+  if (!stored) return err("invalid refresh token", 400);
+
+  if (stored.revoked) {
+    await revokeRefreshTokenFamily(env, stored.family_id);
+    return err("refresh token reuse detected -- this token and every other one issued from the same login have been revoked", 400);
+  }
+  if (new Date(stored.expires_at).getTime() < Date.now()) return err("refresh token expired", 400);
+
+  const client = await getOidcClient(env, stored.client_id);
+  if (!client) return err("unknown client", 400);
+  if (clientSecret && (await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
+
+  await revokeRefreshToken(env, tokenHash);
+  const { idToken, accessToken } = await issueTokenPair(env, stored.ward_did, stored.client_id, null, stored.scope);
+  const newRefreshToken = await issueRefreshToken(env, stored.client_id, stored.ward_did, stored.scope, stored.family_id);
+
+  return json({
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: ID_TOKEN_TTL_S,
+    id_token: idToken,
+    refresh_token: newRefreshToken,
+    scope: stored.scope,
+  });
+}
+
+/** POST /revoke (RFC 7009). A refresh token is looked up and marked revoked directly; an access/id token (a stateless JWT) is decoded (not re-verified -- RFC 7009 doesn't require the token still be valid to revoke it) just far enough to read its own jti, added to the revocation blocklist handleUserinfo already checks. Per RFC 7009 §2.2, an unrecognized or already-invalid token still returns 200 -- revocation is idempotent, never a way to probe which tokens exist. */
+async function handleRevoke(request: Request, env: Env): Promise<Response> {
+  const contentType = request.headers.get("content-type") ?? "";
+  const body = contentType.includes("application/json") ? await request.json() : Object.fromEntries((await request.formData()).entries());
+  const b = body as Record<string, string>;
+  if (!b.token) return err("token is required", 400);
+
+  if (b.token_type_hint !== "access_token") {
+    const stored = await getRefreshToken(env, await hashSecret(b.token));
+    if (stored) {
+      await revokeRefreshToken(env, stored.token_hash);
+      return new Response(null, { status: 200 });
+    }
+  }
+  const parts = b.token.split(".");
+  if (parts.length === 3) {
+    try {
+      const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))));
+      if (typeof payload.jti === "string") await insertRevokedJti(env, payload.jti, new Date().toISOString());
+    } catch {
+      // not a well-formed JWT -- nothing to revoke, still 200 per RFC 7009
+    }
+  }
+  return new Response(null, { status: 200 });
 }
 
 async function handleUserinfo(request: Request, env: Env): Promise<Response> {
@@ -401,7 +522,18 @@ async function handleUserinfo(request: Request, env: Env): Promise<Response> {
   );
   const payload = await verifyJwt(token, publicKey);
   if (!payload || typeof payload.sub !== "string") return err("invalid or expired token", 401);
+  if (typeof payload.jti === "string" && (await isJtiRevoked(env, payload.jti))) return err("token has been revoked", 401);
 
   const ward = await getWardByDid(env, payload.sub);
-  return json({ sub: payload.sub, name: ward?.name });
+  const claims: Record<string, unknown> = { sub: payload.sub, name: ward?.name };
+
+  const scope = typeof payload.scope === "string" ? payload.scope.split(/\s+/) : [];
+  if (scope.includes("email")) {
+    const forwarding = await getVerifiedForwardingByDid(env, payload.sub);
+    if (forwarding) {
+      claims.email = forwarding.forward_to;
+      claims.email_verified = true;
+    }
+  }
+  return json(claims);
 }
