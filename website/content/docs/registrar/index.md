@@ -87,10 +87,62 @@ Entirely this registrar's own operational choice -- the formal spec (REQ-4-4) on
 
 Two independent flows share the same underlying credential (`login_secret`) and the same `gw_session` cookie, for two different purposes:
 
-- `/authorize`, `/token`, `/userinfo`, `/.well-known/openid-configuration`, `/.well-known/jwks.json` -- the OIDC relying-party flow, for a third-party application that wants to let someone sign in with their Guardian ID. Requires a pre-registered `client_id`/`redirect_uri`. See `packages/server/src/oidc.ts`.
+- `/authorize`, `/token`, `/userinfo`, `/revoke`, `/oauth/register-client`, `/.well-known/openid-configuration`, `/.well-known/jwks.json` -- the OIDC relying-party flow, for a third-party application that wants to let someone sign in with their Guardian ID. See `packages/server/src/oidc.ts`.
 - `GET`/`POST /guardian-login?return_to=<path>` -- this registrar's own first-party login, for this registrar's own pages (currently just §3's browser voting page). No client registration: it's just "sign in, then take me back to the same-origin path that sent me here" (`return_to` is restricted to a relative path -- no open redirect to an external target). See `votingPage.ts`.
 
 Named `/guardian-login`, not the shorter `/login` -- a real collision, not a style choice: a registrar is commonly deployed on a domain that already has its own, unrelated human-facing `/login` (zz's own deployment on zzmq.dev does, for its own web app). Worth checking your own host application's routes before adding any new top-level path here, not just this one.
+
+### 5.1 Dynamic client registration (RFC 7591)
+
+A relying party no longer needs this registrar's own operator to hand-insert an `oidc_clients` row -- `POST /oauth/register-client` is open, unauthenticated self-service, the same posture every other registration endpoint here already has:
+
+```json
+{ "redirect_uris": ["https://app.example.com/callback"], "client_name": "Example App", "token_endpoint_auth_method": "client_secret_basic" }
+```
+
+Returns `client_id` (and `client_secret`, unless `token_endpoint_auth_method` was `"none"` -- a public client, e.g. a mobile app or SPA, which authenticates with PKCE alone), plus a `registration_access_token` for `GET /oauth/register-client/<client_id>` (RFC 7592's read operation; update/delete aren't implemented yet). Both the issued `client_secret` and `registration_access_token` are shown exactly once, at registration time, the same convention every other one-time secret in this registrar already follows.
+
+### 5.2 Consent
+
+`/authorize` shows a real "*App X* wants access to -- Allow/Deny" screen before issuing a code, remembered per `(ward, client_id)` so a returning user isn't re-asked unless the requested `scope` actually grows. Denying redirects back with `?error=access_denied` and no code, per RFC 6749 §4.1.2.1.
+
+### 5.3 PKCE
+
+Mandatory for every client, confidential or public -- the OAuth 2.1 baseline. `/authorize` refuses to issue a code at all without a `code_challenge` (`S256` only); `/token` treats a stored code somehow missing one as a bug, not a legitimate case to fall back on.
+
+### 5.4 Tokens, refresh, and revocation
+
+The `authorization_code` grant now always returns a `refresh_token` alongside the access/id tokens (`id`/`access` tokens: 1 hour; refresh tokens: 30 days). `grant_type=refresh_token` rotates on every use -- the presented token is marked spent and a new one issued in its place, sharing the same underlying "family." Presenting an already-rotated-away token again (something a legitimate client never does) is treated as evidence of theft: the entire family is revoked, not just the one request denied.
+
+`POST /revoke` (RFC 7009) takes `{ token, token_type_hint? }`. A refresh token is revoked directly; an access/id token (otherwise a stateless, unrevokable JWT) has its own `jti` added to a small blocklist that `/userinfo` checks going forward. Revocation is idempotent and always returns `200` regardless of whether the token was recognized, per RFC 7009 §2.2 -- never a way to probe which tokens exist.
+
+Client authentication (where a client has a secret at all) accepts either `Authorization: Basic` or a `client_secret` body parameter, at both `/token` grant types.
+
+### 5.5 `/userinfo` claims
+
+Always `sub`/`name`. `email`/`email_verified` are included only when the access token's own granted `scope` includes `email` *and* this identity has a verified forwarding address on file (§6) -- never invented, never returned for a scope that didn't ask for it.
+
+### 5.6 Finding the right registrar (discovery)
+
+This is a client-side problem, not a missing endpoint -- a Guardian identifier already names its own registrar (`name:domain`), so an RP's own "Login with Guardian" button just needs to turn a person's `alice@acme.com`-shaped input into that domain's own `/.well-known/openid-configuration`, then redirect through the ordinary flow above. A minimal reference implementation:
+
+```js
+async function loginWithGuardian(identifier, redirectUri) {
+  const [name, domain] = identifier.split("@");
+  const discovery = await fetch(`https://${domain}/.well-known/openid-configuration`).then((r) => r.json());
+  const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const challenge = base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+  sessionStorage.setItem("guardian_code_verifier", verifier); // survives the redirect round-trip
+  const url = new URL(discovery.authorization_endpoint);
+  url.search = new URLSearchParams({
+    client_id: MY_CLIENT_ID, redirect_uri: redirectUri, response_type: "code",
+    scope: "openid", code_challenge: challenge, code_challenge_method: "S256", login_hint: name,
+  });
+  location.href = url.toString();
+}
+```
+
+`login_hint` (the standard OIDC authentication request parameter, already handled by `/authorize`) carries just the name part through to the registrar's own login form -- the person never has to type the domain part twice in two different shapes.
 
 ## 6. Email forwarding
 
