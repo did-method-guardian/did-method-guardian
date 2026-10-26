@@ -1,6 +1,6 @@
 # @did-guardian/server
 
-The reference, self-hostable registrar + OIDC provider + email proxy for the [`did:guardian`](../../website/content/spec/v1/index.md) method. Anyone can run their own instance on their own domain; this package doesn't assume it's zz's or any other specific deployment.
+The reference, self-hostable registrar + OIDC provider + email proxy for the [`did:guardian`](../../website/content/docs/index.md) method. Anyone can run their own instance on their own domain; this package doesn't assume it's zz's or any other specific deployment.
 
 ## What this is
 
