@@ -46,7 +46,13 @@
     // Named "/guardian-login", not "/login" -- zz-maintainer's own catch-all
     // already serves a "/login" of its own (its human-facing sign-in page);
     // confirmed by reading its route table directly, not assumed.
-    { "pattern": "zzmq.dev/guardian-login*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/guardian-login*", "zone_name": "zzmq.dev" },
+    // Dynamic OAuth client registration (RFC 7591) and token revocation
+    // (RFC 7009) -- confirmed no collision with zz-maintainer's own routes
+    // (it has no bare "/oauth/*" or "/revoke", only nested ones like
+    // "/profile/tokens/.../revoke").
+    { "pattern": "zzmq.dev/oauth/*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/revoke*", "zone_name": "zzmq.dev" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {
