@@ -7,7 +7,7 @@
 // the JSON API already uses, never a separate code path.
 
 import type { Env } from "./env.js";
-import { html, escapeHtml, pageShell } from "./htmlPage.js";
+import { html, escapeHtml, pageShell, secretBox } from "./htmlPage.js";
 import { isSafeReturnTo } from "./votingPage.js";
 import { registerWard, RegistrarError } from "./registrar.js";
 import { createLoginSession } from "./login.js";
@@ -56,7 +56,7 @@ export async function handleRegisterForm(request: Request, env: Env): Promise<Re
     <h1>Account created</h1>
     <p class="hint">${escapeHtml(result.did)}</p>
     <p class="hint">Your login secret -- shown once, right now. Write it down; there's no other way to see it again (though you can always issue a new one later from your account).</p>
-    <dl><dt>Login secret</dt><dd><code>${escapeHtml(result.login_secret)}</code></dd></dl>
+    <dl><dt>Login secret</dt><dd>${secretBox(result.login_secret)}</dd></dl>
     <p><a href="${escapeHtml(returnTo)}">Continue</a></p>
   `;
   return html(pageShell("Account created", body), 201, {

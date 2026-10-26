@@ -16,8 +16,8 @@
 // looking at their own account directly, not a platform acting for them.
 
 import type { Env } from "./env.js";
-import { didFor } from "./env.js";
-import { html, escapeHtml, pageShell } from "./htmlPage.js";
+import { html, escapeHtml, pageShell, secretBox, policyTable, formatThreshold } from "./htmlPage.js";
+import type { PolicyField } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
 import {
   resolveState,
@@ -103,6 +103,39 @@ function banner(message: string | null, kind: "ok" | "error" = "ok"): string {
   return `<p class="${kind === "error" ? "error" : "hint"}">${escapeHtml(message)}</p>`;
 }
 
+// The canonical formal spec lives on this project's own docs site, not
+// necessarily on whichever domain happens to be serving this particular
+// registrar (zzmq.dev doesn't host the docs site at all) -- always link to
+// the one real copy.
+const FORMAL_SPEC_URL = "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/";
+
+function formatOnOrphan(value: string | { transfer_to: string }): string {
+  if (typeof value === "string") return value;
+  return `transfer to ${value.transfer_to}`;
+}
+
+/** REQ-5: a structured table instead of a bare JSON dump, each row linking to the exact requirement it governs so a person can actually learn what the setting means, not just read its raw value. */
+function policySection(policy: {
+  recovery_threshold: Parameters<typeof formatThreshold>[0];
+  tombstone_threshold: Parameters<typeof formatThreshold>[0];
+  removal_threshold: Parameters<typeof formatThreshold>[0];
+  addition_threshold: Parameters<typeof formatThreshold>[0];
+  policy_threshold: Parameters<typeof formatThreshold>[0];
+  min_guardian_count: number;
+  on_orphan: string | { transfer_to: string };
+}): string {
+  const fields: PolicyField[] = [
+    { label: "Recovery (lost-key rotation)", value: formatThreshold(policy.recovery_threshold), reqAnchor: "req-5-2" },
+    { label: "Deactivation", value: formatThreshold(policy.tombstone_threshold), reqAnchor: "req-5-3" },
+    { label: "Removing a guardian", value: formatThreshold(policy.removal_threshold), reqAnchor: "req-5-4" },
+    { label: "Adding a guardian", value: formatThreshold(policy.addition_threshold), reqAnchor: "req-5-5" },
+    { label: "Changing this policy", value: formatThreshold(policy.policy_threshold), reqAnchor: "req-5-6" },
+    { label: "Minimum guardian count", value: policy.min_guardian_count === 0 ? "none" : String(policy.min_guardian_count), reqAnchor: "req-5-7" },
+    { label: "If orphaned", value: formatOnOrphan(policy.on_orphan), reqAnchor: "req-5-8" },
+  ];
+  return policyTable(fields, FORMAL_SPEC_URL);
+}
+
 export async function handleAccountPage(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
@@ -153,7 +186,7 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
     <dl>
       <dt>Status</dt><dd><span class="state">${state.deactivated ? "Deactivated" : "Active"}</span></dd>
       <dt>Guardians</dt><dd>${guardiansList}</dd>
-      <dt>Policy</dt><dd class="hint">recovery: ${escapeHtml(JSON.stringify(state.guardianPolicy.recovery_threshold))}, removal: ${escapeHtml(JSON.stringify(state.guardianPolicy.removal_threshold))}, addition: ${escapeHtml(JSON.stringify(state.guardianPolicy.addition_threshold))}, tombstone: ${escapeHtml(JSON.stringify(state.guardianPolicy.tombstone_threshold))}</dd>
+      <dt>Policy</dt><dd>${policySection(state.guardianPolicy)}</dd>
       <dt>Needs your signature</dt><dd>${pendingList}</dd>
       <dt>Connected apps</dt><dd>${consentsList}</dd>
       <dt>Activity</dt><dd><ul class="signers">${activityList}</ul></dd>
@@ -209,7 +242,7 @@ export async function handleAccountReissueLoginSecret(request: Request, env: Env
   const body = `
     <h1>New login secret</h1>
     <p class="hint">Shown once, right now -- write it down. You'll need it (with your account's own name) to sign in again.</p>
-    <dl><dt>Login secret</dt><dd><code>${escapeHtml(loginSecret)}</code></dd></dl>
+    <dl><dt>Login secret</dt><dd>${secretBox(loginSecret)}</dd></dl>
     <p><a href="/account">Back to your account</a></p>
   `;
   return html(pageShell("New login secret", body));
