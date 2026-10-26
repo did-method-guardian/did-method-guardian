@@ -67,7 +67,10 @@
     // A2A interop (registrar API spec §11) -- confirmed no collision with
     // zz-maintainer's own routes before this was added, not after.
     { "pattern": "zzmq.dev/.well-known/agent-card.json*", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/.well-known/webfinger*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/.well-known/webfinger*", "zone_name": "zzmq.dev" },
+    // MCP interop (registrar API spec §12) -- confirmed no collision with
+    // zz-maintainer's own routes before this was added, not after.
+    { "pattern": "zzmq.dev/.well-known/oauth-protected-resource*", "zone_name": "zzmq.dev" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

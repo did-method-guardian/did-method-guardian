@@ -43,7 +43,8 @@
     { "pattern": "guardianspec.org/revoke*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/account*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/.well-known/agent-card.json*", "zone_name": "guardianspec.org" },
-    { "pattern": "guardianspec.org/.well-known/webfinger*", "zone_name": "guardianspec.org" }
+    { "pattern": "guardianspec.org/.well-known/webfinger*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/.well-known/oauth-protected-resource*", "zone_name": "guardianspec.org" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {
