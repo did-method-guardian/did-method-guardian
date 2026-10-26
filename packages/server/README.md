@@ -6,8 +6,9 @@ The reference, self-hostable registrar + OIDC provider + email proxy for the [`d
 
 A single Cloudflare Worker implementing:
 - **The registrar**: `GET /.well-known/guardian/:name[/log]`, `POST /.well-known/guardian/:name/operations`, `POST /register` -- the actual did:guardian protocol.
-- **An OIDC provider**: authorization code + PKCE, JWT ID tokens, JWKS, discovery -- "Sign in with did:guardian" for any relying party, against pre-registered clients (no dynamic client registration in v1).
-- **Email proxying**: receive-and-forward (not mailbox hosting) for `name@your-domain`, plus outbound transactional send (verification links, etc.) via MailChannels.
+- **An OIDC provider**: authorization code + mandatory PKCE, refresh tokens, revocation, JWT ID tokens, JWKS, discovery, and self-service dynamic client registration (`POST /oauth/register-client`, RFC 7591) -- "Sign in with did:guardian" for any relying party.
+- **An account dashboard** (`GET /account`): a real page for a person to log in and manage their own identity directly -- activity, guardians, connected apps, key rotation, deactivation.
+- **Email proxying**: receive-and-forward (not mailbox hosting) for `name@your-domain`, plus outbound transactional send (verification links, pending-operation notifications) via a configurable provider -- never locked to one vendor (see §5 below).
 
 ## Setting up your own instance
 
@@ -37,19 +38,20 @@ Add a route in `wrangler.jsonc` (or the Cloudflare dashboard) binding your domai
 
 ### 4. Register OIDC clients
 
-No API for this yet (deliberately -- no dynamic client registration in v1). Insert directly:
-
-```sql
-INSERT INTO oidc_clients (client_id, client_secret_hash, redirect_uris, name, created_at)
-VALUES ('my-app', '<sha256 hex of a real secret>', '["https://my-app.example/callback"]', 'My App', '<iso timestamp>');
-```
+Self-service: `POST /oauth/register-client` (RFC 7591) -- see the registrar API spec's own §5.1. No manual D1 insert needed any more.
 
 ### 5. Email proxying (optional)
 
 Two separate things to set up, matching the two separate things this does:
 
 - **Receiving** (`name@your-domain` -> forwarded to a real inbox): enable Cloudflare Email Routing for your zone, and add a route sending incoming mail to this Worker (Cloudflare dashboard: Email > Email Routing > Email Workers). No code or binding changes needed on this side -- the `email()` handler already exported here is what Cloudflare Email Routing invokes.
-- **Sending** (verification links, etc., from `postmaster@your-domain`): this uses [MailChannels](https://mailchannels.net)' transactional API, which is free for Cloudflare Workers but requires your domain to prove it's actually hosted on Workers via a DNS TXT record (`_mailchannels` domain lockdown) -- see MailChannels' own Workers integration docs for the exact record. Without this, outbound sends will fail with a 401, same as they do in local dev (expected -- this step is real, per-domain setup, not something this code can do for you).
+- **Sending** (verification links, pending-operation notifications, from `postmaster@your-domain`): pick a provider and set two things -- the `EMAIL_PROVIDER` var (in `wrangler.jsonc`'s own `vars`) to one of `mailchannels` | `resend`, and that provider's own API key as a secret (`MAILCHANNELS_API_KEY` or `RESEND_API_KEY`, matching the provider name):
+
+  ```
+  npx wrangler secret put MAILCHANNELS_API_KEY   # or RESEND_API_KEY, matching EMAIL_PROVIDER
+  ```
+
+  Never locked to one vendor -- see `emailProviders.ts` for the full list and how to add another (one small function, same shape, registered in `EMAIL_PROVIDERS`). Note: MailChannels' own free, keyless integration for Cloudflare Workers (DNS "domain lockdown" TXT record, no API key) was shut down in mid-2024 -- the current MailChannels option here is their paid Email API (100/day free tier), authenticated with a real API key, not a DNS record. Without `EMAIL_PROVIDER` configured at all, outbound sends fail with a clear "no email provider configured" error rather than a vendor-specific 401.
 
 ## Local development
 
@@ -62,9 +64,10 @@ npm run dev
 
 ```
 KEY_ENCRYPTION_KEY="<base64, 32 bytes>"
+EMAIL_PROVIDER="log"
 ```
 
-Email sending will fail locally (no real domain to authenticate as) -- that's expected; the verification-request flow still writes its row and returns a clear error rather than silently succeeding.
+`EMAIL_PROVIDER="log"` prints every outbound email to this Worker's own console instead of actually sending it -- real local testing of the email-verification and pending-operation-notification flows, without needing a real provider account. Never set this in a real deployment; there's no delivery behind it.
 
 ## Tests
 

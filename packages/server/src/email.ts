@@ -11,7 +11,7 @@ import {
   touchPendingOperationToken,
 } from "./db.js";
 import { randomSecret } from "./secretBox.js";
-import { sendEmail } from "./mailchannels.js";
+import { sendEmail } from "./emailProviders.js";
 
 /**
  * Inbound mail for this registrar's own domain, via Cloudflare Email
@@ -48,14 +48,22 @@ export async function requestEmailForwarding(env: Env, name: string, forwardTo: 
   await upsertEmailForwarding(env, { did: ward.did, forward_to: forwardTo, verification_token: token, created_at: new Date().toISOString() });
 
   const verifyUrl = `https://${env.REGISTRAR_DOMAIN}/verify-email?token=${token}`;
-  const result = await sendEmail({
+  const result = await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwardTo,
     subject: `Confirm mail forwarding for ${didFor(name, env.REGISTRAR_DOMAIN)}`,
     text: `Someone (hopefully you) asked to forward mail sent to ${name}@${env.REGISTRAR_DOMAIN} to this address.\n\nConfirm: ${verifyUrl}\n\nIf this wasn't you, ignore this message -- forwarding stays off until this link is clicked.`,
   });
-  if (!result.ok) return { ok: false, reason: `failed to send verification email (status ${result.status})` };
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason:
+        result.status === 0
+          ? "this registrar has no email provider configured -- see the registrar operator"
+          : `failed to send verification email (status ${result.status})`,
+    };
+  }
   return { ok: true };
 }
 
@@ -124,7 +132,7 @@ export async function notifyAwaitingSignature(env: Env, wardName: string, signer
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, signerDid);
   const link = voteUrl(env, wardName, pendingOpId, token);
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
@@ -143,7 +151,7 @@ export async function notifyVoteRecorded(env: Env, wardName: string, signerDid: 
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, signerDid);
   const link = voteUrl(env, wardName, pendingOpId, token);
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
@@ -159,7 +167,7 @@ export async function notifyProgress(env: Env, wardName: string, recipientDid: s
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, recipientDid);
   const link = voteUrl(env, wardName, pendingOpId, token);
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
@@ -175,7 +183,7 @@ export async function notifyProgress(env: Env, wardName: string, recipientDid: s
 export async function notifyDeclined(env: Env, _wardName: string, recipientDid: string, pendingOpId: string, opType: string, actorDid: string): Promise<void> {
   const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
   if (!forwarding) return;
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
@@ -191,7 +199,7 @@ export async function notifyWithdrawn(env: Env, wardName: string, recipientDid: 
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, recipientDid);
   const link = voteUrl(env, wardName, pendingOpId, token);
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
@@ -207,7 +215,7 @@ export async function notifyWithdrawn(env: Env, wardName: string, recipientDid: 
 export async function notifyFinalized(env: Env, _wardName: string, recipientDid: string, pendingOpId: string, opType: string): Promise<void> {
   const forwarding = await getVerifiedForwardingByDid(env, recipientDid);
   if (!forwarding) return;
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,
@@ -229,7 +237,7 @@ export async function notifyReminder(env: Env, wardName: string, signerDid: stri
   if (!forwarding) return;
   const token = await getOrIssueToken(env, pendingOpId, signerDid);
   const link = voteUrl(env, wardName, pendingOpId, token);
-  await sendEmail({
+  await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwarding.forward_to,

@@ -12,6 +12,16 @@ export interface Env {
   // first access. Both or neither -- set only one and the other is ignored.
   ROOT_WARD_PUBLIC_KEY?: string;
   ROOT_WARD_PRIVATE_KEY?: string;
+  // Outbound email (emailProviders.ts) -- which provider this deployment
+  // uses, and that provider's own API key. Never hardcoded to one vendor:
+  // "mailchannels" | "resend" | "log" (dev-only, prints instead of
+  // sending) today, and one more small function away from any other
+  // fetch-reachable transactional provider. Unset means email forwarding
+  // verification and pending-operation notifications simply don't send,
+  // reported as a clear configuration error, not a vendor-specific 401.
+  EMAIL_PROVIDER?: string;
+  MAILCHANNELS_API_KEY?: string;
+  RESEND_API_KEY?: string;
 }
 
 /** `name: null` builds the bare-domain identity (spec §2.1); domain is embedded as a single dot-joined string, never re-split into colon-joined labels (spec §2). */

@@ -146,7 +146,9 @@ async function loginWithGuardian(identifier, redirectUri) {
 
 ## 6. Email forwarding
 
-Unchanged -- `POST .../email` (set up forwarding), `GET /verify-email` (confirm a forwarding address). See `packages/server/src/email.ts`. Reused, not modified, by §3's own signer-notification need.
+`POST .../email` (set up forwarding), `GET /verify-email` (confirm a forwarding address). See `packages/server/src/email.ts`. Reused, not modified, by §3's own signer-notification need.
+
+Outbound sending (the verification link itself, and every §3 notification) goes through `emailProviders.ts` -- a plain `(apiKey, opts) -> Response` function per provider, using only `fetch`, never a Workers-specific API. This registrar's own choice of provider is a deployment config, not a protocol or method detail: `EMAIL_PROVIDER` (a `wrangler.jsonc` var) names one of `mailchannels` | `resend` | `log` (the last one is dev-only -- prints instead of sending), and that provider's own API key is set as a matching secret (`MAILCHANNELS_API_KEY`/`RESEND_API_KEY`). Nothing here is specific to this provider list -- adding another is one more small function, never a reason to touch any caller. Unconfigured, outbound sending fails with a clear configuration error rather than a vendor-specific HTTP status.
 
 ## 7. Login secret
 
