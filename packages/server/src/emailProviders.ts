@@ -11,6 +11,7 @@
 // registered in EMAIL_PROVIDERS -- never a reason to touch any call site.
 
 import type { Env } from "./env.js";
+import type { SendEmail } from "@cloudflare/workers-types";
 
 export interface SendEmailOptions {
   from: string;
@@ -69,6 +70,38 @@ const EMAIL_PROVIDERS: Record<string, EmailProviderFn> = {
 };
 
 /**
+ * Cloudflare's own native Email Sending binding (public beta, April 2026) --
+ * the one deliberately non-portable option in this list, kept clearly
+ * separate from EMAIL_PROVIDERS/EmailProviderFn's own (apiKey, opts) shape
+ * above: this needs the `EMAIL` binding itself (a Workers-specific object),
+ * not a plain string secret, so it can't be a self-hosted-anywhere function
+ * the way the others are. Still just one more opt-in EMAIL_PROVIDER value,
+ * never a hard dependency of this registrar's own required path -- an
+ * operator not on Workers (or who'd rather not depend on it) picks
+ * "mailchannels"/"resend"/their own addition instead, same config switch.
+ * No API key or account signup needed at all: domain onboarding is a
+ * one-time `wrangler email sending enable <domain>` (or the dashboard
+ * equivalent), after which Cloudflare manages the SPF/DKIM records itself.
+ */
+async function sendViaCloudflareNative(binding: SendEmail, opts: SendEmailOptions): Promise<{ ok: boolean; status: number }> {
+  try {
+    await binding.send({
+      from: opts.fromName ? { name: opts.fromName, email: opts.from } : opts.from,
+      to: opts.to,
+      subject: opts.subject,
+      text: opts.text,
+      headers: opts.headers,
+    });
+    return { ok: true, status: 200 };
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    console.error(`sendEmail (cloudflare-native): ${code ?? "unknown error"} -- ${(e as Error)?.message ?? e}`);
+    const status = code === "E_RATE_LIMIT_EXCEEDED" || code === "E_DAILY_LIMIT_EXCEEDED" ? 429 : code === "E_VALIDATION_ERROR" || code === "E_SENDER_NOT_VERIFIED" ? 400 : 500;
+    return { ok: false, status };
+  }
+}
+
+/**
  * The only function here that touches `Env` -- reads which provider this
  * deployment is configured for (`EMAIL_PROVIDER`, a plain var, since it
  * isn't a secret) and that provider's own API key (named per-provider,
@@ -82,6 +115,13 @@ export async function sendEmail(env: Env, opts: SendEmailOptions): Promise<{ ok:
   if (!provider) {
     console.error("sendEmail: EMAIL_PROVIDER is not configured for this registrar -- see the registrar API spec's own email-provider section.");
     return { ok: false, status: 0 };
+  }
+  if (provider === "cloudflare-native") {
+    if (!env.EMAIL) {
+      console.error('sendEmail: EMAIL_PROVIDER is "cloudflare-native" but no send_email binding named EMAIL is configured in this Worker.');
+      return { ok: false, status: 0 };
+    }
+    return sendViaCloudflareNative(env.EMAIL, opts);
   }
   const fn = EMAIL_PROVIDERS[provider];
   if (!fn) {

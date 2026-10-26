@@ -9,8 +9,17 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "guardian-server", "database_id": "REPLACE_ME", "migrations_dir": "migrations" }
   ],
+  // Outbound email (optional -- see README.md §5). Uncomment both lines
+  // below for Cloudflare's own native Email Sending binding (no external
+  // account needed, just `wrangler email sending enable <your-domain>`
+  // first) -- or leave both commented and set EMAIL_PROVIDER to
+  // "mailchannels"/"resend" plus that provider's own API key secret
+  // instead, for a self-hoster not on Cloudflare (or who'd rather not
+  // depend on this one Workers-specific option).
+  // "send_email": [{ "name": "EMAIL" }],
   "vars": {
     "REGISTRAR_DOMAIN": "guardianspec.org"
+    // "EMAIL_PROVIDER": "cloudflare-native"
   },
   // Daily reminder sweep for still-collecting proposals (task #113) --
   // noon UTC, an arbitrary but fixed daily time, nothing protocol-level
