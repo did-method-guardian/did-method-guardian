@@ -183,3 +183,21 @@ Rotation, login-secret reissue, email forwarding, relinquishing, and deactivatio
 This replaces an earlier, real gap: a `guardian_did` field in the request body, honored for any client that could authenticate with Basic auth (the same credential used at `/token`). Before dynamic client registration (§5.1) existed, that credential meant "a client the registrar operator hand-vetted" -- a real, if implicit, trust signal. Once registration became open and self-service, *any* caller could authenticate as *some* client and name *any other ward on this same registrar* as the guardian of a brand-new identity, with no verification that the named party ever consented -- a real way to falsely imply a trust relationship (e.g. a new identity that looks vouched-for by a well-known account) that was never actually granted. Deriving the guardian from a real access token closes this: the named guardian is always whoever the token proves is authenticated, and that person granted the scope explicitly, on the ordinary `/authorize` consent screen (§5.2) -- the same real, revocable consent every other scope already requires, not a client's own unverifiable say-so.
 
 A platform wanting to use this needs its own OIDC client (§5.1) and a token for the acting human carrying `create:managed-identity` -- normally obtained the same way any other scope is, through that human's own `/authorize` consent. A client that only ever needs this occasionally can request it alongside `openid` at ordinary login time, store the resulting refresh token (§5.4), and mint a fresh access token on demand rather than redirecting through a fresh interactive consent on every single creation.
+
+## 10. Delegation-chain tokens (token exchange)
+
+A managed identity (§9) often needs to be *acted as* later, not just created once -- a platform letting its own user operate an agent it guards, say. `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693) mints a token whose `sub` is a target identity (`resource`, a DID this registrar custodies), given a `subject_token` (the caller's own existing access token) proving who's actually asking:
+
+```
+POST /token
+{
+  "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+  "subject_token": "<the caller's own access token>",
+  "resource": "did:guardian:some-agent:acme.com",
+  "client_id": "...", "client_secret": "..."
+}
+```
+
+**Authorization is the same live-guardian check used everywhere else a guardian's own standing matters** -- never a reimplementation: the caller (the `subject_token`'s own `sub`) must be `resource` itself, or a current, live guardian of it, checked fresh against `resource`'s own operation log every time (`@did-guardian/lib`'s own `liveGuardians`). Not a guardian, or not the identity itself: `403`. `resource` naming an identity this registrar doesn't custody fails too -- there's no key material to issue a token for it.
+
+**The issued token carries `sub` = the target, and `act: { sub: <the caller's own DID> }`** -- the emerging OpenID on-behalf-of shape (`sub`/`act`), not a one-off: anything already built against that draft recognizes a token from this registrar unmodified. No `id_token` -- this isn't a fresh authentication event, just a scoped delegation of an already-authenticated caller's own, separately-proven authority. No refresh token either; the original `subject_token`'s own session is what covers re-exchange later.

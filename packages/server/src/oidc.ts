@@ -1,5 +1,6 @@
-import { generateKeypair } from "@did-guardian/lib";
+import { generateKeypair, liveGuardians } from "@did-guardian/lib";
 import type { Env } from "./env.js";
+import { resolveState, makeGuardianLivenessResolver } from "./registrar.js";
 import {
   getOidcClient,
   getSigningKey,
@@ -122,7 +123,7 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
       revocation_endpoint: `${base}/revoke`,
       registration_endpoint: `${base}/oauth/register-client`,
       response_types_supported: ["code"],
-      grant_types_supported: ["authorization_code", "refresh_token"],
+      grant_types_supported: ["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:token-exchange"],
       subject_types_supported: ["public"],
       id_token_signing_alg_values_supported: ["ES256"],
       code_challenge_methods_supported: ["S256"],
@@ -378,6 +379,35 @@ async function issueTokenPair(
   return { idToken, accessToken };
 }
 
+/**
+ * Delegation-chain token (RFC 8693 token exchange, registrar API spec's
+ * own §10) -- `sub` is the identity being acted *as* (the target), `act`
+ * names who's *actually* doing the acting (the caller, already proven by
+ * their own subject_token) -- the emerging OpenID on-behalf-of shape, not
+ * a one-off: anything already building against RFC 8693's own `act` claim
+ * recognizes this unmodified. No id_token -- this isn't a fresh
+ * authentication event, just a scoped delegation of an already-
+ * authenticated caller's own, separately-proven authority.
+ */
+async function issueDelegatedAccessToken(env: Env, targetDid: string, actorDid: string, clientId: string, scope: string): Promise<string> {
+  const keypair = await getOrCreateSigningKeypair(env);
+  const now = Math.floor(Date.now() / 1000);
+  return signJwt(
+    {
+      iss: `https://${env.REGISTRAR_DOMAIN}`,
+      sub: targetDid,
+      aud: clientId,
+      iat: now,
+      exp: now + ID_TOKEN_TTL_S,
+      typ: "access",
+      scope,
+      act: { sub: actorDid },
+      jti: randomSecret(),
+    },
+    keypair,
+  );
+}
+
 /** Issues a fresh refresh token, same family as `familyId` if given (rotation) or a new family (first issuance) -- stored hashed, same pattern login_secret_hash already uses. */
 async function issueRefreshToken(env: Env, clientId: string, wardDid: string, scope: string, familyId?: string): Promise<string> {
   const token = randomSecret();
@@ -416,7 +446,10 @@ async function handleToken(request: Request, env: Env): Promise<Response> {
   const clientSecret = extractClientSecret(request, b);
 
   if (b.grant_type === "refresh_token") return handleRefreshGrant(b, clientSecret, env);
-  if (b.grant_type !== "authorization_code") return err("only grant_type=authorization_code and grant_type=refresh_token are supported", 400);
+  if (b.grant_type === "urn:ietf:params:oauth:grant-type:token-exchange") return handleTokenExchangeGrant(b, clientSecret, env);
+  if (b.grant_type !== "authorization_code") {
+    return err("only grant_type=authorization_code, grant_type=refresh_token, and grant_type=urn:ietf:params:oauth:grant-type:token-exchange are supported", 400);
+  }
 
   const authCode = await consumeAuthCode(env, b.code ?? "");
   if (!authCode) return err("invalid or expired code", 400);
@@ -483,6 +516,55 @@ async function handleRefreshGrant(b: Record<string, string>, clientSecret: strin
     id_token: idToken,
     refresh_token: newRefreshToken,
     scope: stored.scope,
+  });
+}
+
+/**
+ * grant_type=urn:ietf:params:oauth:grant-type:token-exchange (RFC 8693,
+ * registrar API spec §10) -- mints a token to act *as* `resource` (the
+ * target DID), on behalf of whoever `subject_token` proves is actually
+ * calling. Authorization is the same live-guardian check this registrar
+ * already uses everywhere else a guardian's own standing matters
+ * (rules.ts's liveGuardians, via @did-guardian/lib -- never a
+ * reimplementation): the caller must be the target itself, or a current,
+ * live guardian of it, checked fresh against the target's own operation
+ * log every time, never cached. `resource` must be a ward this registrar
+ * itself custodies -- there's no key material to produce a token for an
+ * identity it doesn't hold.
+ */
+async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret: string | undefined, env: Env): Promise<Response> {
+  if (!b.subject_token) return err("subject_token is required", 400);
+  if (!b.resource) return err("resource (the target DID to act as) is required", 400);
+  if (!b.client_id) return err("client_id is required", 400);
+
+  const client = await getOidcClient(env, b.client_id);
+  if (!client) return err("unknown client", 400);
+  if (clientSecret && (await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
+
+  const verified = await verifyAccessToken(env, b.subject_token);
+  if (!verified) return err("subject_token is invalid, expired, or revoked", 400);
+  const actorDid = verified.sub;
+  const targetDid = b.resource;
+
+  const targetWard = await getWardByDid(env, targetDid);
+  if (!targetWard) return err(`"${targetDid}" is not an identity this registrar custodies -- it has no key material to issue a token for`, 400);
+
+  if (actorDid !== targetDid) {
+    const resolved = await resolveState(env, targetWard.name === "" ? null : targetWard.name);
+    const live = resolved ? await liveGuardians(resolved.state, makeGuardianLivenessResolver(env)) : [];
+    if (!live.includes(actorDid)) {
+      return err(`"${actorDid}" is neither "${targetDid}" itself, nor a current guardian of it`, 403);
+    }
+  }
+
+  const scope = typeof b.scope === "string" && b.scope ? b.scope : "openid";
+  const accessToken = await issueDelegatedAccessToken(env, targetDid, actorDid, b.client_id, scope);
+  return json({
+    access_token: accessToken,
+    issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+    token_type: "Bearer",
+    expires_in: ID_TOKEN_TTL_S,
+    scope,
   });
 }
 
