@@ -7,12 +7,13 @@
 <header ht-include='fragments/header.html'></header>
 <main class='container'>
   <section class='hero'>
-    <p class='eyebrow'>Request for Comments &middot; v0.1 draft</p>
+    <p class='eyebrow'>Request for Comments &middot; v0.2.0 draft</p>
     <h1 ht-content='page.hero.title'></h1>
     <p class='lede' ht-content='markdown:page.hero.description'></p>
     <code class='example-did' ht-content='page.hero.example'></code>
     <p class='hero-actions'>
-      <a role='button' href='/docs/'>Read the spec</a>
+      <a role='button' href='/register'>Create an account</a>
+      <a role='button' class='secondary' href='/docs/'>Read the spec</a>
       <a role='button' class='secondary' href='https://github.com/did-method-guardian/did-method-guardian'>View on GitHub</a>
     </p>
   </section>
@@ -29,6 +30,10 @@
     <article>
       <h3>Built on <code>did:plc</code> and <code>did:web</code></h3>
       <p>Directly adopts <a href='https://github.com/did-method-plc/did-method-plc'><code>did:plc</code></a>'s proven operation log, signing scheme, and recovery-window mechanism, but with <a href='https://w3c-ccg.github.io/did-method-web/'><code>did:web</code></a>'s human readable accessibility and multi-authority resilience.</p>
+    </article>
+    <article>
+      <h3>Sign in with Guardian</h3>
+      <p>This registrar is a real, running OIDC provider, not just a reference spec -- dynamic client registration, consent, PKCE, refresh tokens, and a real <a href='/account'>account dashboard</a> to manage your own identity.</p>
     </article>
   </section>
 </main>
