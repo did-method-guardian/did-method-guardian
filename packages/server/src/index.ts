@@ -7,6 +7,7 @@ import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./e
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
 import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
+import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
 import {
   handleAccountPage,
   handleAccountRotate,
@@ -367,7 +368,19 @@ export default {
         : error(result.reason, 400);
     }
 
+    if (path === "/register" && request.method === "GET") {
+      return handleRegisterPage(url);
+    }
+
     if (path === "/register" && request.method === "POST") {
+      const contentType = request.headers.get("content-type") ?? "";
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        // The browser path -- a real "create an account" page, same
+        // registerWard call the JSON API below already makes, never a
+        // separate code path. Found missing entirely: /guardian-login's
+        // own sign-in form had no way to get here at all.
+        return handleRegisterForm(request, env);
+      }
       try {
         const body = (await request.json()) as { name?: string; guardian_did?: string };
         if (!body.name) return error("name is required", 400);

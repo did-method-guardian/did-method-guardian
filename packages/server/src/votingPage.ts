@@ -28,8 +28,8 @@ import { signPayload } from "@did-guardian/lib";
 
 const SESSION_COOKIE = "gw_session";
 
-/** Only ever a same-origin relative path -- never follow an open redirect to an arbitrary external target. */
-function isSafeReturnTo(path: string): boolean {
+/** Only ever a same-origin relative path -- never follow an open redirect to an arbitrary external target. Exported for registerPage.ts's own return_to handling, the same convention. */
+export function isSafeReturnTo(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\");
 }
 
@@ -167,7 +167,7 @@ export async function handleDirectLogin(request: Request, env: Env, url: URL): P
 function loginFormBody(returnTo: string, opts: { nameValue?: string; error?: string }): string {
   return `
     <h1>Sign in with your Guardian ID</h1>
-    <p class="hint">Enter just the name part of your id (not the domain), and the login secret you were shown once when it was created.</p>
+    <p class="hint">Your name alone (e.g. "alice") or your full id (e.g. "alice@acme.com") both work -- the domain part is ignored here if you include it. Plus the login secret you were shown once when it was created.</p>
     ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
     <form method="post" action="/guardian-login">
       <input type="hidden" name="return_to" value="${escapeHtml(returnTo)}">
@@ -175,5 +175,6 @@ function loginFormBody(returnTo: string, opts: { nameValue?: string; error?: str
       <label>Login secret <small>(shown once, at creation)</small><input name="login_secret" type="password" required></label>
       <button type="submit">Sign in</button>
     </form>
+    <p><a href="/register?return_to=${encodeURIComponent(returnTo)}">Don't have an account? Create one</a></p>
   `;
 }

@@ -64,7 +64,7 @@ function loginForm(action: string, hidden: Record<string, string>, opts: { nameV
     .join("\n");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${pageStyles()}</head><body>
 <h1>Sign in with your Guardian ID</h1>
-<p class="hint">Enter just the name part of your id (not the domain), and the login secret you were shown once when it was created.</p>
+<p class="hint">Your name alone (e.g. "alice") or your full id (e.g. "alice@acme.com") both work -- the domain part is ignored here if you include it. Plus the login secret you were shown once when it was created.</p>
 ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
 <form method="post" action="${action}">
   ${hiddenInputs}
@@ -72,6 +72,7 @@ ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
   <label>Login secret <small>(shown once, at creation)</small><input name="login_secret" type="password" required></label>
   <button type="submit">Sign in</button>
 </form>
+<p><a href="/register?return_to=${encodeURIComponent(action)}">Don't have an account? Create one</a></p>
 </body></html>`;
 }
 
