@@ -201,3 +201,15 @@ POST /token
 **Authorization is the same live-guardian check used everywhere else a guardian's own standing matters** -- never a reimplementation: the caller (the `subject_token`'s own `sub`) must be `resource` itself, or a current, live guardian of it, checked fresh against `resource`'s own operation log every time (`@did-guardian/lib`'s own `liveGuardians`). Not a guardian, or not the identity itself: `403`. `resource` naming an identity this registrar doesn't custody fails too -- there's no key material to issue a token for it.
 
 **The issued token carries `sub` = the target, and `act: { sub: <the caller's own DID> }`** -- the emerging OpenID on-behalf-of shape (`sub`/`act`), not a one-off: anything already built against that draft recognizes a token from this registrar unmodified. No `id_token` -- this isn't a fresh authentication event, just a scoped delegation of an already-authenticated caller's own, separately-proven authority. No refresh token either; the original `subject_token`'s own session is what covers re-exchange later.
+
+## 11. A2A (Agent2Agent) interop
+
+A2A's own Agent Card -- a JSON manifest advertising an identity's capabilities and how to authenticate with it -- is conventionally served at one fixed path per origin (`/.well-known/agent-card.json`), which doesn't fit this registrar's own multi-tenant shape: many identities under one domain. Confirmed against both the current A2A spec and a very recent (August 2026), still individual-draft WebFinger discovery profile for exactly this problem (`draft-zhao-a2a-webfinger-00`) before writing any of this -- the fixed path remains correct for a single-agent origin and isn't deprecated, and WebFinger is the discovery layer that resolves a *named* identity to wherever its own card actually lives, which doesn't have to be that fixed path.
+
+- `GET /.well-known/agent-card.json` -- this domain's own bare-domain root identity (spec §2.1), satisfying A2A's own fixed-path convention for the one identity it actually fits here.
+- `GET /.well-known/guardian/<name>/agent-card.json` -- a named ward's own card, at a path consistent with every other resolution this registrar already does.
+- `GET /.well-known/webfinger?resource=acct:<name>@<domain>` -- resolves a named identity to its own card's real URL (the JRD shape `draft-zhao-a2a-webfinger-00` itself specifies: `rel: "self"`, `type: "application/a2a+json"`).
+
+Every card here declares `securitySchemes.oidc` (an `OpenIdConnectSecurityScheme` pointing at this registrar's own `/.well-known/openid-configuration`) -- how an A2A client authenticates with this identity is just this registrar's own OIDC flow, already documented in full above.
+
+**Deliberately unsigned in this pass.** A2A's own `AgentCardSignature` (JWS, canonicalized) is optional, not required -- plain HTTPS already gives a verifier a real, if weaker, binding to this domain. Signing with a ward's own operational key (already custodied here, already published in its own DID Document) is a natural fit for later, not something this first pass needed to block on.

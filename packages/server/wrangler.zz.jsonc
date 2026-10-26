@@ -63,7 +63,11 @@
     // The account dashboard -- confirmed no collision with zz-maintainer's
     // own routes (it has no "/account" path at all) before this was added,
     // not after.
-    { "pattern": "zzmq.dev/account*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/account*", "zone_name": "zzmq.dev" },
+    // A2A interop (registrar API spec §11) -- confirmed no collision with
+    // zz-maintainer's own routes before this was added, not after.
+    { "pattern": "zzmq.dev/.well-known/agent-card.json*", "zone_name": "zzmq.dev" },
+    { "pattern": "zzmq.dev/.well-known/webfinger*", "zone_name": "zzmq.dev" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

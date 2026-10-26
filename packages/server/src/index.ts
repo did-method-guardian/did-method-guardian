@@ -8,6 +8,7 @@ import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
 import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
+import { handleAgentCard, handleWebfinger } from "./agentCard.js";
 import {
   handleAccountPage,
   handleAccountRotate,
@@ -36,7 +37,9 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    const wellKnownMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt)?$/);
+    const wellKnownMatch = path.match(
+      /^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
+    );
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
       // (spec §2.1/§5) -- never a real registration (assertValidName's own
@@ -51,6 +54,9 @@ export default {
         if (suffix === "/log" && request.method === "GET") {
           const log = await resolveLog(env, name);
           return log ? json(log) : error("not found", 404);
+        }
+        if (suffix === "/agent-card.json" && request.method === "GET") {
+          return handleAgentCard(env, name);
         }
         if (suffix === "/operations" && request.method === "POST") {
           const op = await request.json();
@@ -226,6 +232,17 @@ export default {
         return error("internal error", 500);
       }
       return error("not found", 404);
+    }
+
+    // A2A interop (registrar API spec §11): the fixed path is A2A's own
+    // convention for a single-agent origin -- satisfied here for this
+    // domain's own bare-domain root identity specifically, the same "_"
+    // convention did:guardian already uses everywhere else.
+    if (path === "/.well-known/agent-card.json" && request.method === "GET") {
+      return handleAgentCard(env, null);
+    }
+    if (path === "/.well-known/webfinger" && request.method === "GET") {
+      return handleWebfinger(env, url);
     }
 
     // Ward-scoped, per the registrar API spec's own §3 table -- the ward's
