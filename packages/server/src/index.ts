@@ -351,7 +351,16 @@ export default {
       }
     }
 
-    if (path.startsWith("/.well-known/openid-configuration") || path.startsWith("/.well-known/jwks.json") || path.startsWith("/authorize") || path.startsWith("/token") || path.startsWith("/userinfo")) {
+    if (
+      path.startsWith("/.well-known/openid-configuration") ||
+      path.startsWith("/.well-known/jwks.json") ||
+      path.startsWith("/.well-known/oauth-protected-resource") ||
+      path.startsWith("/authorize") ||
+      path.startsWith("/token") ||
+      path.startsWith("/userinfo") ||
+      path.startsWith("/revoke") ||
+      path.startsWith("/oauth/")
+    ) {
       return handleOidcRequest(request, env);
     }
 

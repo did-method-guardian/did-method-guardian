@@ -3,8 +3,8 @@
 // everything else this registrar serves is JSON, consumed by a relying
 // party's own code, never looked at directly by a person.
 
-export function html(body: string, status = 200): Response {
-  return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } });
+export function html(body: string, status = 200, extraHeaders?: Record<string, string>): Response {
+  return new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8", ...extraHeaders } });
 }
 
 export function escapeHtml(s: string): string {

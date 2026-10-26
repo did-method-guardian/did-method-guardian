@@ -1,7 +1,17 @@
 import { generateKeypair } from "@did-guardian/lib";
 import type { Env } from "./env.js";
-import { getOidcClient, getSigningKey, insertSigningKey, insertAuthCode, consumeAuthCode, getWardByDid } from "./db.js";
-import { encryptSecret, decryptSecret, randomSecret } from "./secretBox.js";
+import {
+  getOidcClient,
+  getSigningKey,
+  insertSigningKey,
+  insertAuthCode,
+  consumeAuthCode,
+  getWardByDid,
+  insertOidcClient,
+  getOidcConsent,
+  upsertOidcConsent,
+} from "./db.js";
+import { encryptSecret, decryptSecret, randomSecret, hashSecret } from "./secretBox.js";
 import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, type SigningKeypair } from "./jwt.js";
 import { verifyLogin, createLoginSession, resolveSession, readCookie } from "./login.js";
 import { html, escapeHtml, pageStyles } from "./htmlPage.js";
@@ -57,6 +67,34 @@ ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
 </body></html>`;
 }
 
+/** Previously-granted scope already covers a newly requested one iff every requested token is already present -- a returning user is only re-asked when the requested scope actually grows, the same posture every major OAuth provider already takes. */
+function scopeSatisfied(granted: string, requested: string): boolean {
+  const grantedSet = new Set(granted.split(/\s+/).filter(Boolean));
+  return requested.split(/\s+/).filter(Boolean).every((s) => grantedSet.has(s));
+}
+
+/** The "App X wants access -- Allow/Deny" step handleAuthorize previously skipped entirely. POSTs back to the same /authorize URL (same query string) with just a consent decision -- the session cookie set when this page was rendered is what lets that follow-up POST resolve the ward without asking for credentials again. */
+function consentPage(action: string, clientName: string, scope: string): string {
+  const scopeLabels: Record<string, string> = { openid: "Your Guardian identity", email: "Your verified email address" };
+  const items = scope
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((s) => `<li>${escapeHtml(scopeLabels[s] ?? s)}</li>`)
+    .join("");
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${pageStyles()}</head><body>
+<h1>${escapeHtml(clientName)} wants access to:</h1>
+<ul>${items}</ul>
+<form method="post" action="${escapeHtml(action)}">
+  <input type="hidden" name="consent" value="allow">
+  <button type="submit">Allow</button>
+</form>
+<form method="post" action="${escapeHtml(action)}">
+  <input type="hidden" name="consent" value="deny">
+  <button type="submit" class="neutral">Deny</button>
+</form>
+</body></html>`;
+}
+
 export async function handleOidcRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
 
@@ -82,6 +120,14 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
     return json({ keys: [{ ...keypair.publicKeyJwk, use: "sig", alg: "ES256", kid: keypair.kid }] });
   }
 
+  if (url.pathname === "/oauth/register-client" && request.method === "POST") {
+    return handleRegisterClient(request, env);
+  }
+
+  if (url.pathname.startsWith("/oauth/register-client/") && request.method === "GET") {
+    return handleReadClientRegistration(request, env, url.pathname.slice("/oauth/register-client/".length));
+  }
+
   if (url.pathname === "/authorize") {
     return handleAuthorize(request, env, url);
   }
@@ -97,6 +143,86 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
   return err("not found", 404);
 }
 
+/**
+ * POST /oauth/register-client -- RFC 7591 Dynamic Client Registration.
+ * Open, unauthenticated self-service, the same posture every other
+ * registration endpoint this registrar exposes already has (/register,
+ * .../propose, etc.) -- no new gate invented for OAuth clients specifically.
+ * A public client (token_endpoint_auth_method: "none") still gets a
+ * client_secret_hash row (a random value it's never given, since the
+ * column predates dynamic registration and stays NOT NULL) -- handleToken's
+ * own client_secret check is already conditional on the client actually
+ * supplying one, so a public client simply never triggers it.
+ */
+async function handleRegisterClient(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return err("request body must be JSON", 400);
+  }
+  const b = body as { redirect_uris?: unknown; client_name?: unknown; token_endpoint_auth_method?: unknown };
+  if (!Array.isArray(b.redirect_uris) || b.redirect_uris.length === 0 || !b.redirect_uris.every((u) => typeof u === "string")) {
+    return err("redirect_uris must be a non-empty array of strings", 400);
+  }
+  const authMethod = b.token_endpoint_auth_method === "none" ? "none" : "client_secret_basic";
+  const clientName = typeof b.client_name === "string" ? b.client_name : "unnamed client";
+
+  const clientId = randomSecret();
+  const clientSecret = authMethod === "none" ? randomSecret() : randomSecret(); // public clients still get a never-issued placeholder, see header comment
+  const registrationAccessToken = randomSecret();
+  const now = new Date().toISOString();
+
+  await insertOidcClient(env, {
+    client_id: clientId,
+    client_secret_hash: await hashSecret(clientSecret),
+    redirect_uris: JSON.stringify(b.redirect_uris),
+    name: clientName,
+    token_endpoint_auth_method: authMethod,
+    registration_access_token_hash: await hashSecret(registrationAccessToken),
+    created_at: now,
+  });
+
+  const response: Record<string, unknown> = {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.parse(now) / 1000),
+    redirect_uris: b.redirect_uris,
+    client_name: clientName,
+    token_endpoint_auth_method: authMethod,
+    registration_access_token: registrationAccessToken,
+    registration_client_uri: `https://${env.REGISTRAR_DOMAIN}/oauth/register-client/${clientId}`,
+  };
+  if (authMethod !== "none") response.client_secret = clientSecret;
+  return json(response, 201);
+}
+
+/**
+ * GET /oauth/register-client/<client_id> -- RFC 7592's read operation only
+ * (v1 scope; update/delete deferred). Authenticated by the
+ * registration_access_token issued at registration time, exactly the same
+ * trust model this registrar's other one-time-shown secrets already use
+ * (a ward's own login_secret, a pending-op signer's own email token).
+ */
+async function handleReadClientRegistration(request: Request, env: Env, clientId: string): Promise<Response> {
+  const auth = request.headers.get("authorization") ?? "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return err("missing registration access token", 401);
+
+  const client = await getOidcClient(env, clientId);
+  if (!client || client.registration_access_token_hash !== (await hashSecret(token))) {
+    return err("invalid client_id or registration access token", 401);
+  }
+
+  return json({
+    client_id: client.client_id,
+    client_id_issued_at: Math.floor(Date.parse(client.created_at) / 1000),
+    redirect_uris: JSON.parse(client.redirect_uris),
+    client_name: client.name,
+    token_endpoint_auth_method: client.token_endpoint_auth_method,
+    registration_client_uri: `https://${env.REGISTRAR_DOMAIN}/oauth/register-client/${client.client_id}`,
+  });
+}
+
 async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Response> {
   const params = url.searchParams;
   const clientId = params.get("client_id") ?? "";
@@ -109,18 +235,35 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
 
   const codeChallenge = params.get("code_challenge");
   const codeChallengeMethod = params.get("code_challenge_method");
+  // PKCE mandatory for every client, confidential or public -- the OAuth
+  // 2.1 baseline, tightened from v1's own "PKCE only if the client happened
+  // to send one" (meaning a client that omitted it skipped PKCE entirely).
+  if (!codeChallenge) return err("code_challenge is required (PKCE is mandatory)", 400);
+  if (codeChallengeMethod !== "S256") return err("code_challenge_method must be S256", 400);
   const state = params.get("state") ?? "";
   const scope = params.get("scope") ?? "openid";
   const nonce = params.get("nonce");
 
   let wardDid: string | null = null;
+  let consentDecision: "allow" | "deny" | null = null;
 
   if (request.method === "POST") {
     const form = await request.formData();
-    const submittedName = String(form.get("name") ?? "");
-    wardDid = await verifyLogin(env, submittedName, String(form.get("login_secret") ?? ""));
-    if (!wardDid) {
-      return html(loginForm(url.pathname + url.search, {}, { nameValue: submittedName, error: "Invalid name or login secret." }), 401);
+    if (form.has("consent")) {
+      // This POST is a consent decision, not a login attempt -- the ward
+      // was already established by the login (or existing session) that
+      // rendered the consent page in the first place, and its session
+      // cookie is what resolves them here with no credentials re-asked.
+      const sessionId = readCookie(request, SESSION_COOKIE);
+      wardDid = sessionId ? await resolveSession(env, sessionId) : null;
+      if (!wardDid) return err("session expired -- please start over", 400);
+      consentDecision = form.get("consent") === "allow" ? "allow" : "deny";
+    } else {
+      const submittedName = String(form.get("name") ?? "");
+      wardDid = await verifyLogin(env, submittedName, String(form.get("login_secret") ?? ""));
+      if (!wardDid) {
+        return html(loginForm(url.pathname + url.search, {}, { nameValue: submittedName, error: "Invalid name or login secret." }), 401);
+      }
     }
   } else {
     const sessionId = readCookie(request, SESSION_COOKIE);
@@ -135,6 +278,30 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
       // field never wants the domain part, but a relying party's own
       // login page usually does).
       return html(loginForm(`${url.pathname}${url.search}`, {}, { nameValue: params.get("login_hint") ?? "" }));
+    }
+  }
+
+  if (consentDecision === "deny") {
+    const redirect = new URL(redirectUri);
+    redirect.searchParams.set("error", "access_denied");
+    if (state) redirect.searchParams.set("state", state);
+    return new Response(null, { status: 302, headers: { location: redirect.toString() } });
+  }
+
+  if (consentDecision === "allow") {
+    await upsertOidcConsent(env, { ward_did: wardDid, client_id: clientId, scope, granted_at: new Date().toISOString() });
+  } else {
+    // No explicit decision yet this request -- check whether a prior visit
+    // already granted (at least) this scope before asking again.
+    const existing = await getOidcConsent(env, wardDid, clientId);
+    if (!existing || !scopeSatisfied(existing.scope, scope)) {
+      // Ensure the session is set even on a fresh login, so the consent
+      // page's own follow-up POST (just `consent=allow|deny`, no
+      // credentials) can resolve the ward via cookie alone.
+      const sessionId = await createLoginSession(env, wardDid);
+      return html(consentPage(url.pathname + url.search, client.name, scope), 200, {
+        "set-cookie": `${SESSION_COOKIE}=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`,
+      });
     }
   }
 
@@ -184,10 +351,12 @@ async function handleToken(request: Request, env: Env): Promise<Response> {
     if ((await hashSecret(b.client_secret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
   }
 
-  if (authCode.code_challenge) {
-    if (!b.code_verifier || !(await verifyPkce(b.code_verifier, authCode.code_challenge))) {
-      return err("PKCE verification failed", 400);
-    }
+  // PKCE is mandatory (handleAuthorize refuses to issue a code without a
+  // code_challenge), so a stored auth code missing one is an invariant
+  // violation, not a legitimate "this client skipped it" case -- fail
+  // closed rather than silently accept.
+  if (!authCode.code_challenge || !b.code_verifier || !(await verifyPkce(b.code_verifier, authCode.code_challenge))) {
+    return err("PKCE verification failed", 400);
   }
 
   const keypair = await getOrCreateSigningKeypair(env);

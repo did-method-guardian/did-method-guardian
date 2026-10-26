@@ -61,15 +61,61 @@ export async function updateWardKeys(env: Env, did: string, publicKey: string, p
 
 export interface OidcClientRow {
   client_id: string;
-  client_secret_hash: string;
+  client_secret_hash: string; // a throwaway, never-issued random value for a public client (token_endpoint_auth_method = "none") -- the column predates dynamic registration and stays NOT NULL rather than forcing a disruptive table rebuild
   redirect_uris: string; // JSON array
   name: string;
+  token_endpoint_auth_method: string; // "client_secret_basic" | "none"
+  registration_access_token_hash: string | null; // RFC 7592 -- lets the registering party read back its own client later; null for a client inserted by hand (pre-dynamic-registration) rather than via /oauth/register-client
   created_at: string;
 }
 
 export async function getOidcClient(env: Env, clientId: string): Promise<OidcClientRow | null> {
   const row = await env.DB.prepare("SELECT * FROM oidc_clients WHERE client_id = ?").bind(clientId).first<OidcClientRow>();
   return row ?? null;
+}
+
+export async function insertOidcClient(env: Env, row: OidcClientRow): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO oidc_clients (client_id, client_secret_hash, redirect_uris, name, token_endpoint_auth_method, registration_access_token_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  )
+    .bind(
+      row.client_id,
+      row.client_secret_hash,
+      row.redirect_uris,
+      row.name,
+      row.token_endpoint_auth_method,
+      row.registration_access_token_hash,
+      row.created_at,
+    )
+    .run();
+}
+
+export async function getOidcClientByRegistrationToken(env: Env, registrationAccessTokenHash: string): Promise<OidcClientRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM oidc_clients WHERE registration_access_token_hash = ?")
+    .bind(registrationAccessTokenHash)
+    .first<OidcClientRow>();
+  return row ?? null;
+}
+
+export interface OidcConsentRow {
+  ward_did: string;
+  client_id: string;
+  scope: string;
+  granted_at: string;
+}
+
+export async function getOidcConsent(env: Env, wardDid: string, clientId: string): Promise<OidcConsentRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM oidc_consents WHERE ward_did = ? AND client_id = ?").bind(wardDid, clientId).first<OidcConsentRow>();
+  return row ?? null;
+}
+
+export async function upsertOidcConsent(env: Env, row: OidcConsentRow): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO oidc_consents (ward_did, client_id, scope, granted_at) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(ward_did, client_id) DO UPDATE SET scope = excluded.scope, granted_at = excluded.granted_at",
+  )
+    .bind(row.ward_did, row.client_id, row.scope, row.granted_at)
+    .run();
 }
 
 export interface AuthCodeRow {
