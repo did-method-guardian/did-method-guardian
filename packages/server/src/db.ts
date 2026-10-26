@@ -118,6 +118,29 @@ export async function upsertOidcConsent(env: Env, row: OidcConsentRow): Promise<
     .run();
 }
 
+export interface OidcConsentWithClientName extends OidcConsentRow {
+  client_name: string;
+}
+
+/** For the account dashboard's own "connected apps" section -- every app this identity has ever granted access to, newest first. */
+export async function listOidcConsentsForWard(env: Env, wardDid: string): Promise<OidcConsentWithClientName[]> {
+  const result = await env.DB.prepare(
+    "SELECT c.ward_did, c.client_id, c.scope, c.granted_at, o.name AS client_name FROM oidc_consents c JOIN oidc_clients o ON o.client_id = c.client_id WHERE c.ward_did = ? ORDER BY c.granted_at DESC",
+  )
+    .bind(wardDid)
+    .all<OidcConsentWithClientName>();
+  return result.results;
+}
+
+export async function deleteOidcConsent(env: Env, wardDid: string, clientId: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM oidc_consents WHERE ward_did = ? AND client_id = ?").bind(wardDid, clientId).run();
+}
+
+/** Revoking access to an app has to actually revoke access, not just "stop remembering consent" -- kills every still-live refresh token this (ward, client) pair has outstanding, so a prior grant can't keep minting fresh access tokens after the consent record is gone. */
+export async function revokeRefreshTokensForWardAndClient(env: Env, wardDid: string, clientId: string): Promise<void> {
+  await env.DB.prepare("UPDATE oidc_refresh_tokens SET revoked = 1 WHERE ward_did = ? AND client_id = ?").bind(wardDid, clientId).run();
+}
+
 export interface AuthCodeRow {
   code: string;
   client_id: string;

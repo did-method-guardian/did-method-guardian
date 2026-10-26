@@ -52,7 +52,11 @@
     // (it has no bare "/oauth/*" or "/revoke", only nested ones like
     // "/profile/tokens/.../revoke").
     { "pattern": "zzmq.dev/oauth/*", "zone_name": "zzmq.dev" },
-    { "pattern": "zzmq.dev/revoke*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/revoke*", "zone_name": "zzmq.dev" },
+    // The account dashboard -- confirmed no collision with zz-maintainer's
+    // own routes (it has no "/account" path at all) before this was added,
+    // not after.
+    { "pattern": "zzmq.dev/account*", "zone_name": "zzmq.dev" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

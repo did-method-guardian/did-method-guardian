@@ -7,6 +7,16 @@ import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./e
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
 import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
+import {
+  handleAccountPage,
+  handleAccountRotate,
+  handleAccountReissueLoginSecret,
+  handleAccountEmail,
+  handleAccountRelinquish,
+  handleAccountTombstoneConfirm,
+  handleAccountTombstone,
+  handleAccountRevokeConsent,
+} from "./accountPage.js";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -321,6 +331,31 @@ export default {
       // back to whatever first-party page sent me here" (the voting page,
       // today; any future first-party HTML page this registrar grows).
       return handleDirectLogin(request, env, url);
+    }
+
+    if (path === "/account" && request.method === "GET") {
+      return handleAccountPage(request, env);
+    }
+    if (path === "/account/rotate" && request.method === "POST") {
+      return handleAccountRotate(request, env);
+    }
+    if (path === "/account/login-secret/reissue" && request.method === "POST") {
+      return handleAccountReissueLoginSecret(request, env);
+    }
+    if (path === "/account/email" && request.method === "POST") {
+      return handleAccountEmail(request, env);
+    }
+    if (path === "/account/relinquish" && request.method === "POST") {
+      return handleAccountRelinquish(request, env);
+    }
+    if (path === "/account/tombstone" && request.method === "GET") {
+      return handleAccountTombstoneConfirm(request, env);
+    }
+    if (path === "/account/tombstone" && request.method === "POST") {
+      return handleAccountTombstone(request, env);
+    }
+    if (path === "/account/consents/revoke" && request.method === "POST") {
+      return handleAccountRevokeConsent(request, env);
     }
 
     if (path === "/verify-email" && request.method === "GET") {

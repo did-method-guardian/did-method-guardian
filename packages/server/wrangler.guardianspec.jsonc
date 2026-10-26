@@ -36,7 +36,8 @@
     { "pattern": "guardianspec.org/api/me/pending-signatures*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/guardian-login*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/oauth/*", "zone_name": "guardianspec.org" },
-    { "pattern": "guardianspec.org/revoke*", "zone_name": "guardianspec.org" }
+    { "pattern": "guardianspec.org/revoke*", "zone_name": "guardianspec.org" },
+    { "pattern": "guardianspec.org/account*", "zone_name": "guardianspec.org" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {
