@@ -132,6 +132,21 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
     });
   }
 
+  // RFC 9728 Protected Resource Metadata (registrar API spec §12): this
+  // registrar is both its own authorization server and, for endpoints like
+  // /userinfo, a protected resource in its own right -- the shape an
+  // MCP-style client expects when it discovers this domain as a resource
+  // and needs to find out who issues tokens for it.
+  if (url.pathname === "/.well-known/oauth-protected-resource" && request.method === "GET") {
+    const base = `https://${env.REGISTRAR_DOMAIN}`;
+    return json({
+      resource: base,
+      authorization_servers: [base],
+      bearer_methods_supported: ["header"],
+      scopes_supported: ["openid", "email", "create:managed-identity"],
+    });
+  }
+
   if (url.pathname === "/.well-known/jwks.json" && request.method === "GET") {
     const keypair = await getOrCreateSigningKeypair(env);
     return json({ keys: [{ ...keypair.publicKeyJwk, use: "sig", alg: "ES256", kid: keypair.kid }] });
@@ -264,6 +279,10 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
   const state = params.get("state") ?? "";
   const scope = params.get("scope") ?? "openid";
   const nonce = params.get("nonce");
+  const resourceParam = params.get("resource");
+  if (resourceParam && !isValidResourceIndicator(resourceParam)) {
+    return err("resource must be an absolute URI with no fragment (RFC 8707)", 400);
+  }
 
   let wardDid: string | null = null;
   let consentDecision: "allow" | "deny" | null = null;
@@ -339,6 +358,7 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
     nonce,
     expires_at: expiresAt,
     used: 0,
+    resource: resourceParam,
   });
 
   const sessionId = await createLoginSession(env, wardDid);
@@ -355,25 +375,50 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
   });
 }
 
-/** Every access/id token gets its own jti -- the only way to revoke an otherwise-stateless JWT before its own natural expiry (RFC 7009, via POST /revoke -> oidc_revoked_jti, checked in handleUserinfo). */
+/**
+ * RFC 8707 Resource Indicators: an absolute URI, no fragment component
+ * (RFC 8707 §2's own requirement -- a resource identifies a server, not a
+ * location within one). Deliberately not also requiring https: a resource
+ * server on a private network during development is still a valid target.
+ */
+function isValidResourceIndicator(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.hash === "";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Every access/id token gets its own jti -- the only way to revoke an
+ * otherwise-stateless JWT before its own natural expiry (RFC 7009, via
+ * POST /revoke -> oidc_revoked_jti, checked in handleUserinfo). `resource`
+ * (RFC 8707), when the client named one at /authorize or refresh time,
+ * replaces the OAuth client's own id as `aud` -- an MCP-style resource
+ * server expects its own URI there, not the identity of whatever app
+ * mediated the login.
+ */
 async function issueTokenPair(
   env: Env,
   wardDid: string,
   clientId: string,
   nonce: string | null | undefined,
   scope: string,
+  resource?: string | null,
 ): Promise<{ idToken: string; accessToken: string }> {
   const keypair = await getOrCreateSigningKeypair(env);
   const now = Math.floor(Date.now() / 1000);
+  const aud = resource ?? clientId;
   const idToken = await signJwt(
-    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud: clientId, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret() },
+    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret() },
     keypair,
   );
   // scope travels with the access token itself (not just the one-time auth
   // code/refresh-token row) so handleUserinfo can gate which claims it
   // returns without a second DB lookup.
   const accessToken = await signJwt(
-    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud: clientId, iat: now, exp: now + ID_TOKEN_TTL_S, typ: "access", scope, jti: randomSecret() },
+    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud, iat: now, exp: now + ID_TOKEN_TTL_S, typ: "access", scope, jti: randomSecret() },
     keypair,
   );
   return { idToken, accessToken };
@@ -408,8 +453,15 @@ async function issueDelegatedAccessToken(env: Env, targetDid: string, actorDid: 
   );
 }
 
-/** Issues a fresh refresh token, same family as `familyId` if given (rotation) or a new family (first issuance) -- stored hashed, same pattern login_secret_hash already uses. */
-async function issueRefreshToken(env: Env, clientId: string, wardDid: string, scope: string, familyId?: string): Promise<string> {
+/** Issues a fresh refresh token, same family as `familyId` if given (rotation) or a new family (first issuance) -- stored hashed, same pattern login_secret_hash already uses. `resource` (RFC 8707) is carried forward so a later refresh keeps scoping new tokens to the same resource server unless the client explicitly asks to narrow it. */
+async function issueRefreshToken(
+  env: Env,
+  clientId: string,
+  wardDid: string,
+  scope: string,
+  resource: string | null,
+  familyId?: string,
+): Promise<string> {
   const token = randomSecret();
   const now = new Date();
   await insertRefreshToken(env, {
@@ -421,6 +473,7 @@ async function issueRefreshToken(env: Env, clientId: string, wardDid: string, sc
     created_at: now.toISOString(),
     expires_at: new Date(now.getTime() + REFRESH_TOKEN_TTL_MS).toISOString(),
     revoked: 0,
+    resource,
   });
   return token;
 }
@@ -469,8 +522,8 @@ async function handleToken(request: Request, env: Env): Promise<Response> {
     return err("PKCE verification failed", 400);
   }
 
-  const { idToken, accessToken } = await issueTokenPair(env, authCode.ward_did, authCode.client_id, authCode.nonce, authCode.scope);
-  const refreshToken = await issueRefreshToken(env, authCode.client_id, authCode.ward_did, authCode.scope);
+  const { idToken, accessToken } = await issueTokenPair(env, authCode.ward_did, authCode.client_id, authCode.nonce, authCode.scope, authCode.resource);
+  const refreshToken = await issueRefreshToken(env, authCode.client_id, authCode.ward_did, authCode.scope, authCode.resource);
 
   return json({
     access_token: accessToken,
@@ -505,9 +558,20 @@ async function handleRefreshGrant(b: Record<string, string>, clientSecret: strin
   if (!client) return err("unknown client", 400);
   if (clientSecret && (await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
 
+  // RFC 8707 §2: a refresh request may narrow (never widen) the resource a
+  // new token is scoped to. Only accepted when one was already established
+  // at the original /authorize -- a client that never asked for resource
+  // scoping can't introduce it later via refresh.
+  let resource = stored.resource;
+  if (b.resource) {
+    if (!isValidResourceIndicator(b.resource)) return err("resource must be an absolute URI with no fragment (RFC 8707)", 400);
+    if (!stored.resource) return err("this refresh token was not scoped to a resource at /authorize -- resource cannot be introduced at refresh time", 400);
+    resource = b.resource;
+  }
+
   await revokeRefreshToken(env, tokenHash);
-  const { idToken, accessToken } = await issueTokenPair(env, stored.ward_did, stored.client_id, null, stored.scope);
-  const newRefreshToken = await issueRefreshToken(env, stored.client_id, stored.ward_did, stored.scope, stored.family_id);
+  const { idToken, accessToken } = await issueTokenPair(env, stored.ward_did, stored.client_id, null, stored.scope, resource);
+  const newRefreshToken = await issueRefreshToken(env, stored.client_id, stored.ward_did, stored.scope, resource, stored.family_id);
 
   return json({
     access_token: accessToken,
@@ -622,13 +686,24 @@ export async function verifyAccessToken(env: Env, token: string): Promise<Verifi
   return { sub: payload.sub, scope };
 }
 
+/** RFC 9728 §5.1: a protected resource's 401 names where to find its own metadata, so a generic (e.g. MCP) client can discover this registrar as the authorization server without being told out of band. */
+function unauthorizedWithResourceMetadata(env: Env, message: string): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status: 401,
+    headers: {
+      "content-type": "application/json",
+      "www-authenticate": `Bearer resource_metadata="https://${env.REGISTRAR_DOMAIN}/.well-known/oauth-protected-resource"`,
+    },
+  });
+}
+
 async function handleUserinfo(request: Request, env: Env): Promise<Response> {
   const auth = request.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (!token) return err("missing bearer token", 401);
+  if (!token) return unauthorizedWithResourceMetadata(env, "missing bearer token");
 
   const verified = await verifyAccessToken(env, token);
-  if (!verified) return err("invalid, expired, or revoked token", 401);
+  if (!verified) return unauthorizedWithResourceMetadata(env, "invalid, expired, or revoked token");
 
   const ward = await getWardByDid(env, verified.sub);
   const claims: Record<string, unknown> = { sub: verified.sub, name: ward?.name };

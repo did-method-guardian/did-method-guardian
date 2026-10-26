@@ -152,13 +152,25 @@ export interface AuthCodeRow {
   nonce: string | null;
   expires_at: string;
   used: number;
+  resource: string | null;
 }
 
 export async function insertAuthCode(env: Env, row: AuthCodeRow): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO oidc_auth_codes (code, client_id, ward_did, redirect_uri, code_challenge, code_challenge_method, scope, nonce, expires_at, used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+    "INSERT INTO oidc_auth_codes (code, client_id, ward_did, redirect_uri, code_challenge, code_challenge_method, scope, nonce, expires_at, used, resource) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
   )
-    .bind(row.code, row.client_id, row.ward_did, row.redirect_uri, row.code_challenge, row.code_challenge_method, row.scope, row.nonce, row.expires_at)
+    .bind(
+      row.code,
+      row.client_id,
+      row.ward_did,
+      row.redirect_uri,
+      row.code_challenge,
+      row.code_challenge_method,
+      row.scope,
+      row.nonce,
+      row.expires_at,
+      row.resource,
+    )
     .run();
 }
 
@@ -179,13 +191,14 @@ export interface RefreshTokenRow {
   created_at: string;
   expires_at: string;
   revoked: number;
+  resource: string | null;
 }
 
 export async function insertRefreshToken(env: Env, row: RefreshTokenRow): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO oidc_refresh_tokens (token_hash, client_id, ward_did, scope, family_id, created_at, expires_at, revoked) VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+    "INSERT INTO oidc_refresh_tokens (token_hash, client_id, ward_did, scope, family_id, created_at, expires_at, revoked, resource) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
   )
-    .bind(row.token_hash, row.client_id, row.ward_did, row.scope, row.family_id, row.created_at, row.expires_at)
+    .bind(row.token_hash, row.client_id, row.ward_did, row.scope, row.family_id, row.created_at, row.expires_at, row.resource)
     .run();
 }
 

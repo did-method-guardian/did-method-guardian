@@ -213,3 +213,22 @@ A2A's own Agent Card -- a JSON manifest advertising an identity's capabilities a
 Every card here declares `securitySchemes.oidc` (an `OpenIdConnectSecurityScheme` pointing at this registrar's own `/.well-known/openid-configuration`) -- how an A2A client authenticates with this identity is just this registrar's own OIDC flow, already documented in full above.
 
 **Deliberately unsigned in this pass.** A2A's own `AgentCardSignature` (JWS, canonicalized) is optional, not required -- plain HTTPS already gives a verifier a real, if weaker, binding to this domain. Signing with a ward's own operational key (already custodied here, already published in its own DID Document) is a natural fit for later, not something this first pass needed to block on.
+
+## 12. MCP interop
+
+MCP's own authorization spec is OAuth 2.1 plus mandatory Resource Indicators (RFC 8707) -- an MCP client treats the tool server it's calling as a *resource*, discovers who issues tokens for it, and asks for a token scoped to that one resource specifically, not a generic token good for anything the OAuth client happens to be. Two additions, both strictly additive -- every existing client that never sends a `resource` keeps getting exactly the behavior it already had.
+
+**`GET /.well-known/oauth-protected-resource`** (RFC 9728, Protected Resource Metadata): this registrar is both its own authorization server and, for endpoints like `/userinfo`, a protected resource in its own right. The document names itself as both:
+
+```json
+{
+  "resource": "https://acme.com",
+  "authorization_servers": ["https://acme.com"],
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": ["openid", "email", "create:managed-identity"]
+}
+```
+
+A `401` from `/userinfo` (missing, invalid, expired, or revoked token) carries a `WWW-Authenticate: Bearer resource_metadata="https://acme.com/.well-known/oauth-protected-resource"` header (RFC 9728 §5.1) -- a generic client discovers the authorization server from the 401 alone, with nothing hardcoded out of band.
+
+**`resource` at `/authorize` and `/token`** (RFC 8707 Resource Indicators): a client naming a `resource` (an absolute URI, no fragment -- e.g. the MCP tool server's own URL) at `/authorize` gets an access token whose `aud` is that URI instead of the OAuth client's own `client_id` -- the resource server checks a token meant for *it*, not evidence that *some* client authenticated. A refresh request may narrow which resource a fresh token is scoped to, but never introduce one that wasn't already established at the original `/authorize` -- a client that never asked for resource scoping can't add it later through refresh alone.
