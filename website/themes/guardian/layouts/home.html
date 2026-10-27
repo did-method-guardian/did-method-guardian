@@ -5,33 +5,101 @@
 </head>
 <body>
 <header ht-include='fragments/header.html'></header>
-<main class='container'>
-  <section class='hero'>
-    <p class='eyebrow'>Request for Comments &middot; v0.2.0 draft</p>
-    <h1 ht-content='page.hero.title'></h1>
-    <p class='lede' ht-content='markdown:page.hero.description'></p>
-    <code class='example-did' ht-content='page.hero.example'></code>
-    <p class='hero-actions'>
-      <a role='button' href='/docs/'>Read the spec</a>
-      <a role='button' class='secondary' href='https://github.com/did-method-guardian/did-method-guardian'>View on GitHub</a>
-    </p>
+<main>
+  <section class='field-hero hero-field'>
+    <div class='hero-grid'>
+      <div class='hero-copy'>
+        <p class='eyebrow'>Request for Comments &middot; v0.2.0 draft</p>
+        <h1>A DID method built for <span class='hl'>guardianship.</span></h1>
+        <p class='lede' ht-content='markdown:page.hero.description'></p>
+        <p class='hero-actions'>
+          <a class='btn btn-solid' href='/docs/'>Read the spec <i class='ph ph-arrow-right'></i></a>
+          <a class='btn btn-ghost-ink' href='https://github.com/did-method-guardian/did-method-guardian'><i class='ph ph-github-logo'></i> View on GitHub</a>
+        </p>
+      </div>
+      <div class='hero-diagram-col'>
+        <div class='paper diagram-card'>
+          <div class='diagram-panel'>
+            <svg id='guardianship-svg' viewBox='0 0 440 400' aria-label='Guardianship diagram'></svg>
+            <p class='diagram-threshold' id='diagram-threshold'>ANY 2 OF 3 GUARDIANS</p>
+          </div>
+          <p class='diagram-hint'><i class='ph ph-hand-pointing'></i> Try it: act as laura's guardians</p>
+          <div class='diagram-actions'>
+            <button class='btn btn-outline' data-action='recover'><i class='ph ph-key'></i> Recover</button>
+            <button class='btn btn-outline' data-action='revoke'><i class='ph ph-prohibit'></i> Revoke</button>
+            <button class='btn btn-outline' data-action='transfer'><i class='ph ph-arrows-left-right'></i> Transfer</button>
+            <button class='btn btn-ghost-ink' data-action='impersonate'><i class='ph ph-mask-happy'></i> Sign as laura</button>
+          </div>
+          <div class='diagram-log'>
+            <div class='diagram-log-head'>
+              <span>Operation log</span>
+              <span id='diagram-status'>idle</span>
+            </div>
+            <div id='diagram-log-rows'></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section class='grid' id='why'>
-    <article>
-      <h3>Group guardianship</h3>
-      <p>Any identity may be overseen by one or more guardians -- transferable, terminable, governed by configurable consensus thresholds. No other DID method has this as a first-class relationship.</p>
-    </article>
-    <article>
-      <h3>Auditable and verifiable</h3>
-      <p>All guardian recovery actions are signed by the guardian's key, which stay attributable in the replayed log.</p>
-    </article>
-    <article>
-      <h3>Built on <code>did:plc</code> and <code>did:web</code></h3>
-      <p>Directly adopts <a href='https://github.com/did-method-plc/did-method-plc'><code>did:plc</code></a>'s proven operation log, signing scheme, and recovery-window mechanism, but with <a href='https://w3c-ccg.github.io/did-method-web/'><code>did:web</code></a>'s human readable accessibility and multi-authority resilience.</p>
-    </article>
+  <section class='container anatomy'>
+    <p class='eyebrow'>Anatomy of an identifier</p>
+    <p class='anatomy-id'><span class='a-scheme'>did</span><span class='a-sep'>:</span><span class='a-method'>guardian</span><span class='a-sep'>:</span><span class='a-authority'>acme.com</span><span class='a-sep'>:</span><span class='a-identity'>alice</span></p>
+    <div class='anatomy-labels'>
+      <div class='anatomy-label a-scheme'><span class='bar'></span>Scheme</div>
+      <div class='anatomy-label a-method'><span class='bar'></span>Method</div>
+      <div class='anatomy-label a-authority'><span class='bar'></span>Authority</div>
+      <div class='anatomy-label a-identity'><span class='bar'></span>Identity</div>
+    </div>
+  </section>
+
+  <section class='container feature-cards'>
+    <div class='paper-frame tilt-1'>
+      <div class='feature-field feature-ochre'>
+        <i class='ph ph-users-three'></i>
+        <h2>Group guardianship</h2>
+        <p>Any identity may be overseen by one or more guardians -- transferable, terminable, governed by configurable consensus thresholds. No other DID method has this as a first-class relationship.</p>
+      </div>
+    </div>
+    <div class='paper-frame tilt-2'>
+      <div class='feature-field feature-sky'>
+        <i class='ph ph-seal-check'></i>
+        <h2>Auditable and verifiable</h2>
+        <p>All guardian recovery actions are signed by the guardian's key, which stay attributable in the replayed log.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class='band-sage'>
+    <div class='container'>
+      <h2>Built on did:plc and did:web</h2>
+      <div class='sage-cols'>
+        <div>
+          <p class='sage-label sage-butter'>did:plc</p>
+          <ul>
+            <li>proven operation log</li>
+            <li>signing scheme</li>
+            <li>recovery-window mechanism</li>
+          </ul>
+        </div>
+        <div>
+          <p class='sage-label'><span class='sage-op'>+</span> <span class='sage-sky'>did:web</span></p>
+          <ul>
+            <li>human readable accessibility</li>
+            <li>multi-authority resilience</li>
+          </ul>
+        </div>
+        <div>
+          <p class='sage-label'><span class='sage-op'>=</span> did:guardian</p>
+          <ul>
+            <li>+ guardians, as a first-class relationship</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
 <footer ht-include='fragments/footer.html'></footer>
+<script src='/js/guardian-diagram.js'></script>
 </body>
 </html>

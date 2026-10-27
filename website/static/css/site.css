@@ -432,42 +432,245 @@ body.page-docs .nav-login:hover {
   text-decoration: underline;
 }
 
-.hero {
-  padding: 3rem 0 2rem;
-  text-align: center;
+.container {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
 }
-.hero .eyebrow {
+.eyebrow {
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.8rem;
-  color: var(--guardian-accent);
-  margin-bottom: 0.5rem;
+  letter-spacing: 0.12em;
+  color: var(--muted-500);
 }
-.hero h1 {
-  font-size: 2.4rem;
-  margin-bottom: 0.75rem;
-}
-.hero .lede {
-  max-width: 42rem;
-  margin: 0 auto 1.25rem;
-  font-size: 1.1rem;
-}
-.example-did {
-  display: inline-block;
-  padding: 0.4rem 0.9rem;
-  border-radius: 0.5rem;
-  background: var(--pico-code-background-color);
-  margin-bottom: 1.5rem;
-}
-.hero-actions a {
-  margin: 0 0.4rem;
+.field-hero .eyebrow {
+  color: var(--ink-warm);
+  opacity: 0.75;
 }
 
-.site-footer {
-  margin-top: 3rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--pico-muted-border-color);
+/* Hero */
+.hero-field {
+  padding: 88px var(--gutter) 104px;
+}
+.hero-grid {
+  max-width: var(--container);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 56px;
+  align-items: center;
+}
+.hero-copy h1 {
+  font-size: clamp(44px, 6.4vw, 90px);
+  margin: 10px 0 20px;
+}
+.hero-copy .lede {
+  font-size: 18px;
+  line-height: 1.6;
+  max-width: 46ch;
+  color: var(--ink-warm);
+  margin: 0 0 28px;
+}
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.diagram-card {
+  max-width: 500px;
+  margin-left: auto;
+  padding: 24px;
+  transform: rotate(1.6deg);
+  box-shadow: var(--shadow-lift);
+}
+.diagram-panel {
+  position: relative;
+  background: var(--paper-inset);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  background-image: radial-gradient(ellipse 60% 60% at 10% 10%, color-mix(in srgb, var(--butter) 35%, transparent), transparent 70%), radial-gradient(ellipse 60% 60% at 100% 100%, color-mix(in srgb, var(--sky) 30%, transparent), transparent 70%);
+}
+.diagram-panel svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.diagram-threshold {
   text-align: center;
+  font: 11px var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--muted-500);
+  margin: 4px 0 0;
+}
+.diagram-hint {
+  font-size: 13px;
+  color: var(--muted-400);
+  margin: 14px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.diagram-hint .ph {
+  color: var(--clay-deep);
+}
+.diagram-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.diagram-actions .btn {
+  font-size: 13px;
+  padding: 7px 12px;
+}
+.diagram-log {
+  background: var(--paper-inset);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  min-height: 140px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.diagram-log-head {
+  display: flex;
+  justify-content: space-between;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--muted-500);
+  margin-bottom: 8px;
+}
+.diagram-log-row {
+  display: grid;
+  grid-template-columns: 32px auto 1fr 16px;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--muted-400);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.diagram-log-row .log-sig {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.diagram-log-row .log-n {
+  color: var(--muted-600);
+}
+.diagram-log-row .log-mark {
+  color: var(--sage);
+}
+
+/* Anatomy of an identifier */
+.anatomy {
+  padding: 88px 0;
+}
+.anatomy-id {
+  font-family: var(--font-mono);
+  font-size: clamp(17px, 4.6vw, 64px);
+  white-space: nowrap;
+  margin: 20px 0 10px;
+}
+.a-scheme { color: var(--wood); }
+.a-method { color: var(--clay); }
+.a-authority { color: var(--blue); }
+.a-identity { color: var(--quilt); }
+.anatomy-id .a-sep { color: var(--muted-600); }
+.anatomy-labels {
+  display: flex;
+  gap: 40px;
+  flex-wrap: wrap;
+}
+.anatomy-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-500);
+}
+.anatomy-label .bar {
+  display: block;
+  height: 4px;
+  width: 2.5em;
+  border-radius: 2px;
+  margin-bottom: 6px;
+}
+.anatomy-label.a-scheme .bar { background: var(--wood); }
+.anatomy-label.a-method .bar { background: var(--clay); }
+.anatomy-label.a-authority .bar { background: var(--blue); }
+.anatomy-label.a-identity .bar { background: var(--quilt); }
+
+/* Feature cards */
+.feature-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 40px;
+  padding-bottom: 88px;
+}
+.paper-frame {
+  background: var(--paper);
+  border-radius: 6px;
+  padding: 14px 14px 28px;
+  box-shadow: 0 18px 36px rgba(60, 25, 10, 0.18);
+}
+.tilt-1 { transform: rotate(-1.2deg); }
+.tilt-2 { transform: rotate(1deg) translateY(16px); }
+.feature-field {
+  border-radius: 4px;
+  padding: 32px 28px;
+  color: var(--ink-warm);
+}
+.feature-field .ph {
+  font-size: 28px;
+}
+.feature-field h2 {
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: -0.03em;
+  margin: 14px 0 12px;
+}
+.feature-field p {
+  font-size: 16px;
+  max-width: 52ch;
+  margin: 0;
+}
+.feature-ochre {
+  background: linear-gradient(160deg, var(--ochre), color-mix(in srgb, var(--ochre) 70%, var(--butter)));
+}
+.feature-sky {
+  background: linear-gradient(160deg, var(--sky), color-mix(in srgb, var(--sky) 70%, var(--paper)));
+}
+
+/* Sage band */
+.band-sage {
+  padding: 88px var(--gutter);
+}
+.band-sage h2 {
+  font-size: clamp(26px, 3vw, 38px);
+  margin: 0 0 40px;
+}
+.sage-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 40px;
+}
+.sage-label {
+  font-family: var(--font-mono);
+  font-size: clamp(28px, 3.4vw, 46px);
+  margin: 0 0 14px;
+}
+.sage-label.sage-butter { color: var(--butter); }
+.sage-sky { color: #cfe2ff; }
+.sage-op { color: color-mix(in srgb, var(--cream) 60%, transparent); }
+.sage-cols ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+  color: var(--cream);
 }
 
 .layout {
