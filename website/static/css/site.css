@@ -582,27 +582,46 @@ body.page-docs .nav-login:hover {
   padding-top: 88px;
   padding-bottom: 88px;
 }
-.anatomy-id {
+/* The id's own segments and their labels below share one grid (not
+   two independently-laid-out rows) so each label's column lines up
+   under its own colored segment exactly, at any width -- a separate
+   flex row with its own even `gap` has no way to know how wide
+   "guardian:" rendered above it, so it drifted out of alignment with
+   the id as soon as the box narrowed enough to matter. Neither row is
+   allowed to wrap for the same reason: once either row rewraps alone,
+   the column pairing breaks. */
+.anatomy-grid {
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  row-gap: 10px;
+  /* The id row's own trailing colon (e.g. "did:") already separates
+     it visually from the next segment, but the label row has nothing
+     equivalent -- without this, adjacent labels (e.g. "SCHEME" and
+     "METHOD") sat flush against each other with zero gap, confirmed
+     live as a run-together "SCHEMEMETHOD". */
+  column-gap: 4px;
+  margin: 20px 0 10px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.anatomy-id-seg {
+  grid-row: 1;
   font-family: var(--font-mono);
   font-size: clamp(17px, 4.6vw, 64px);
   white-space: nowrap;
-  margin: 20px 0 10px;
 }
 .a-scheme { color: var(--wood); }
 .a-method { color: var(--clay); }
 .a-authority { color: var(--blue); }
 .a-identity { color: var(--quilt); }
-.anatomy-id .a-sep { color: var(--muted-600); }
-.anatomy-labels {
-  display: flex;
-  gap: 40px;
-  flex-wrap: wrap;
-}
+.anatomy-id-seg .a-sep { color: var(--muted-600); }
 .anatomy-label {
+  grid-row: 2;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted-500);
+  white-space: nowrap;
 }
 .anatomy-label .bar {
   display: block;
@@ -686,9 +705,14 @@ body.page-docs .nav-login:hover {
   .sage-label:has(.sage-op) {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
+    align-items: flex-start;
     gap: 4px;
+  }
+  /* The operator sits on its own line, left-aligned like everything
+     else -- consistent with the plain "did:plc" label and its own
+     bulleted list right below it. */
+  .sage-label:has(.sage-op) .sage-op {
+    display: block;
   }
 }
 .sage-cols ul {
