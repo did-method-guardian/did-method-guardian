@@ -574,7 +574,13 @@ body.page-docs .nav-login:hover {
 
 /* Anatomy of an identifier */
 .anatomy {
-  padding: 88px 0;
+  /* Top/bottom only -- this element also carries .container, whose own
+     left/right padding (var(--gutter)) must not be clobbered by this
+     shorthand's own 0 for those sides (confirmed live: invisible on
+     desktop, where .container's auto-margins still leave outer space,
+     but flush to the screen edge on mobile, where they don't). */
+  padding-top: 88px;
+  padding-bottom: 88px;
 }
 .anatomy-id {
   font-family: var(--font-mono);
@@ -671,6 +677,20 @@ body.page-docs .nav-login:hover {
 .sage-label.sage-butter { color: var(--butter); }
 .sage-sky { color: #cfe2ff; }
 .sage-op { color: color-mix(in srgb, var(--cream) 60%, transparent); }
+@media (max-width: 720px) {
+  /* .sage-cols already collapses to one column here (auto-fit can't
+     fit three 240px tracks), so "<op> did:web" / "<op> did:guardian"
+     reads as the operator crowded against the name -- stack the
+     operator onto its own centered line above the name instead,
+     without touching the desktop side-by-side layout. */
+  .sage-label:has(.sage-op) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+  }
+}
 .sage-cols ul {
   list-style: none;
   margin: 0;
