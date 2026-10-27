@@ -19,7 +19,7 @@
 
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { html, escapeHtml, pageShell } from "./htmlPage.js";
+import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
 import { readCookie, resolveSession, verifyLogin, createLoginSession } from "./login.js";
 import { getPendingOperationStatus, contributeToOperation, type PendingOperationStatus } from "./pendingOps.js";
 import { getPendingOperation, getWardByDid } from "./db.js";
@@ -149,7 +149,7 @@ export async function handleDirectLogin(request: Request, env: Env, url: URL): P
     const safeFormReturnTo = isSafeReturnTo(formReturnTo) ? formReturnTo : "/";
     const wardDid = await verifyLogin(env, name, loginSecret);
     if (!wardDid) {
-      return html(pageShell("Sign in", loginFormBody(safeFormReturnTo, { nameValue: name, error: "Invalid name or login secret." })), 401);
+      return html(authPageShell("Sign in", loginFormBody(safeFormReturnTo, { nameValue: name, error: "Invalid name or login secret." })), 401);
     }
     const sessionId = await createLoginSession(env, wardDid);
     return new Response(null, {
@@ -161,20 +161,32 @@ export async function handleDirectLogin(request: Request, env: Env, url: URL): P
     });
   }
 
-  return html(pageShell("Sign in", loginFormBody(safeReturnTo, {})));
+  return html(authPageShell("Sign in", loginFormBody(safeReturnTo, {})));
 }
 
 function loginFormBody(returnTo: string, opts: { nameValue?: string; error?: string }): string {
   return `
-    <h1>Sign in with your Guardian ID</h1>
-    <p class="hint">Your name alone (e.g. "alice") or your full id (e.g. "alice@acme.com") both work -- the domain part is ignored here if you include it. Plus the login secret you were shown once when it was created.</p>
-    ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
-    <form method="post" action="/guardian-login">
-      <input type="hidden" name="return_to" value="${escapeHtml(returnTo)}">
-      <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
-      <label>Login secret <small>(shown once, at creation)</small><input name="login_secret" type="password" required></label>
-      <button type="submit">Sign in</button>
-    </form>
-    <p><a href="/register?return_to=${encodeURIComponent(returnTo)}">Don't have an account? Create one</a></p>
+    <section class="signin-hero">
+      <div class="signin-grid">
+        <div class="signin-copy">
+          <h1>Sign in with your <span class="hl">Guardian ID</span></h1>
+          <p>Your name alone (e.g. "alice") or your full id (e.g. "alice@acme.com") both work -- the domain part is ignored here if you include it. Plus the login secret you were shown once when it was created.</p>
+        </div>
+        <div class="signin-card">
+          ${opts.error ? `<p class="error"><i class="ph ph-warning-circle"></i> ${escapeHtml(opts.error)}</p>` : ""}
+          <form method="post" action="/guardian-login">
+            <input type="hidden" name="return_to" value="${escapeHtml(returnTo)}">
+            <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
+            <label>Login secret <small>(shown once, at creation)</small></label>
+            <div class="field-eye">
+              <input id="login-secret-field" name="login_secret" type="password" required>
+              <button type="button" aria-label="Show login secret" onclick="var f=document.getElementById('login-secret-field'); var show=f.type==='password'; f.type=show?'text':'password'; this.querySelector('i').className=show?'ph ph-eye-slash':'ph ph-eye';"><i class="ph ph-eye"></i></button>
+            </div>
+            <button type="submit">Sign in</button>
+          </form>
+          <p style="text-align:center; margin-top: 1rem;"><a href="/register?return_to=${encodeURIComponent(returnTo)}">Don't have an account? Create one</a></p>
+        </div>
+      </div>
+    </section>
   `;
 }
