@@ -128,14 +128,6 @@ ul.toc {
   flex-direction: column;
   gap: 0.05rem;
 }
-ul.toc ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
-}
 ul.toc a {
   display: block;
   color: var(--pico-muted-color);
@@ -144,10 +136,6 @@ ul.toc a {
   line-height: 1.4;
   padding: 0.3rem 0.6rem;
   border-radius: 0.35rem;
-}
-ul.toc ul a {
-  padding-left: 1.4rem;
-  font-size: 0.8rem;
 }
 ul.toc a:hover {
   color: var(--pico-color);

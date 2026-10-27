@@ -40,7 +40,6 @@
   }
   var list = document.createElement('ul');
   list.className = 'toc';
-  var sublist = null;
   headings.forEach(function (h) {
     if (!h.id) return;
     var li = document.createElement('li');
@@ -48,17 +47,7 @@
     a.href = '#' + h.id;
     a.textContent = h.textContent.replace(/#$/, '').trim();
     li.appendChild(a);
-    if (h.tagName === 'H2') {
-      list.appendChild(li);
-      sublist = null;
-    } else {
-      if (!sublist) {
-        sublist = document.createElement('ul');
-        if (list.lastElementChild) list.lastElementChild.appendChild(sublist);
-        else list.appendChild(sublist);
-      }
-      sublist.appendChild(li);
-    }
+    list.appendChild(li);
   });
   toc.appendChild(list);
 })();
