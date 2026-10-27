@@ -707,7 +707,14 @@ body.page-docs .nav-login:hover {
   margin-left: -2.4em;
   margin-right: 1.2em;
 }
-@media (max-width: 720px) {
+@media (max-width: 927px) {
+  /* Matches .sage-cols's own breakpoint exactly -- its three 240px
+     tracks (plus two 40px gaps) need 800px of content width, i.e. an
+     800 + 2*32px gutter = 864px container, but auto-fit's own
+     rounding puts the actual collapse to 2 columns at 927px/928px
+     (confirmed live: 927px still renders 2 columns, 928px renders 3).
+     Below that, "did:guardian" no longer sits in a column adjacent to
+     "did:web", so the operator has nothing beside it to pull toward. */
   .sage-op {
     margin-left: -1.2em;
     margin-right: 0;
