@@ -49,7 +49,13 @@
     { "pattern": "guardianspec.org/account*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/.well-known/agent-card.json*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/.well-known/webfinger*", "zone_name": "guardianspec.org" },
-    { "pattern": "guardianspec.org/.well-known/oauth-protected-resource*", "zone_name": "guardianspec.org" }
+    { "pattern": "guardianspec.org/.well-known/oauth-protected-resource*", "zone_name": "guardianspec.org" },
+    // Cross-registrar signature relay's own review/approve page
+    // (relaySign.ts) -- its /.well-known/guardian/relay-notify receiver is
+    // already covered by the .well-known/guardian/* pattern above, this one
+    // is just for the new top-level /relay-sign path. No collision with the
+    // docs site (website/) hosted on this same domain.
+    { "pattern": "guardianspec.org/relay-sign*", "zone_name": "guardianspec.org" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

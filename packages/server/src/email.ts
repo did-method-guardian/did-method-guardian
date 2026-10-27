@@ -249,3 +249,30 @@ export async function notifyReminder(env: Env, wardName: string, signerDid: stri
     headers: threadHeaders(env, pendingOpId),
   });
 }
+
+/**
+ * Cross-registrar relay: `signerDid` is one of *this* registrar's own
+ * wards, but the pending operation it's a required signer on lives on
+ * `wardDid`'s own (different) registrar -- that registrar has no way to
+ * notify this signer itself (it has no email-forwarding record for a DID it
+ * doesn't custody), so relay-notify's own handler (index.ts) sends this
+ * instead, after independently verifying the operation is real. The link
+ * points at this registrar's own `/relay-sign` review page, not the ward's
+ * registrar -- that page re-fetches and re-verifies everything live rather
+ * than trusting anything in this email or the query string.
+ */
+export async function notifyRelaySignatureRequested(env: Env, signerDid: string, wardDid: string, pendingOpId: string, opType: string): Promise<void> {
+  const forwarding = await getVerifiedForwardingByDid(env, signerDid);
+  if (!forwarding) return;
+  const link = `https://${env.REGISTRAR_DOMAIN}/relay-sign?ward=${encodeURIComponent(wardDid)}&op=${encodeURIComponent(pendingOpId)}`;
+  await sendEmail(env, {
+    from: `postmaster@${env.REGISTRAR_DOMAIN}`,
+    fromName: "did:guardian",
+    to: forwarding.forward_to,
+    subject: `Your signature is requested: ${opType}`,
+    text:
+      `A ${opType} operation on ${wardDid} (hosted on a different registrar) is waiting on your signature as ${signerDid}.\n\n` +
+      `Review and sign: ${link}\n\n` +
+      `If nobody completes this, it expires on its own -- it never passes automatically.`,
+  });
+}

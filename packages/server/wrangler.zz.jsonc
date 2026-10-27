@@ -74,7 +74,13 @@
     { "pattern": "zzmq.dev/.well-known/webfinger*", "zone_name": "zzmq.dev" },
     // MCP interop (registrar API spec §12) -- confirmed no collision with
     // zz-maintainer's own routes before this was added, not after.
-    { "pattern": "zzmq.dev/.well-known/oauth-protected-resource*", "zone_name": "zzmq.dev" }
+    { "pattern": "zzmq.dev/.well-known/oauth-protected-resource*", "zone_name": "zzmq.dev" },
+    // Cross-registrar signature relay's own review/approve page
+    // (relaySign.ts) -- its /.well-known/guardian/relay-notify receiver is
+    // already covered by the .well-known/guardian/* pattern above, this one
+    // is just for the new top-level /relay-sign path. Confirmed no
+    // collision with zz-maintainer's own routes before this was added.
+    { "pattern": "zzmq.dev/relay-sign*", "zone_name": "zzmq.dev" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

@@ -1,12 +1,13 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
-import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders } from "./pendingOps.js";
+import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders, handleRelayNotify } from "./pendingOps.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
 import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
+import { handleRelaySignPage, handleRelaySignApprove } from "./relaySign.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
 import { handleAgentCard, handleWebfinger } from "./agentCard.js";
 import {
@@ -36,6 +37,27 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Cross-registrar signature relay (registrar API spec §13): the
+    // receiving half of pendingOps.ts's pushRelayNotify, called by a WARD's
+    // own registrar to tell THIS registrar one of its own wards is a
+    // required signer on a pending operation that lives elsewhere. Must be
+    // checked before wellKnownMatch below -- that regex's own ward-name
+    // capture group is generic enough to match "relay-notify" as if it were
+    // a ward name and return its own 404 first, since "relay-notify" isn't
+    // one of its explicitly listed suffixes. Never trusted blindly -- see
+    // handleRelayNotify's own doc comment for the independent re-fetch this
+    // does before acting. Always 200s (never leaks whether signer_did is
+    // actually one of this registrar's own wards).
+    if (path === "/.well-known/guardian/relay-notify" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as { ward_did?: string; pending_operation_id?: string; signer_did?: string };
+        await handleRelayNotify(env, body);
+      } catch (e) {
+        console.error("relay-notify error:", e);
+      }
+      return json({ ok: true });
+    }
 
     const wellKnownMatch = path.match(
       /^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
@@ -349,6 +371,13 @@ export default {
       // back to whatever first-party page sent me here" (the voting page,
       // today; any future first-party HTML page this registrar grows).
       return handleDirectLogin(request, env, url);
+    }
+
+    if (path === "/relay-sign" && request.method === "GET") {
+      return handleRelaySignPage(request, env, url);
+    }
+    if (path === "/relay-sign" && request.method === "POST") {
+      return handleRelaySignApprove(request, env);
     }
 
     if (path === "/account" && request.method === "GET") {

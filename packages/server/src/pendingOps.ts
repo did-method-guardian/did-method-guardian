@@ -12,6 +12,8 @@ import {
   verifySignerSig,
   liveGuardians,
   OPERATION_RULES,
+  parseDid,
+  wellKnownPath,
   type Did,
   type Operation,
   type RuleGovernedOpType,
@@ -40,7 +42,16 @@ import {
   updatePendingOperationState,
 } from "./db.js";
 import type { PendingOperationRow } from "./db.js";
-import { notifyAwaitingSignature, notifyVoteRecorded, notifyProgress, notifyDeclined, notifyWithdrawn, notifyFinalized, notifyReminder } from "./email.js";
+import {
+  notifyAwaitingSignature,
+  notifyVoteRecorded,
+  notifyProgress,
+  notifyDeclined,
+  notifyWithdrawn,
+  notifyFinalized,
+  notifyReminder,
+  notifyRelaySignatureRequested,
+} from "./email.js";
 import { randomSecret } from "./secretBox.js";
 
 const REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -49,6 +60,41 @@ const PROPOSAL_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days -- a reasonable fixed
 
 function isRuleGoverned(type: string): type is RuleGovernedOpType {
   return type in OPERATION_RULES;
+}
+
+/**
+ * Best-effort companion to `notifyAwaitingSignature`/`notifyProgress` for a
+ * required signer this registrar doesn't custody: that signer's own
+ * registrar has no way to know this pending operation exists at all, so its
+ * own `notifyAwaitingSignature` (which looks up email forwarding in *its*
+ * own D1) silently finds nothing and never fires -- a foreign guardian got
+ * zero notification before this, not just no way to sign.
+ *
+ * This push is purely advisory, never trusted: the receiving registrar
+ * (relay-notify's own handler) always re-fetches this op's real status from
+ * here before acting on it. A failure here (unreachable peer, peer doesn't
+ * implement the endpoint) is silently swallowed -- the ward can still share
+ * the pending-op link by hand, the same fallback that's always existed for
+ * a self-held-key external guardian.
+ */
+async function pushRelayNotify(env: Env, wardDid: Did, signerDid: Did, pendingOpId: string): Promise<void> {
+  const local = await getWardByDid(env, signerDid);
+  if (local) return; // handled by the ordinary local email path instead
+  let domain: string;
+  try {
+    ({ domain } = parseDid(signerDid));
+  } catch {
+    return;
+  }
+  try {
+    await fetch(`https://${domain}/.well-known/guardian/relay-notify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ward_did: wardDid, pending_operation_id: pendingOpId, signer_did: signerDid }),
+    });
+  } catch {
+    // best-effort -- see doc comment above
+  }
 }
 
 async function buildContextForWard(env: Env, wardDid: Did): Promise<VerificationContext> {
@@ -168,7 +214,10 @@ export async function proposeOperation(env: Env, name: string | null, op: Operat
 
   await notifyVoteRecorded(env, wardName, proposerDid, id, op.type);
   for (const signerDid of requiredSigners) {
-    if (signerDid !== proposerDid) await notifyAwaitingSignature(env, wardName, signerDid, id, op.type);
+    if (signerDid !== proposerDid) {
+      await notifyAwaitingSignature(env, wardName, signerDid, id, op.type);
+      await pushRelayNotify(env, ward.did as Did, signerDid, id);
+    }
   }
   return { id, state: "collecting" };
 }
@@ -233,7 +282,10 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
 
   await notifyVoteRecorded(env, wardName!, signerDid, id, op.type);
   for (const other of requiredSigners) {
-    if (other !== signerDid && !(other in newCollectedSigs)) await notifyProgress(env, wardName!, other, id, op.type, signerDid);
+    if (other !== signerDid && !(other in newCollectedSigs)) {
+      await notifyProgress(env, wardName!, other, id, op.type, signerDid);
+      await pushRelayNotify(env, row.ward_did as Did, other, id);
+    }
   }
   return { state: newState };
 }
@@ -305,12 +357,23 @@ export interface PendingOperationStatus {
   signed: Did[];
   created_at: string;
   expires_at: string;
+  /**
+   * The op minus `sig`/`sigs` -- exactly the bytes `signPayload` would sign,
+   * same shape `votingPage.ts`'s own `signAsSelf` already destructures out
+   * of a pending op inline. Present so a *different* registrar (relaying a
+   * signature for a foreign guardian it custodies -- see relaySign.ts) can
+   * reproduce the same canonicalized payload independently, rather than
+   * trusting anything handed to it out of band.
+   */
+  unsigned_payload: unknown;
 }
 
 /** GET .../pending/<id> (registrar API spec §3) -- ward-scoped: `wardDid` must match the proposal's own, same defensive check every other ward-path endpoint makes. */
 export async function getPendingOperationStatus(env: Env, wardDid: Did, id: string): Promise<PendingOperationStatus> {
   const row = await getPendingOperation(env, id);
   if (!row || row.ward_did !== wardDid) throw new RegistrarError(`no pending operation "${id}" for this ward`, 404);
+  const op = JSON.parse(row.partial_op) as { sig?: unknown; sigs?: unknown };
+  const { sig: _sig, sigs: _sigs, ...unsignedPayload } = op;
   return {
     id: row.id,
     op_type: row.op_type,
@@ -319,6 +382,7 @@ export async function getPendingOperationStatus(env: Env, wardDid: Did, id: stri
     signed: Object.keys(JSON.parse(row.collected_sigs) as Record<Did, string>),
     created_at: row.created_at,
     expires_at: row.expires_at,
+    unsigned_payload: unsignedPayload,
   };
 }
 
@@ -358,6 +422,48 @@ async function finalize(
   // Retriable -- the signatures collected are still valid; only the append attempt failed (e.g. the log head moved).
   await updatePendingOperationState(env, id, "satisfied", JSON.stringify(collectedSigs), JSON.stringify(sigTimestamps));
   throw new RegistrarError(`collected enough signatures, but finalizing failed: ${result.reason}`, 409);
+}
+
+/**
+ * POST /.well-known/guardian/relay-notify (index.ts) -- the receiving side
+ * of `pushRelayNotify` above, on whichever registrar actually custodies the
+ * named signer. Never trusts the push's own content: `ward_did` and
+ * `pending_operation_id` are only ever used to independently re-fetch the
+ * real status from the ward's own registrar (the same no-auth, read-only
+ * endpoint `getPendingOperationStatus` already serves), and nothing is
+ * acted on unless that live fetch confirms the operation is real, still
+ * collectible, and this signer genuinely required. A caller supplying a
+ * `signer_did` this registrar doesn't custody, or a bogus/stale pointer, is
+ * silently ignored either way -- worst case is a skipped notification, the
+ * same as the push never arriving at all.
+ */
+export async function handleRelayNotify(env: Env, body: { ward_did?: string; pending_operation_id?: string; signer_did?: string }): Promise<void> {
+  const { ward_did: wardDid, pending_operation_id: pendingOpId, signer_did: signerDid } = body;
+  if (!wardDid || !pendingOpId || !signerDid) return;
+
+  const local = await getWardByDid(env, signerDid);
+  if (!local) return; // not one of ours -- nothing to do
+
+  let name: string | null, domain: string;
+  try {
+    ({ name, domain } = parseDid(wardDid as Did));
+  } catch {
+    return;
+  }
+  let status: PendingOperationStatus;
+  try {
+    const resp = await fetch(`https://${domain}${wellKnownPath(name)}/pending/${pendingOpId}`, { headers: { accept: "application/json" } });
+    if (!resp.ok) return;
+    status = (await resp.json()) as PendingOperationStatus;
+  } catch {
+    return;
+  }
+
+  if (status.state !== "collecting" && status.state !== "satisfied") return;
+  if (!status.required_signers.includes(signerDid as Did)) return;
+  if (status.signed.includes(signerDid as Did)) return; // already signed -- nothing to notify
+
+  await notifyRelaySignatureRequested(env, signerDid, wardDid, pendingOpId, status.op_type);
 }
 
 /**
