@@ -702,7 +702,17 @@ body.page-docs .nav-login:hover {
 }
 .sage-label.sage-butter { color: var(--butter); }
 .sage-sky { color: #cfe2ff; }
-.sage-op { color: color-mix(in srgb, var(--cream) 60%, transparent); }
+.sage-op {
+  color: color-mix(in srgb, var(--cream) 60%, transparent);
+  margin-left: -2.4em;
+  margin-right: 1.2em;
+}
+@media (max-width: 720px) {
+  .sage-op {
+    margin-left: -1.2em;
+    margin-right: 0;
+  }
+}
 .sage-cols ul {
   list-style: none;
   margin: 0;
