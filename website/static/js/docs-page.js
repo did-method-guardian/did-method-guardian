@@ -42,32 +42,68 @@
     if (/\bMAY\b/.test(text)) return { label: "MAY", cls: "req-tag--may" };
     return { label: "DEFINES", cls: "req-tag--defines" };
   }
+  // A list item's first block is the <a id="req-..."> directly in a
+  // "tight" markdown list (no blank lines / nested content among items),
+  // or that same <a> wrapped in a <p> in a "loose" one -- confirmed live:
+  // §5's own REQ-5-8 has a nested sub-list under it, which makes
+  // CommonMark render that *whole* list loose, not just that one item, so
+  // every REQ-5-x row silently failed this check and never transformed.
+  function reqAnchorOf(li) {
+    var first = li.firstElementChild;
+    if (!first) return null;
+    if (first.tagName === "A") return first;
+    if (first.tagName === "P" && first.firstElementChild && first.firstElementChild.tagName === "A") return first.firstElementChild;
+    return null;
+  }
   article.querySelectorAll("ul").forEach(function (ul) {
     var items = Array.prototype.slice.call(ul.children).filter(function (c) { return c.tagName === "LI"; });
     if (items.length === 0) return;
     var allReq = items.every(function (li) {
-      var a = li.querySelector("a[id]");
-      return a && /^req-/.test(a.id) && a === li.firstElementChild;
+      var a = reqAnchorOf(li);
+      return a && /^req-/.test(a.id);
     });
     if (!allReq) return;
     var wrapper = document.createElement("div");
     wrapper.className = "req-list";
     items.forEach(function (li) {
-      var anchor = li.querySelector("a[id]");
+      var anchor = reqAnchorOf(li);
       var id = anchor.id;
       var reqIdText = id.toUpperCase().replace("REQ-", "REQ-");
+      var wrappingP = anchor.parentElement.tagName === "P" ? anchor.parentElement : null;
       anchor.remove();
       var strong = li.querySelector("strong");
       var label = strong ? strong.textContent.replace(/:$/, "") : reqIdText;
       if (strong) strong.remove();
-      var bodyHtml = li.innerHTML.replace(/^:\s*/, "");
+      // Unwrap the now-anchor-and-strong-less <p> so its own text rejoins
+      // li's direct content instead of staying nested -- a <p> is exactly
+      // what this function's own new .req markup provides itself.
+      if (wrappingP) {
+        while (wrappingP.firstChild) wrappingP.parentElement.insertBefore(wrappingP.firstChild, wrappingP);
+        wrappingP.remove();
+      }
+      // A "loose" list (one triggered into that mode by a sibling item's
+      // own nested content, like REQ-5-8's sub-bullets) renders its markup
+      // with a newline text node between <li> and its own <p> -- strips
+      // leading whitespace along with the separator colon, not just the
+      // colon alone, so that leftover newline doesn't survive into the body.
+      var bodyHtml = li.innerHTML.replace(/^\s*:\s*/, "");
       var tag = reqTag(li.textContent);
       var row = document.createElement("div");
       row.className = "req";
       row.id = id;
       row.innerHTML =
         '<div class="req-id"><a href="#' + id + '">' + label + '</a><span class="req-tag ' + tag.cls + '">' + tag.label + "</span></div>" +
-        '<p>' + bodyHtml + "</p>";
+        '<div class="req-body"></div>';
+      // A <p> wrapper (not a plain innerHTML assignment) for the inline
+      // run only -- REQ-5-8's own nested sub-list means bodyHtml isn't
+      // always pure inline content, and a block element like a <ul> can't
+      // legally live inside a <p> (confirmed live: the browser's own
+      // error-recovery otherwise splices it into a visually broken mess).
+      row.querySelector(".req-body").innerHTML = "<p>" + bodyHtml + "</p>";
+      row.querySelectorAll(".req-body p ul, .req-body p ol").forEach(function (nested) {
+        var p = nested.closest("p");
+        p.insertAdjacentElement("afterend", nested);
+      });
       wrapper.appendChild(row);
     });
     ul.replaceWith(wrapper);

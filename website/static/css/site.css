@@ -248,10 +248,19 @@ pre {
   color: var(--clay-deep);
   text-decoration: none;
 }
-.req p {
+.req-body p {
   margin: 0;
   font-size: 15px;
   text-wrap: pretty;
+}
+.req-body ul,
+.req-body ol {
+  margin: 0.6em 0 0;
+  padding-left: 1.3em;
+  font-size: 15px;
+}
+.req-body li + li {
+  margin-top: 0.4em;
 }
 .req-tag {
   font: 11px var(--font-mono);
