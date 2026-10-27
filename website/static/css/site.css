@@ -809,6 +809,7 @@ ul.toc {
   padding: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 4px;
 }
 ul.toc a {
