@@ -2,14 +2,15 @@
 layout: docs-sidebar
 title: "DID Guardian Method Specification, v0.2.0"
 description: "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements."
+versionTag: true
 ---
 # DID Guardian Method Specification
 
 `did:guardian` merges [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s own operation log and key-rotation model with [`did:web`](https://w3c-ccg.github.io/did-method-web/)'s domain-scoped, directory-free resolution, adding group guardianship on top of both -- a configurable, cryptographically-enforced set of parties able to recover, revoke, or transfer an identity.
 
-The key words *MUST*, *MUST NOT*, *REQUIRED*, *SHALL*, *SHALL NOT*, *SHOULD*, *SHOULD NOT*, *RECOMMENDED*, *MAY*, and *OPTIONAL* in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
-
-Each normative rule carries a stable requirement ID (`REQ-<section>-<n>`); an ID's meaning never changes once published.
+> The key words *MUST*, *MUST NOT*, *REQUIRED*, *SHALL*, *SHALL NOT*, *SHOULD*, *SHOULD NOT*, *RECOMMENDED*, *MAY*, and *OPTIONAL* in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
+>
+> Each normative rule carries a stable requirement ID (`REQ-<section>-<n>`); an ID's meaning never changes once published.
 
 ## 1. Target system
 
