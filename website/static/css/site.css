@@ -692,6 +692,13 @@ body.page-docs .nav-login:hover {
   font-family: var(--font-mono);
   font-size: clamp(28px, 3.4vw, 46px);
   margin: 0 0 14px;
+  /* "= did:guardian" is the longest of the three labels (14 chars,
+     vs. 7 and 9) -- at plenty of realistic desktop widths it alone
+     was wider than its own equal-thirds grid column and wrapped onto
+     a second line, while the shorter labels stayed on one, breaking
+     the row's own height alignment. Not mobile-specific: confirmed
+     live at 1160px viewport width. */
+  white-space: nowrap;
 }
 .sage-label.sage-butter { color: var(--butter); }
 .sage-sky { color: #cfe2ff; }
