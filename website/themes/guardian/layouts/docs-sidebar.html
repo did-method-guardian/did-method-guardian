@@ -10,30 +10,34 @@
 <main class='content'>
 <article class='prose' ht-content='markdown:page.content'></article>
 </main>
+<aside class='toc-sidebar'><p class='toc-label'>On this page</p><nav id='TableOfContents'></nav></aside>
 </div>
 <footer ht-include='fragments/footer.html'></footer>
 <script>
 (function () {
-  // Marks the current page's own link active, then nests this page's own
-  // H2/H3 headings right underneath it -- in place, not a separate right-
-  // side column, so the left nav shows both "which doc" and "where in it"
-  // together.
+  // Marks the current page's own link active in the left page-nav (just
+  // the highlight, no nesting -- a page's own heading count can be large
+  // enough to push every other page out of view, confirmed live). The
+  // heading outline itself goes in the right-hand "on this page" column
+  // instead, the near-universal docs-site pattern (Stripe, MDN, Tailwind,
+  // GitHub Docs, Vercel).
   var path = window.location.pathname;
   if (!path.endsWith('/')) path = path + '/';
-  var navLinks = document.querySelectorAll('.sidenav > a.navlink');
-  var current = null;
-  navLinks.forEach(function (a) {
+  document.querySelectorAll('.sidenav > a.navlink').forEach(function (a) {
     var href = a.getAttribute('href');
     if (!href.endsWith('/')) href = href + '/';
-    if (href === path) {
-      a.classList.add('active');
-      current = a;
-    }
+    if (href === path) a.classList.add('active');
   });
+
   var article = document.querySelector('article.prose');
-  if (!current || !article) return;
+  var toc = document.getElementById('TableOfContents');
+  var tocSidebar = document.querySelector('.toc-sidebar');
+  if (!article || !toc) return;
   var headings = article.querySelectorAll('h2, h3');
-  if (headings.length < 2) return;
+  if (headings.length < 2) {
+    if (tocSidebar) tocSidebar.hidden = true;
+    return;
+  }
   var list = document.createElement('ul');
   list.className = 'toc';
   var sublist = null;
@@ -56,7 +60,7 @@
       sublist.appendChild(li);
     }
   });
-  current.insertAdjacentElement('afterend', list);
+  toc.appendChild(list);
 })();
 </script>
 </body>

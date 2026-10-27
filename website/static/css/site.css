@@ -101,13 +101,28 @@
   display: block;
   overflow-x: auto;
 }
-/* The current page's own H2/H3 headings, nested inline under its sidenav
-   link (docs-sidebar.html's own script) -- Google Docs outline-panel
-   style: hierarchy from indentation and row weight alone, no border
-   lines or boxes, each heading its own hoverable row. */
+/* The "on this page" column (docs-sidebar.html's own script fills it) --
+   a separate right-hand column, not nested in the left page-nav: a long
+   page's own heading count was pushing every other doc page out of view
+   there. Same Google Docs outline-panel style either way: hierarchy from
+   indentation and row weight alone, no border lines or boxes. */
+.toc-sidebar {
+  flex: 0 0 220px;
+  position: sticky;
+  top: 1.5rem;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+.toc-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pico-muted-color);
+  margin: 0 0 0.5rem 0.6rem;
+}
 ul.toc {
   list-style: none;
-  margin: 0.1rem 0 0.4rem 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -127,16 +142,21 @@ ul.toc a {
   font-size: 0.82rem;
   text-decoration: none;
   line-height: 1.4;
-  padding: 0.3rem 0.6rem 0.3rem 1.4rem;
+  padding: 0.3rem 0.6rem;
   border-radius: 0.35rem;
 }
 ul.toc ul a {
-  padding-left: 2.2rem;
+  padding-left: 1.4rem;
   font-size: 0.8rem;
 }
 ul.toc a:hover {
   color: var(--pico-color);
   background: var(--pico-code-background-color);
+}
+@media (max-width: 75rem) {
+  .toc-sidebar {
+    display: none;
+  }
 }
 @media (max-width: 55rem) {
   .layout {
