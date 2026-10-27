@@ -24,6 +24,7 @@ import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, randomSecret } from "./secretBox.js";
+import { proposeOperation } from "./pendingOps.js";
 
 export class RegistrarError extends Error {
   constructor(message: string, public status: number) {
@@ -48,22 +49,38 @@ export function assertValidName(name: string): void {
  * same root identity's own key, is attached unconditionally -- cheap, since
  * the root ward is already auto-provisioned on first access regardless.
  *
- * `guardianDid`, when given, establishes a real first guardian immediately
- * afterward via a genuine, separately-signed `guardian_add` (REQ-7.2-5,
- * zero-to-one) -- two log entries, one API call, not genesis itself
- * carrying a guardian directly. Only ever reached with a caller-supplied
- * value when index.ts's own route handler has already verified a trusted
- * OIDC client credential (clientAuth.ts) -- an unauthenticated caller's
- * `guardian_did` is never honored, never even reaches this function. Safe
- * specifically because this registrar custodies both keys: the new ward's
- * own (always true) and the guardian's (only true when `guardianDid`
- * identifies one of this same registrar's own wards, checked below) -- so
- * both required signatures are producible server-side, with no separate
- * interactive signing round-trip needed. If the guardian_add fails, genesis
- * itself has already succeeded -- the ward exists, ownerless, rather than
- * half-created; the caller gets a clear error naming just that failure.
+ * `guardianDid`, when given, establishes a real first guardian via a
+ * genuine, separately-signed `guardian_add` (REQ-7.2-5, zero-to-one) --
+ * two log entries, one API call, not genesis itself carrying a guardian
+ * directly. Only ever reached with a caller-supplied value once
+ * index.ts's own route handler has derived it from a validated access
+ * token's own `sub` (registrar API spec §9) -- never a client-supplied
+ * free-text field. Two different outcomes depending on where that
+ * guardian's own key actually lives:
+ * - **Same registrar** (`guardianDid` names one of this registrar's own
+ *   wards): both required signatures -- the new ward's own and the
+ *   guardian's -- are producible server-side, so this finishes
+ *   synchronously, in the same call, with no interactive signing round
+ *   trip needed.
+ * - **Foreign registrar**: this registrar can never produce a signature
+ *   for a key it doesn't hold. The `guardian_add` is proposed instead,
+ *   signed only with the new ward's own key, and left pending the
+ *   guardian's own signature -- the same async collection (§3) any other
+ *   cross-registrar guardian relationship already goes through. The
+ *   response's own `pending_guardian_add.id` names it; the identity
+ *   exists and is usable immediately, just guardian-less until that
+ *   signature actually lands.
+ *
+ * Either way, genesis itself has already succeeded by the time
+ * guardian_add is attempted -- the ward exists, ownerless, rather than
+ * half-created; a same-registrar failure gets a clear error naming just
+ * that failure, never rolling genesis back.
  */
-export async function registerWard(env: Env, name: string, guardianDid?: string | null): Promise<{ did: string; document: unknown; login_secret: string }> {
+export async function registerWard(
+  env: Env,
+  name: string,
+  guardianDid?: string | null,
+): Promise<{ did: string; document: unknown; login_secret: string; pending_guardian_add?: { id: string } }> {
   assertValidName(name);
   if (await getWardByName(env, name)) {
     throw new RegistrarError(`name "${name}" is already taken`, 409);
@@ -103,26 +120,41 @@ export async function registerWard(env: Env, name: string, guardianDid?: string 
   await insertWard(env, ward);
   await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
 
+  let pendingGuardianAdd: { id: string } | undefined;
   if (guardianDid) {
     const guardianWard = await getWardByDid(env, guardianDid);
-    if (!guardianWard) {
-      throw new RegistrarError(`guardian_did "${guardianDid}" is not a ward this registrar custodies -- it can't produce that ward's signature`, 400);
-    }
-    const guardianPrivateKey = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
-    const addOp = await signGuardianAdd(
-      { type: "guardian_add", incoming: guardianDid, prev: cid },
-      { [guardianDid]: guardianPrivateKey, [did]: keypair.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's own key and the ward's own operational key
-      [guardianDid, did],
-    );
-    const result = await submitOperation(env, name, addOp);
-    if (!result.accepted) {
-      throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 500);
+    if (guardianWard) {
+      // Same registrar, both keys producible server-side -- the one-call
+      // convenience this was originally built for.
+      const guardianPrivateKey = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+      const addOp = await signGuardianAdd(
+        { type: "guardian_add", incoming: guardianDid, prev: cid },
+        { [guardianDid]: guardianPrivateKey, [did]: keypair.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's own key and the ward's own operational key
+        [guardianDid, did],
+      );
+      const result = await submitOperation(env, name, addOp);
+      if (!result.accepted) {
+        throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 500);
+      }
+    } else {
+      // A foreign guardian -- this registrar holds the new ward's own key
+      // but never the incoming guardian's (that key lives, and only ever
+      // lives, on whichever registrar actually custodies them). There's
+      // no way to produce that signature here, so this can't be the same
+      // one-call convenience: propose the guardian_add with only the
+      // ward's own signature attached, same async collection every other
+      // cross-registrar guardian relationship already uses (§3) -- the
+      // guardian signs it themselves, on their own registrar's own
+      // pending-operation page, whenever they do.
+      const addOp = await signGuardianAdd({ type: "guardian_add", incoming: guardianDid, prev: cid }, { [did]: keypair.privateKey }, [did]);
+      const proposeResult = await proposeOperation(env, name, addOp);
+      pendingGuardianAdd = { id: proposeResult.id };
     }
   }
 
   const log = await loadLog(env, did);
   const state = replay(did as Did, log);
-  return { did, document: toDidDocument(state), login_secret: loginSecret };
+  return { did, document: toDidDocument(state), login_secret: loginSecret, pending_guardian_add: pendingGuardianAdd };
 }
 
 /**

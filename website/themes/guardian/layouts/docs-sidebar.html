@@ -12,5 +12,52 @@
 </main>
 </div>
 <footer ht-include='fragments/footer.html'></footer>
+<script>
+(function () {
+  // Marks the current page's own link active, then nests this page's own
+  // H2/H3 headings right underneath it -- in place, not a separate right-
+  // side column, so the left nav shows both "which doc" and "where in it"
+  // together.
+  var path = window.location.pathname;
+  if (!path.endsWith('/')) path = path + '/';
+  var navLinks = document.querySelectorAll('.sidenav > a.navlink');
+  var current = null;
+  navLinks.forEach(function (a) {
+    var href = a.getAttribute('href');
+    if (!href.endsWith('/')) href = href + '/';
+    if (href === path) {
+      a.classList.add('active');
+      current = a;
+    }
+  });
+  var article = document.querySelector('article.prose');
+  if (!current || !article) return;
+  var headings = article.querySelectorAll('h2, h3');
+  if (headings.length < 2) return;
+  var list = document.createElement('ul');
+  list.className = 'toc';
+  var sublist = null;
+  headings.forEach(function (h) {
+    if (!h.id) return;
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + h.id;
+    a.textContent = h.textContent.replace(/#$/, '').trim();
+    li.appendChild(a);
+    if (h.tagName === 'H2') {
+      list.appendChild(li);
+      sublist = null;
+    } else {
+      if (!sublist) {
+        sublist = document.createElement('ul');
+        if (list.lastElementChild) list.lastElementChild.appendChild(sublist);
+        else list.appendChild(sublist);
+      }
+      sublist.appendChild(li);
+    }
+  });
+  current.insertAdjacentElement('afterend', list);
+})();
+</script>
 </body>
 </html>
