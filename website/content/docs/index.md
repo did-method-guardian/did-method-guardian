@@ -7,7 +7,9 @@ description: "A self-authenticating DID method for custodial oversight -- key re
 
 A merger of two existing, proven DID methods, not a derivative of either one alone: [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s own operation log and key-rotation model (a real, proven, 40-million-identifier-scale design for a self-authenticating DID with key rotation), and [`did:web`](https://w3c-ccg.github.io/did-method-web/)'s domain-scoped, directory-free resolution -- each adopted wherever it already solves something this method also needs. On top of both: **group guardianship** as a first-class, cryptographically-enforced relationship, this method's own real addition to either source.
 
-> This page is the friendly explainer, kept deliberately narrative. The sole authoritative, normative text is **[the formal specification, v0.2.0](/docs/did-guardian-spec-v0.2.0/)** -- RFC 2119 language, numbered requirement IDs, no teaching prose. Where this page and the formal spec ever appear to disagree, the formal spec is correct and this page has drifted; please file an issue. This page's own content below has been updated to match v0.2 throughout. Separately, **[the registrar API spec](/docs/registrar/)** documents this specific registrar's own HTTP surface (convenience endpoints, asynchronous signature collection, login) -- a different registrar implementation is free to expose none of it without being non-conformant to the method itself.
+This page documents the DID method itself -- the identifier, the operation log, and the guardianship model, independent of any one implementation. The reference registrar built around it is also a working identity provider: OIDC/OAuth with the usual parity features (dynamic client registration, PKCE, refresh-token rotation, a real consent screen), plus an agent-identity surface no other IdP has -- managed identities with a multi-party threshold guardian group standing behind each one, delegation-chain tokens, and A2A/MCP interop. **[The registrar API spec](/docs/registrar/)** covers all of that; none of it is part of the method itself, so a different registrar is free to expose none of it without being non-conformant.
+
+> This page is the friendly explainer, kept deliberately narrative. The sole authoritative, normative text is **[the formal specification, v0.2.0](/docs/did-guardian-spec-v0.2.0/)** -- RFC 2119 language, numbered requirement IDs, no teaching prose. Where this page and the formal spec ever appear to disagree, the formal spec is correct and this page has drifted; please file an issue. This page's own content below has been updated to match v0.2 throughout.
 
 ## 1. Motivation
 
@@ -53,14 +55,14 @@ Resolving `did:guardian:acme.com:alice` returns an ordinary [W3C DID Core](https
   "authentication": ["did:guardian:acme.com:alice#key-1"],
   "assertionMethod": ["did:guardian:acme.com:alice#key-1"],
   "capabilityInvocation": ["did:guardian:acme.com:alice#key-1"],
-  "service": [
-    { "id": "did:guardian:acme.com:alice#registrar", "type": "GuardianRegistrarService", "serviceEndpoint": "https://acme.com" }
-  ],
+  "service": [],
   "alsoKnownAs": []
 }
 ```
 
 Only the **operational tier** of rotation keys (§4) is reflected in `verificationMethod`/`authentication`/`capabilityInvocation` -- an operational key is exactly what invokes the capability to update the document, the semantic `capabilityInvocation` itself names. The guardian tier, `GuardianPolicy`, and the full operation log are method-internal state needed to *produce* this document, never part of the document itself -- the same way `did:plc`'s own `rotationKeys` are omitted from its presented document. Nothing in this document's own shape distinguishes any particular kind of ward from any other.
+
+`service` is part of the shape -- an operator-defined extension point, same as in any W3C DID document -- but this reference implementation never populates it; every document it actually resolves has `service: []`. A registrar that wants to advertise its own endpoints (its API base URL, say) can start writing entries here without needing a method-level change first.
 
 ## 4. The operation log
 

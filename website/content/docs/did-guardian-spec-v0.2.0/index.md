@@ -10,7 +10,7 @@ versionTag: true
 
 > The key words *MUST*, *MUST NOT*, *REQUIRED*, *SHALL*, *SHALL NOT*, *SHOULD*, *SHOULD NOT*, *RECOMMENDED*, *MAY*, and *OPTIONAL* in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 >
-> Each normative rule carries a stable requirement ID (`REQ-<section>-<n>`); an ID's meaning never changes once published.
+> Each normative rule carries a stable requirement ID (`REQ-<section>-<n>`); an ID's meaning never changes once published, and neither does its number -- a rule added after a section's own IDs are already in use gets the next free number in that section regardless of where in the section it's placed, rather than renumbering anything already published. REQ-7.2-11, placed with `guardian_add`'s other rules despite sorting after REQ-7.2-10, is the one case in this document where that's visible.
 
 ## 1. Target system
 
