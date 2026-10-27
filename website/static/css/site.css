@@ -1,5 +1,302 @@
+/* did:guardian -- "Hearth" theme. Lifted from design_handoff_guardian_theme/
+   theme.css per its own README ("written to be lifted directly"). Single
+   light theme, no dark mode. Pico stays loaded underneath for base element
+   resets (forms, tables) but every color/spacing/radius token below takes
+   over -- Phase 2-4 progressively replace Pico's own component styling
+   (nav, buttons) with theme.css's own .btn/.paper/etc. classes. */
 :root {
-  --guardian-accent: #2f6f4f;
+  /* Grounds */
+  --bg: #f2e3c3;
+  --surface: #eadbb8;
+  --paper: #fcf5e6;
+  --paper-inset: #f5e7c8;
+  --input-bg: #f6ebd3;
+  --cream: #fbf0dc;
+  --wall: #efb999;
+
+  /* Ink */
+  --text: #26201a;
+  --ink-warm: #3a2216;
+  --muted-300: #463829;
+  --muted-400: #574634;
+  --muted-500: #6f5b45;
+  --muted-600: #9c8569;
+  --divider: color-mix(in srgb, #26201a 16%, transparent);
+
+  /* Palette */
+  --clay: #c9502c;
+  --clay-deep: #8f3218;
+  --ochre: #f0a91a;
+  --butter: #ffd65c;
+  --blue: #1f62c4;
+  --blue-hover: #2a74dd;
+  --sky: #6fa8ef;
+  --sage: #6f8f58;
+  --quilt: #526e40;
+  --moss: #7d9170;
+  --moss-glow: #a9b99b;
+  --head-warm: #45693a;
+  --wood: #7a4a2a;
+
+  /* RFC 2119 keyword text colors (no background) */
+  --kw-must: #c2360f;
+  --kw-should: #1660d6;
+  --kw-may: #3f8a1f;
+
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-card: 10px;
+  --shadow-card: 0 1px 0 rgba(60, 30, 10, 0.06), 0 10px 24px rgba(60, 25, 10, 0.08);
+  --shadow-lift: 0 2px 0 rgba(60, 30, 10, 0.08), 0 24px 48px rgba(60, 25, 10, 0.3);
+  --container: 1240px;
+  --gutter: 32px;
+
+  /* Kept for any not-yet-migrated rule still reading it -- same value as --head-warm. */
+  --guardian-accent: #45693a;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 400 15px/1.55 var(--font-body);
+}
+h1, h2, h3 {
+  font-weight: 500;
+}
+a {
+  color: var(--clay-deep);
+}
+a:hover {
+  color: var(--blue);
+}
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--butter) 70%, transparent);
+}
+
+/* Hero / page-header field: peach wall with butter, ochre, sky, sage glows. */
+.field-hero {
+  background:
+    radial-gradient(ellipse 55% 80% at 6% 4%, var(--butter), transparent 70%),
+    radial-gradient(ellipse 30% 40% at 70% 0%, color-mix(in srgb, var(--ochre) 55%, transparent), transparent 70%),
+    radial-gradient(ellipse 45% 60% at 100% 100%, color-mix(in srgb, var(--sky) 60%, transparent), transparent 72%),
+    radial-gradient(ellipse 35% 45% at 45% 115%, color-mix(in srgb, var(--sage) 50%, transparent), transparent 70%),
+    var(--wall);
+  color: var(--ink-warm);
+}
+.field-hero h1 {
+  color: var(--cream);
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+/* Highlighter: green word with a butter stripe on the lower third. */
+.hl {
+  color: var(--head-warm);
+  background: linear-gradient(transparent 58%, var(--butter) 58% 92%, transparent 92%);
+  padding: 0 0.06em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 14px/1.2 var(--font-body);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-solid {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--cream);
+}
+.btn-solid:hover {
+  background: var(--blue-hover);
+  border-color: var(--blue-hover);
+  color: var(--cream);
+}
+.btn-outline {
+  color: var(--clay-deep);
+  border-color: var(--clay-deep);
+  background: transparent;
+}
+.btn-outline:hover {
+  background: color-mix(in srgb, var(--clay-deep) 12%, transparent);
+}
+.btn-ghost-ink {
+  color: var(--ink-warm);
+  border-color: color-mix(in srgb, var(--ink-warm) 45%, transparent);
+}
+.btn-ghost-ink:hover {
+  background: color-mix(in srgb, var(--ink-warm) 8%, transparent);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Surfaces */
+.paper {
+  background: var(--paper);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.paper-lift {
+  background: var(--paper);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lift);
+}
+.band-sage {
+  background: radial-gradient(ellipse 45% 120% at 90% 0%, color-mix(in srgb, var(--moss-glow) 55%, transparent), transparent 70%), var(--moss);
+  color: var(--cream);
+}
+
+/* Code */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+pre {
+  margin: 0;
+}
+.code-block {
+  background: var(--paper);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.code-block-bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 14px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-500);
+  background: color-mix(in srgb, var(--surface) 60%, var(--paper));
+}
+.code-block pre {
+  padding: 14px 0;
+  font: 13px/1.75 var(--font-mono);
+  overflow-x: auto;
+}
+.code-block .ln {
+  display: inline-block;
+  width: 44px;
+  padding-right: 16px;
+  text-align: right;
+  color: var(--muted-600);
+  user-select: none;
+}
+
+/* Callouts */
+.note {
+  display: flex;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--butter) 45%, var(--paper));
+  font-size: 15px;
+}
+.note .ph {
+  font-size: 20px;
+  color: var(--clay-deep);
+}
+.note-normative {
+  background: color-mix(in srgb, var(--sky) 28%, var(--paper));
+}
+.note-normative .ph {
+  color: var(--blue);
+}
+
+/* Spec requirement row */
+.req {
+  display: grid;
+  grid-template-columns: minmax(0, 92px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: var(--paper);
+}
+.req:hover {
+  background: color-mix(in srgb, var(--butter) 22%, var(--paper));
+}
+.req-id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  font: 12.5px var(--font-mono);
+}
+.req-id a {
+  color: var(--clay-deep);
+  text-decoration: none;
+}
+.req p {
+  margin: 0;
+  font-size: 15px;
+  text-wrap: pretty;
+}
+.req-tag {
+  font: 11px var(--font-mono);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-warm);
+}
+.req-tag--must {
+  background: color-mix(in srgb, var(--clay) 28%, var(--paper));
+}
+.req-tag--may {
+  background: color-mix(in srgb, var(--sage) 30%, var(--paper));
+}
+.req-tag--defines {
+  background: color-mix(in srgb, var(--sky) 35%, var(--paper));
+}
+.kw {
+  font-weight: 600;
+}
+.kw--must {
+  color: var(--kw-must);
+}
+.kw--should {
+  color: var(--kw-should);
+}
+.kw--may {
+  color: var(--kw-may);
+}
+
+/* Footer gradient wordmark -- keep exactly as specified. */
+.footer-wordmark {
+  font: min(13.2vw, 164px) / 0.78 var(--font-mono);
+  letter-spacing: -0.06em;
+  white-space: nowrap;
+  margin-top: 32px;
+  transform: translateY(12%);
+  opacity: 0.7;
+  background: linear-gradient(90deg, #1f62c4, #4f9a3a 35%, #f0a91a 65%, #c9502c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+footer {
+  overflow: hidden;
 }
 
 /* Pico centers nav items on their own box (border + padding included),
