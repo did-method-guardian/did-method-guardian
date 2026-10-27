@@ -696,25 +696,6 @@ body.page-docs .nav-login:hover {
 .sage-label.sage-butter { color: var(--butter); }
 .sage-sky { color: #cfe2ff; }
 .sage-op { color: color-mix(in srgb, var(--cream) 60%, transparent); }
-@media (max-width: 720px) {
-  /* .sage-cols already collapses to one column here (auto-fit can't
-     fit three 240px tracks), so "<op> did:web" / "<op> did:guardian"
-     reads as the operator crowded against the name -- stack the
-     operator onto its own centered line above the name instead,
-     without touching the desktop side-by-side layout. */
-  .sage-label:has(.sage-op) {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  /* The operator sits on its own line, left-aligned like everything
-     else -- consistent with the plain "did:plc" label and its own
-     bulleted list right below it. */
-  .sage-label:has(.sage-op) .sage-op {
-    display: block;
-  }
-}
 .sage-cols ul {
   list-style: none;
   margin: 0;
