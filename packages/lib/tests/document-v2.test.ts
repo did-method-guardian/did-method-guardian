@@ -11,7 +11,7 @@ import type { VerificationContext } from "../src/rules.js";
 import { DEFAULT_GUARDIAN_POLICY } from "../src/types.js";
 import type { CustodialCreateOp, Did, GuardianAddOp, GuardianRemoveOp, LogEntry, PolicyUpdateOp } from "../src/types.js";
 
-const wardDid = "did:guardian:alice:example.com";
+const wardDid = "did:guardian:example.com:alice";
 
 function genesisEntry(overrides: Partial<CustodialCreateOp> = {}): LogEntry {
   const op: CustodialCreateOp = {
@@ -39,8 +39,8 @@ test("REQ-7.1-7: replay merges genesis.policy over the stated defaults, field by
 });
 
 test("replay applies guardian_add then guardian_remove in order", () => {
-  const g1: Did = "did:guardian:g1:example.com";
-  const g2: Did = "did:guardian:g2:example.com";
+  const g1: Did = "did:guardian:example.com:g1";
+  const g2: Did = "did:guardian:example.com:g2";
   const addG1: LogEntry = { cid: "cid-1", op: { type: "guardian_add", incoming: g1, prev: "cid-genesis", sigs: {} } as GuardianAddOp };
   const addG2: LogEntry = { cid: "cid-2", op: { type: "guardian_add", incoming: g2, prev: "cid-1", sigs: {} } as GuardianAddOp };
   const removeG1: LogEntry = { cid: "cid-3", op: { type: "guardian_remove", outgoing: g1, prev: "cid-2", sigs: {} } as GuardianRemoveOp };
@@ -49,7 +49,7 @@ test("replay applies guardian_add then guardian_remove in order", () => {
 });
 
 test("replay applies policy_update wholesale", () => {
-  const g1: Did = "did:guardian:g1:example.com";
+  const g1: Did = "did:guardian:example.com:g1";
   const addG1: LogEntry = { cid: "cid-1", op: { type: "guardian_add", incoming: g1, prev: "cid-genesis", sigs: {} } as GuardianAddOp };
   const newPolicy = { ...DEFAULT_GUARDIAN_POLICY, policy_threshold: "unanimous" as const };
   const update: LogEntry = { cid: "cid-2", op: { type: "policy_update", policy: newPolicy, prev: "cid-1", sigs: {} } as PolicyUpdateOp };
@@ -100,7 +100,7 @@ async function makeGuardianContext(wardDid: Did, guardianDid: Did, guardianPriva
 }
 
 test("REQ-6-8: a guardian-signed rotation naming an earlier prev, within the recovery window, is accepted as a nullification", async () => {
-  const guardianDid = "did:guardian:g1:example.com";
+  const guardianDid = "did:guardian:example.com:g1";
   const guardian = await generateKeypair();
   const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
   ctx.state = { ...ctx.state, guardians: [guardianDid], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } };
@@ -142,7 +142,7 @@ test("REQ-6-8: a ward-signed rotation (not guardian-signed) may never nullify, e
 });
 
 test("REQ-6-9: a nullification naming a prev whose successor was accepted more than 72h ago is rejected", async () => {
-  const guardianDid = "did:guardian:g1:example.com";
+  const guardianDid = "did:guardian:example.com:g1";
   const guardian = await generateKeypair();
   const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
   ctx.state = { ...ctx.state, guardians: [guardianDid], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } };

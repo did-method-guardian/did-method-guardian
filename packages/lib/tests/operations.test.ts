@@ -268,8 +268,8 @@ test("REQ-4-2: verifySignerSig's own asOf parameter resolves a signer's key as o
   );
   const signedAt = new Date("2026-05-01T00:00:00Z"); // before rotatedAt
 
-  assert.equal(await verifySignerSig(op, "did:guardian:g1:example.com", op.sig!, resolve, signedAt), true, "verified as of when it was actually signed, against the key valid then");
-  assert.equal(await verifySignerSig(op, "did:guardian:g1:example.com", op.sig!, resolve), false, "verified with no asOf (i.e. 'now', after rotation) against the signer's current key must fail -- it's genuinely a different key");
+  assert.equal(await verifySignerSig(op, "did:guardian:example.com:g1", op.sig!, resolve, signedAt), true, "verified as of when it was actually signed, against the key valid then");
+  assert.equal(await verifySignerSig(op, "did:guardian:example.com:g1", op.sig!, resolve), false, "verified with no asOf (i.e. 'now', after rotation) against the signer's current key must fail -- it's genuinely a different key");
 });
 
 test("cidFor is deterministic for identical content", async () => {

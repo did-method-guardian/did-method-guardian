@@ -32,7 +32,7 @@ export interface Env {
   EMAIL?: SendEmail;
 }
 
-/** `name: null` builds the bare-domain identity (spec §2.1); domain is embedded as a single dot-joined string, never re-split into colon-joined labels (spec §2). */
+/** `name: null` builds the bare-domain identity (spec §2.1); domain is embedded as a single dot-joined string, never re-split into colon-joined labels (spec §2). Domain-first, matching did:web's own convention. */
 export function didFor(name: string | null, domain: string): string {
-  return name ? `did:guardian:${name}:${domain}` : `did:guardian:${domain}`;
+  return name ? `did:guardian:${domain}:${name}` : `did:guardian:${domain}`;
 }

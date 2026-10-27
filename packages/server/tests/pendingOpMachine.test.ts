@@ -12,9 +12,9 @@ import { pendingOperationMachine } from "../src/pendingOpMachine.js";
 import type { PendingOpEvent } from "../src/pendingOpMachine.js";
 
 const EVENT_CASES: PendingOpEvent[] = [
-  { type: "CONTRIBUTE", did: "did:guardian:g1:example.com", sig: "s1", satisfiedNow: false },
-  { type: "CONTRIBUTE", did: "did:guardian:g2:example.com", sig: "s2", satisfiedNow: true },
-  { type: "WITHDRAW", did: "did:guardian:g1:example.com" },
+  { type: "CONTRIBUTE", did: "did:guardian:example.com:g1", sig: "s1", satisfiedNow: false },
+  { type: "CONTRIBUTE", did: "did:guardian:example.com:g2", sig: "s2", satisfiedNow: true },
+  { type: "WITHDRAW", did: "did:guardian:example.com:g1" },
   { type: "DECLINE" },
   { type: "EXPIRE" },
   { type: "FINALIZED" },
@@ -70,12 +70,12 @@ test("the full reachable state set, from a not-yet-satisfied proposal, is exactl
 
 test("CONTRIBUTE always merges the new signature into context, whichever branch it takes", () => {
   const actor = createActor(pendingOperationMachine, { input: { collectedSigs: {}, satisfiedAtPropose: false } }).start();
-  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g1:example.com", sig: "s1", satisfiedNow: false });
-  assert.deepEqual(actor.getSnapshot().context.collectedSigs, { "did:guardian:g1:example.com": "s1" });
-  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g2:example.com", sig: "s2", satisfiedNow: true });
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:example.com:g1", sig: "s1", satisfiedNow: false });
+  assert.deepEqual(actor.getSnapshot().context.collectedSigs, { "did:guardian:example.com:g1": "s1" });
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:example.com:g2", sig: "s2", satisfiedNow: true });
   assert.deepEqual(actor.getSnapshot().context.collectedSigs, {
-    "did:guardian:g1:example.com": "s1",
-    "did:guardian:g2:example.com": "s2",
+    "did:guardian:example.com:g1": "s1",
+    "did:guardian:example.com:g2": "s2",
   });
   assert.equal(actor.getSnapshot().value, "satisfied");
 });
@@ -91,21 +91,21 @@ test("FINALIZE_FAILED keeps a satisfied proposal retriable rather than dead-endi
 
 test("WITHDRAW removes the withdrawing party's own signature and stays in collecting, never blocking others", () => {
   const actor = createActor(pendingOperationMachine, { input: { collectedSigs: {}, satisfiedAtPropose: false } }).start();
-  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g1:example.com", sig: "s1", satisfiedNow: false });
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:example.com:g1", sig: "s1", satisfiedNow: false });
   assert.equal(actor.getSnapshot().value, "collecting");
-  actor.send({ type: "WITHDRAW", did: "did:guardian:g1:example.com" });
+  actor.send({ type: "WITHDRAW", did: "did:guardian:example.com:g1" });
   assert.equal(actor.getSnapshot().value, "collecting");
   assert.deepEqual(actor.getSnapshot().context.collectedSigs, {});
   // a later signer can still bring it to satisfied -- withdrawing never blocks anyone else
-  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g2:example.com", sig: "s2", satisfiedNow: true });
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:example.com:g2", sig: "s2", satisfiedNow: true });
   assert.equal(actor.getSnapshot().value, "satisfied");
 });
 
 test("WITHDRAW for a DID with no existing signature is a safe no-op on context", () => {
-  const actor = createActor(pendingOperationMachine, { input: { collectedSigs: { "did:guardian:g2:example.com": "s2" }, satisfiedAtPropose: false } }).start();
-  actor.send({ type: "WITHDRAW", did: "did:guardian:g1:example.com" });
+  const actor = createActor(pendingOperationMachine, { input: { collectedSigs: { "did:guardian:example.com:g2": "s2" }, satisfiedAtPropose: false } }).start();
+  actor.send({ type: "WITHDRAW", did: "did:guardian:example.com:g1" });
   assert.equal(actor.getSnapshot().value, "collecting");
-  assert.deepEqual(actor.getSnapshot().context.collectedSigs, { "did:guardian:g2:example.com": "s2" });
+  assert.deepEqual(actor.getSnapshot().context.collectedSigs, { "did:guardian:example.com:g2": "s2" });
 });
 
 test("DECLINE from satisfied (the retry-after-finalize-failure window) still vetoes -- nothing is irreversible until actually finalized", () => {
@@ -120,11 +120,11 @@ test("DECLINE from satisfied (the retry-after-finalize-failure window) still vet
 test("machine.resolveState reconstructs a valid, resumable snapshot from plain {value, context} alone -- the shape pendingOps.ts persists to D1", () => {
   const resolved = pendingOperationMachine.resolveState({
     value: "collecting",
-    context: { collectedSigs: { "did:guardian:g1:example.com": "s1" }, satisfiedAtPropose: false },
+    context: { collectedSigs: { "did:guardian:example.com:g1": "s1" }, satisfiedAtPropose: false },
   });
   // `input` is only consulted when no snapshot is given, but XState's own types require it be passed regardless.
   const actor = createActor(pendingOperationMachine, { snapshot: resolved, input: resolved.context }).start();
   assert.equal(actor.getSnapshot().value, "collecting");
-  actor.send({ type: "CONTRIBUTE", did: "did:guardian:g2:example.com", sig: "s2", satisfiedNow: true });
+  actor.send({ type: "CONTRIBUTE", did: "did:guardian:example.com:g2", sig: "s2", satisfiedNow: true });
   assert.equal(actor.getSnapshot().value, "satisfied");
 });

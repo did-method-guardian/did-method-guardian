@@ -18,11 +18,13 @@ A registrar: an HTTP server operating one or more `did:guardian` namespaces, one
 ## 2. Identifier syntax
 
 ```
-did-guardian-identifier = "did:guardian:" [ name ":" ] domain
+did-guardian-identifier = "did:guardian:" domain [ ":" name ]
 name         = 3*32(ALPHA / DIGIT / "-")
 domain       = domain-label *( "." domain-label )
 domain-label = 1*63(ALPHA / DIGIT / "-")
 ```
+
+Domain-first, deliberately isomorphic to `did:web`'s own method-specific-id grammar (`did:web:<domain>:<path...>`) -- did:guardian is that same shape with at most one flat `name` segment, not a coincidence: it keeps a did:guardian identifier visually parallel to the equivalent `did:web:<domain>:<name>`, differing only in the method name, which matters if a future did:web-interop profile ever links the two.
 
 - <a id="req-2-1"></a>**REQ-2-1**: `name`, if present, *MUST* be lowercase ALPHA/DIGIT/"-" only, 3 to 32 characters, *MUST* start and end with ALPHA/DIGIT, and *MUST NOT* contain two consecutive "-" characters.
 - <a id="req-2-2"></a>**REQ-2-2**: `domain` *MUST* be written dot-joined, exactly as it appears in ordinary DNS usage (e.g. `acme.com`), never colon-joined.
@@ -149,7 +151,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 
 ## 8. Resolution
 
-- <a id="req-8-1"></a>**REQ-8-1**: Resolution *MUST* split the identifier on its first colon after the method name: no colon denotes the bare-domain identity; one colon denotes `name` then `domain`.
+- <a id="req-8-1"></a>**REQ-8-1**: Resolution *MUST* split the identifier on its first colon after the method name: no colon denotes the bare-domain identity; one colon denotes `domain` then `name`.
 - <a id="req-8-2"></a>**REQ-8-2**: A conformant registrar *MUST* expose, for each identity it hosts, reachable under `https://<domain>/.well-known/guardian/<name>` (or `.../guardian/_` for the bare-domain identity): `GET` the current derived document; `GET` the full operation log; `POST` one new signed operation. A registrar *MAY* expose additional surface; this specification does not constrain it.
 
 ## 9. Deactivation and data permanence

@@ -1,7 +1,7 @@
 // Core types for the did:guardian method.
-// See website/content/spec/v1/index.md for the full specification these mirror.
+// See website/content/docs/did-guardian-spec-v0.2.0/index.md for the full specification these mirror.
 
-export type Did = string; // "did:guardian:<domain>" (bare) or "did:guardian:<name>:<domain>" (named) -- domain is dot-joined, never colon-joined (see spec §2)
+export type Did = string; // "did:guardian:<domain>" (bare) or "did:guardian:<domain>:<name>" (named, domain-first -- matches did:web's own convention) -- domain is dot-joined, never colon-joined (see spec §2)
 
 /** One of the four consensus thresholds a GuardianPolicy knob may be set to. */
 export type Threshold = "any" | "majority" | "unanimous" | { at_least: number };

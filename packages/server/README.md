@@ -30,7 +30,7 @@ npm run db:migrate:remote
 npx wrangler secret put KEY_ENCRYPTION_KEY   # 32 random bytes, base64 -- e.g. `openssl rand -base64 32`
 ```
 
-Set `REGISTRAR_DOMAIN` in `wrangler.jsonc`'s `vars` to your actual domain (e.g. `acme.com`). Every identity this instance creates will be `did:guardian:<name>:<your>:<domain>`.
+Set `REGISTRAR_DOMAIN` in `wrangler.jsonc`'s `vars` to your actual domain (e.g. `acme.com`). Every identity this instance creates will be `did:guardian:<your-domain>:<name>`.
 
 ### 3. Route the Worker to your domain
 

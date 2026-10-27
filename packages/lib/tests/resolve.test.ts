@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseDid, wellKnownPath } from "../src/resolve.js";
 
-test("parseDid: named identity splits on the single colon", () => {
-  assert.deepEqual(parseDid("did:guardian:alice:acme.com"), { name: "alice", domain: "acme.com" });
+test("parseDid: named identity splits on the single colon, domain first", () => {
+  assert.deepEqual(parseDid("did:guardian:acme.com:alice"), { name: "alice", domain: "acme.com" });
 });
 
 test("parseDid: bare domain (no colon) has no name", () => {
@@ -11,7 +11,7 @@ test("parseDid: bare domain (no colon) has no name", () => {
 });
 
 test("parseDid: a subdomain name never collides with a bare subdomain identity -- the dot/colon split disambiguates both ways", () => {
-  assert.deepEqual(parseDid("did:guardian:www:example.com"), { name: "www", domain: "example.com" });
+  assert.deepEqual(parseDid("did:guardian:example.com:www"), { name: "www", domain: "example.com" });
   assert.deepEqual(parseDid("did:guardian:www.example.com"), { name: null, domain: "www.example.com" });
 });
 

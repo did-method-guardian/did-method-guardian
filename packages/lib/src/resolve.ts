@@ -1,11 +1,15 @@
 import type { Did } from "./types.js";
 
 /**
- * Splits an identifier into its (optional) name and registrar domain.
+ * Splits an identifier into its registrar domain and (optional) name.
  * Deterministic, single parse -- no retry/fallback needed (spec §2/§5): the
  * domain is always dot-joined and a name can never contain a dot, so
  * "one colon after the method name" vs. "none" fully disambiguates bare
- * (`did:guardian:acme.com`) from named (`did:guardian:alice:acme.com`).
+ * (`did:guardian:acme.com`) from named (`did:guardian:acme.com:alice`).
+ * Domain-first, matching did:web's own convention (`did:web:<domain>:
+ * <path...>`) -- did:guardian is the method-specific-id's domain followed
+ * by at most one flat name segment, a deliberate subset of that same
+ * grammar, not a coincidence.
  */
 export function parseDid(did: Did): { name: string | null; domain: string } {
   const parts = did.split(":");
@@ -13,11 +17,11 @@ export function parseDid(did: Did): { name: string | null; domain: string } {
     throw new Error(`not a valid did:guardian identifier: ${did}`);
   }
   const rest = parts.slice(2);
-  const domain = rest[rest.length - 1];
+  const domain = rest[0];
   if (rest.length < 1 || rest.length > 2 || !domain) {
     throw new Error(`not a valid did:guardian identifier: ${did}`);
   }
-  return rest.length === 1 ? { name: null, domain } : { name: rest[0], domain };
+  return rest.length === 1 ? { name: null, domain } : { name: rest[1], domain };
 }
 
 /**

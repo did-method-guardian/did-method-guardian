@@ -25,7 +25,7 @@ import type { Did, GuardianPolicy, ResolvedState } from "../src/types.js";
 
 function makeState(overrides: Partial<ResolvedState> = {}): ResolvedState {
   return {
-    did: "did:guardian:alice:example.com",
+    did: "did:guardian:example.com:alice",
     operationalKeys: [],
     verificationMethods: {},
     services: {},
@@ -54,7 +54,7 @@ async function signMap(payload: unknown, signerKeys: Record<Did, string>, signer
 
 test("REQ-7.1-1: genesis with non-empty incoming is rejected -- establishing a guardian directly at genesis is guardian_add's job now", () => {
   const result = checkGenesisShape({
-    incoming: ["did:guardian:board:example.com"],
+    incoming: ["did:guardian:example.com:board"],
     prev: null,
     operationalKeys: ["pk"],
     verificationMethods: { "key-1": "pk" },
@@ -120,7 +120,7 @@ test("REQ-2-1: names with consecutive hyphens, too short, or non-alphanumeric ed
 
 test("REQ-7.2-1(a): a ward's own single operational key alone satisfies rotation, regardless of recovery_threshold", async () => {
   const ward = await generateKeypair();
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const state = makeState({ did: wardDid, guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "unanimous" } });
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
   const sig = await signPayload(partial, ward.privateKey);
@@ -130,9 +130,9 @@ test("REQ-7.2-1(a): a ward's own single operational key alone satisfies rotation
 });
 
 test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate without the ward's own key", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
-  const g2Did = "did:guardian:g2:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
+  const g2Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({
@@ -163,8 +163,8 @@ test("REQ-4-2 regression: a guardian signature collected before that guardian's 
   // key. A resolver that only ever reports "current" (ignoring asOf, the
   // bug this fixes) would see the new key and reject g1's own, perfectly
   // legitimate T1 signature.
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
   const g1OldKey = await generateKeypair();
   const g1NewKey = await generateKeypair();
   const rotatedAt = new Date("2026-06-01T00:00:00Z");
@@ -188,9 +188,9 @@ test("REQ-4-2 regression: a guardian signature collected before that guardian's 
 });
 
 test("REQ-4-4: a deactivated guardian's signature no longer counts toward recovery_threshold", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
-  const g2Did = "did:guardian:g2:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
+  const g2Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({
@@ -236,9 +236,9 @@ test("REQ-6-9: a rotation accepted 72h or more ago is outside the recovery windo
 // --- REQ-7.2-3/4/5, REQ-5-5: guardian_add -------------------------------
 
 test("REQ-7.2-5: zero-to-one guardian_add requires both the incoming guardian's own key and the ward's own operational key", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
-  const incomingDid = "did:guardian:board:example.com";
+  const incomingDid = "did:guardian:example.com:board";
   const incoming = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const partial = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0" };
@@ -257,9 +257,9 @@ test("REQ-7.2-5: zero-to-one guardian_add requires both the incoming guardian's 
 });
 
 test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's own key plus enough of the current guardians to meet addition_threshold", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
-  const incomingDid = "did:guardian:newguy:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
+  const incomingDid = "did:guardian:example.com:newguy";
   const g1 = await generateKeypair();
   const incoming = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, addition_threshold: "majority" } });
@@ -289,8 +289,8 @@ test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's
 });
 
 test("REQ-7.2-5: guardian_add's requiredSigners lists the ward itself only for the zero-to-one case", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const incomingDid = "did:guardian:newguy:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const incomingDid = "did:guardian:example.com:newguy";
   const state = makeState({ did: wardDid, guardians: [] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
   const required = await OPERATION_RULES.guardian_add.requiredSigners({ type: "guardian_add", incoming: incomingDid, prev: "cid0", sigs: {} }, ctx);
@@ -298,7 +298,7 @@ test("REQ-7.2-5: guardian_add's requiredSigners lists the ward itself only for t
 });
 
 test("REQ-7.2-7(b) regression: guardian_remove's requiredSigners lists the OTHER current guardians, not just outgoing -- the forced path's real signers", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
@@ -307,8 +307,8 @@ test("REQ-7.2-7(b) regression: guardian_remove's requiredSigners lists the OTHER
 });
 
 test("REQ-7.2-1 regression: custodial_rotate's requiredSigners lists the live guardian committee too, not just the ward", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
   const required = await OPERATION_RULES.custodial_rotate.requiredSigners(
@@ -319,8 +319,8 @@ test("REQ-7.2-1 regression: custodial_rotate's requiredSigners lists the live gu
 });
 
 test("REQ-7.3-1 regression: custodial_tombstone's requiredSigners lists the live guardian committee too, not just the ward", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
   const required = await OPERATION_RULES.custodial_tombstone.requiredSigners({ type: "custodial_tombstone", prev: "cid0", sigs: {} }, ctx);
@@ -328,8 +328,8 @@ test("REQ-7.3-1 regression: custodial_tombstone's requiredSigners lists the live
 });
 
 test("REQ-7.2-3: guardian_add naming an already-current guardian is rejected", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
   const g1 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const partial = { type: "guardian_add" as const, incoming: g1Did, prev: "cid0" };
@@ -340,7 +340,7 @@ test("REQ-7.2-3: guardian_add naming an already-current guardian is rejected", a
 });
 
 test("REQ-7.2-11: a ward cannot name itself as its own guardian, even zero-to-one with its own key alone", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const partial = { type: "guardian_add" as const, incoming: wardDid, prev: "cid0" };
@@ -354,9 +354,9 @@ test("REQ-7.2-11: a ward cannot name itself as its own guardian, even zero-to-on
 // --- REQ-7.2-6/7, REQ-5-4, REQ-5-7: guardian_remove ----------------------
 
 test("REQ-7.2-7(a): a guardian can always voluntarily remove itself", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
-  const g2Did = "did:guardian:g2:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
+  const g2Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did] });
@@ -368,9 +368,9 @@ test("REQ-7.2-7(a): a guardian can always voluntarily remove itself", async () =
 });
 
 test("REQ-7.2-7(b) regression: at exactly two guardians, forced removal is unreachable -- majority of the FULL set (N=2 -> M=2) can never be met by the one remaining guardian alone", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
-  const g2Did = "did:guardian:g2:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
+  const g2Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, removal_threshold: "majority" } });
@@ -387,7 +387,7 @@ test("REQ-7.2-7(b) regression: at exactly two guardians, forced removal is unrea
 });
 
 test("REQ-7.2-7(b): at three guardians, two of the other three meeting majority can forcibly remove the third", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const [g1Did, g2Did, g3Did] = ["g1", "g2", "g3"].map((n) => `did:guardian:${n}:example.com`);
   const [g1, g2, g3] = await Promise.all([generateKeypair(), generateKeypair(), generateKeypair()]);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did, g3Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, removal_threshold: "majority" } });
@@ -399,8 +399,8 @@ test("REQ-7.2-7(b): at three guardians, two of the other three meeting majority 
 });
 
 test("REQ-7.2-6: removing the only current guardian is rejected -- guardian_relinquish is the correct operation for full dissolution", async () => {
-  const wardDid = "did:guardian:alice:example.com";
-  const g1Did = "did:guardian:g1:example.com";
+  const wardDid = "did:guardian:example.com:alice";
+  const g1Did = "did:guardian:example.com:g1";
   const g1 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const partial = { type: "guardian_remove" as const, outgoing: g1Did, prev: "cid0" };
@@ -411,7 +411,7 @@ test("REQ-7.2-6: removing the only current guardian is rejected -- guardian_reli
 });
 
 test("REQ-5-7: guardian_remove is rejected if it would bring the guardian count below min_guardian_count, even if otherwise satisfied", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const [g1Did, g2Did, g3Did] = ["g1", "g2", "g3"].map((n) => `did:guardian:${n}:example.com`);
   const [g1, g2, g3] = await Promise.all([generateKeypair(), generateKeypair(), generateKeypair()]);
   const state = makeState({
@@ -429,7 +429,7 @@ test("REQ-5-7: guardian_remove is rejected if it would bring the guardian count 
 // --- REQ-7.2-8, REQ-5-4: guardian_relinquish ------------------------------
 
 test("REQ-7.2-8: guardian_relinquish needs enough current guardians to meet removal_threshold, evaluated against the full set", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
   const [g1, g2] = await Promise.all([generateKeypair(), generateKeypair()]);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, removal_threshold: "unanimous" } });
@@ -447,7 +447,7 @@ test("REQ-7.2-8: guardian_relinquish needs enough current guardians to meet remo
 // --- REQ-7.2-9/10, REQ-5-6: policy_update ---------------------------------
 
 test("REQ-7.2-10: policy_update is rejected while the current guardian set is empty", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const state = makeState({ did: wardDid, guardians: [] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
   const op = { type: "policy_update" as const, policy: { ...DEFAULT_GUARDIAN_POLICY }, prev: "cid0", sigs: {} };
@@ -457,7 +457,7 @@ test("REQ-7.2-10: policy_update is rejected while the current guardian set is em
 });
 
 test("REQ-5-6: policy_update is evaluated against the CURRENT policy_threshold, never the proposed new one", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
   const [g1, g2] = await Promise.all([generateKeypair(), generateKeypair()]);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, policy_threshold: "any" } });
@@ -472,7 +472,7 @@ test("REQ-5-6: policy_update is evaluated against the CURRENT policy_threshold, 
 // --- REQ-7.3-1, REQ-5-3: custodial_tombstone ------------------------------
 
 test("REQ-7.3-1: the ward's own key alone satisfies tombstone under the default any-threshold", async () => {
-  const wardDid = "did:guardian:alice:example.com";
+  const wardDid = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const partial = { type: "custodial_tombstone" as const, prev: "cid0" };
@@ -485,9 +485,9 @@ test("REQ-7.3-1: the ward's own key alone satisfies tombstone under the default 
 // --- liveGuardians / REQ-4-4 helper --------------------------------------
 
 test("REQ-4-4: liveGuardians excludes a deactivated guardian from the current set entirely", async () => {
-  const state = makeState({ guardians: ["did:guardian:g1:example.com", "did:guardian:g2:example.com"] });
-  const live = await liveGuardians(state, (did) => did !== "did:guardian:g1:example.com");
-  assert.deepEqual(live, ["did:guardian:g2:example.com"]);
+  const state = makeState({ guardians: ["did:guardian:example.com:g1", "did:guardian:example.com:g2"] });
+  const live = await liveGuardians(state, (did) => did !== "did:guardian:example.com:g1");
+  assert.deepEqual(live, ["did:guardian:example.com:g2"]);
 });
 
 // --- REQ-5-1: threshold formula property tests ----------------------------

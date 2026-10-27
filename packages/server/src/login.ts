@@ -6,7 +6,7 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
 /**
  * Liberal in what it accepts: "alice", "alice@acme.com", "alice:acme.com",
- * and "did:guardian:alice:acme.com" all mean the same thing on a login
+ * and "did:guardian:acme.com:alice" all mean the same thing on a login
  * form, since the domain part is implied by whichever registrar is
  * actually being asked -- strict in what it produces, every other page
  * this registrar renders only ever shows the bare name. Whatever domain
@@ -14,10 +14,21 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
  * registrar's own -- it isn't security-relevant, since the login_secret
  * itself is what actually authenticates; a wrong name (with or without a
  * domain tacked on) just fails to match any account, same as today.
+ *
+ * A full "did:guardian:" string is domain-first (the DID's own grammar,
+ * matching did:web) and needs its *last* segment as the name; the
+ * shorthand forms ("alice@acme.com", "alice:acme.com") stay name-first,
+ * matching the email-address convention humans already expect -- two
+ * different, deliberately independent conventions for the same entity,
+ * same as how an email address and a URL path order "alice at acme"
+ * differently without anyone finding that confusing.
  */
 function normalizeLoginName(input: string): string {
-  let s = input.trim();
-  if (s.startsWith("did:guardian:")) s = s.slice("did:guardian:".length);
+  const s = input.trim();
+  if (s.startsWith("did:guardian:")) {
+    const rest = s.slice("did:guardian:".length).split(":");
+    return rest.length > 1 ? rest[rest.length - 1] : rest[0];
+  }
   const sepIdx = s.search(/[@:]/);
   return sepIdx === -1 ? s : s.slice(0, sepIdx);
 }

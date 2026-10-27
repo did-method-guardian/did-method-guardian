@@ -124,7 +124,7 @@ Always `sub`/`name`. `email`/`email_verified` are included only when the access 
 
 ### 5.6 Finding the right registrar (discovery)
 
-This is a client-side problem, not a missing endpoint -- a Guardian identifier already names its own registrar (`name:domain`), so an RP's own "Login with Guardian" button just needs to turn a person's `alice@acme.com`-shaped input into that domain's own `/.well-known/openid-configuration`, then redirect through the ordinary flow above. A minimal reference implementation:
+This is a client-side problem, not a missing endpoint -- a Guardian identifier already names its own registrar (`domain:name`), so an RP's own "Login with Guardian" button just needs to turn a person's `alice@acme.com`-shaped input into that domain's own `/.well-known/openid-configuration`, then redirect through the ordinary flow above. A minimal reference implementation:
 
 ```js
 async function loginWithGuardian(identifier, redirectUri) {
@@ -193,7 +193,7 @@ POST /token
 {
   "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
   "subject_token": "<the caller's own access token>",
-  "resource": "did:guardian:some-agent:acme.com",
+  "resource": "did:guardian:acme.com:some-agent",
   "client_id": "...", "client_secret": "..."
 }
 ```
