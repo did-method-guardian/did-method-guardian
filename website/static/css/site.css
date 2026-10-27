@@ -299,21 +299,137 @@ footer {
   overflow: hidden;
 }
 
-/* Pico centers nav items on their own box (border + padding included),
-   which visibly sits a "Log in" role=button a pixel or two off the text
-   baseline of its plain-link siblings -- align by baseline instead,
-   like any other mixed text+button inline row. */
-.site-header nav ul {
-  align-items: baseline;
+/* Nav (every page) -- brand left, links + Log in right, 20px 32px padding. */
+.site-header {
+  padding: 20px var(--gutter);
 }
-
+.nav-inner {
+  max-width: var(--container);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
 .brand {
-  font-weight: 700;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   text-decoration: none;
+  color: var(--text);
+}
+.brand-mark {
+  display: block;
+}
+.brand-word {
+  font: 500 17px var(--font-body);
 }
 .brand-dim {
-  opacity: 0.5;
+  color: var(--muted-500);
+  opacity: 1;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 14px;
+  margin-right: auto;
+  margin-left: 40px;
+}
+.nav-links a {
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-links a:hover {
+  color: var(--blue);
+}
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-login {
+  font-size: 13px;
+  padding: 7px 14px;
+}
+.nav-menu-btn {
+  display: none;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 22px;
+}
+.nav-menu-btn:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.nav-mobile-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0 var(--gutter) 16px;
+  max-width: var(--container);
+  margin: 0 auto;
+}
+.nav-mobile-panel a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  font-size: 16px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+/* Docs pages give Log in a solid-blue treatment instead of the landing
+   page's own outlined-clay default -- see layouts' own body class. */
+body.page-docs .nav-login {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: var(--cream);
+}
+body.page-docs .nav-login:hover {
+  background: var(--blue-hover);
+  border-color: var(--blue-hover);
+}
+@media (max-width: 720px) {
+  .nav-links {
+    display: none;
+  }
+  .nav-menu-btn {
+    display: flex;
+  }
+}
+
+/* Footer (every page). */
+.site-footer {
+  padding: 48px var(--gutter) 0;
+  max-width: var(--container);
+  margin: 0 auto;
+}
+.footer-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 24px;
+}
+.footer-top small {
+  color: var(--muted-500);
+  font-size: 13px;
+}
+.footer-links {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  font-size: 13px;
+}
+.footer-links a {
+  color: var(--clay-deep);
+  text-decoration: underline;
 }
 
 .hero {

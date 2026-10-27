@@ -1,13 +1,47 @@
-<header class='site-header container'>
-  <nav>
-    <ul>
-      <li><a class='brand' href='/'>did<span class='brand-dim'>:</span>guardian</a></li>
-    </ul>
-    <ul>
-      <li><a href='/docs/did-guardian-spec-v0.2.0/'>Spec</a></li>
-      <li><a href='/docs/'>Docs</a></li>
-      <li><a href='https://github.com/did-method-guardian/did-method-guardian'>GitHub</a></li>
-      <li><a role='button' href='/guardian-login'>Log in</a></li>
-    </ul>
+<header class='site-header'>
+  <nav class='nav-inner'>
+    <a class='brand' href='/'>
+      <img src='/img/guardian-mark.svg' alt='' class='brand-mark' width='30' height='30'>
+      <span class='brand-word'><span class='brand-dim'>did:</span>guardian</span>
+    </a>
+    <div class='nav-links'>
+      <a href='/docs/did-guardian-spec-v0.2.0/'>Spec</a>
+      <a href='/docs/'>Docs</a>
+      <a href='https://github.com/did-method-guardian/did-method-guardian'>GitHub</a>
+    </div>
+    <div class='nav-right'>
+      <a class='btn btn-outline nav-login' href='/guardian-login'>Log in</a>
+      <button class='nav-menu-btn' data-menu-toggle aria-label='Menu'>
+        <i class='ph ph-list'></i>
+      </button>
+    </div>
   </nav>
+  <div class='nav-mobile-panel' data-mobile-panel hidden>
+    <a href='/docs/did-guardian-spec-v0.2.0/'>Spec<i class='ph ph-caret-right'></i></a>
+    <a href='/docs/'>Docs<i class='ph ph-caret-right'></i></a>
+    <a href='https://github.com/did-method-guardian/did-method-guardian'>GitHub<i class='ph ph-arrow-up-right'></i></a>
+  </div>
 </header>
+<script>
+(function () {
+  var btn = document.querySelector('[data-menu-toggle]');
+  var panel = document.querySelector('[data-mobile-panel]');
+  if (!btn || !panel) return;
+  var icon = btn.querySelector('i');
+  var open = false;
+  function setOpen(v) {
+    open = v;
+    panel.hidden = !v;
+    if (icon) icon.className = v ? 'ph ph-x' : 'ph ph-list';
+  }
+  btn.addEventListener('click', function () {
+    setOpen(!open);
+  });
+  // Closes on crossing the 720px breakpoint either direction, so a panel
+  // left open narrow never lingers stale once the layout goes wide (where
+  // CSS alone already hides it) or reappears stuck open if narrowed again.
+  window.addEventListener('resize', function () {
+    if (open) setOpen(false);
+  });
+})();
+</script>
