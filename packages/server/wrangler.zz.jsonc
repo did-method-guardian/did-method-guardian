@@ -26,7 +26,11 @@
     // which Cloudflare matches by specificity -- these take precedence over
     // zz-maintainer's catch-all for exactly these paths, nothing else.
     "REGISTRAR_DOMAIN": "zzmq.dev",
-    "EMAIL_PROVIDER": "cloudflare-native"
+    "EMAIL_PROVIDER": "cloudflare-native",
+    // Accepts guardianspec.org's own access tokens at bearer-token-gated
+    // endpoints (verifyAccessToken) -- the real need: a guardian zz's own
+    // Managed Identity API relies on doesn't have to be a zzmq.dev identity.
+    "FEDERATED_TRUSTED_ISSUERS": "guardianspec.org"
   },
   // Trailing "*" on every one of these, even ones with no further real
   // path to match -- confirmed live, empirically: a non-wildcard exact-

@@ -4,6 +4,13 @@ export interface Env {
   DB: D1Database;
   KEY_ENCRYPTION_KEY: string; // base64, 32 bytes, AES-GCM -- set via `wrangler secret put`
   REGISTRAR_DOMAIN: string; // e.g. "guardianspec.org"
+  // Comma-separated registrar domains whose own access tokens this
+  // instance accepts at bearer-token-gated endpoints (verifyAccessToken),
+  // not just its own -- the Managed Identity API's own real need: a
+  // guardian's identity doesn't have to live on this same registrar. An
+  // operator opts a federated peer in explicitly; empty/unset means this
+  // registrar only ever trusts its own tokens, same as before this existed.
+  FEDERATED_TRUSTED_ISSUERS?: string;
   // OIDC signing key, set once per deployment -- see oidc.ts
   OIDC_SIGNING_KEY?: string;
   // Optional pre-seeded keypair for this instance's own bare-domain root

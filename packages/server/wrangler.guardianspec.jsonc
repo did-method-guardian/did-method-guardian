@@ -21,7 +21,12 @@
   "send_email": [{ "name": "EMAIL" }],
   "vars": {
     "REGISTRAR_DOMAIN": "guardianspec.org",
-    "EMAIL_PROVIDER": "cloudflare-native"
+    "EMAIL_PROVIDER": "cloudflare-native",
+    // Mutual with wrangler.zz.jsonc's own entry -- these two reference
+    // registrars trust each other's tokens for cross-registrar flows
+    // (e.g. a guardianspec.org-hosted guardian creating a managed
+    // identity on zzmq.dev, confirmed live, and the reverse).
+    "FEDERATED_TRUSTED_ISSUERS": "zzmq.dev"
   },
   // Explicit routes (not a wildcard catch-all on the zone) -- this domain
   // also hosts the method's own docs site (website/), which this registrar

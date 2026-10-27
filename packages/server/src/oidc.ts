@@ -20,7 +20,7 @@ import {
   getVerifiedForwardingByDid,
 } from "./db.js";
 import { encryptSecret, decryptSecret, randomSecret, hashSecret } from "./secretBox.js";
-import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, type SigningKeypair } from "./jwt.js";
+import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, decodeJwtUnsafe, type SigningKeypair } from "./jwt.js";
 import { verifyLogin, createLoginSession, resolveSession, readCookie } from "./login.js";
 import { html, escapeHtml, pageStyles } from "./htmlPage.js";
 
@@ -663,25 +663,68 @@ export interface VerifiedAccessToken {
   scope: string[];
 }
 
+/** Fetches and caches-for-this-request a foreign registrar's own JWKS, importing the key matching `kid`. No local caching across requests yet -- correctness first; a real cache is a reasonable follow-up once this sees enough traffic to matter. */
+async function fetchForeignPublicKey(issuer: string, kid: string): Promise<CryptoKey | null> {
+  try {
+    const resp = await fetch(`${issuer}/.well-known/jwks.json`);
+    if (!resp.ok) return null;
+    const jwks = (await resp.json()) as { keys?: Array<JsonWebKey & { kid?: string }> };
+    const jwk = jwks.keys?.find((k) => k.kid === kid);
+    if (!jwk) return null;
+    return await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Shared bearer-token verification -- originally handleUserinfo's own
  * inline logic, now also used by registerPage.ts's own managed-identity
  * creation path (REQ: a managed identity's guardian must be derived from
  * a real, scope-checked access token's own sub, never a client-supplied
- * free-text field -- see that file's own header comment for why).
+ * free-text field -- see that file's own header comment for why) and by
+ * handleTokenExchangeGrant's own subject_token check.
+ *
+ * Accepts tokens issued by this registrar itself, or (new) by any other
+ * registrar this operator explicitly trusts (FEDERATED_TRUSTED_ISSUERS) --
+ * the real gap a cross-registrar Managed Identity API call surfaced: a
+ * guardian's own identity doesn't have to live on this same registrar,
+ * so a token proving who they are doesn't either. The issuer is read from
+ * the token's own (unverified at this point) `iss` claim, then the token
+ * is verified against *that* issuer's own key -- never trusted just
+ * because it claims to be from a trusted domain. An issuer this operator
+ * hasn't explicitly trusted is rejected outright, same as an issuer that
+ * doesn't match this registrar's own domain at all.
+ *
+ * jti revocation (oidc_revoked_jti) is only ever checked for this
+ * registrar's own tokens -- a foreign registrar's own revocation table
+ * isn't visible here, the same limitation any JWT-based federation has
+ * without a shared introspection endpoint. Short token TTLs bound the
+ * exposure; this isn't solved further here.
  */
 export async function verifyAccessToken(env: Env, token: string): Promise<VerifiedAccessToken | null> {
-  const keypair = await getOrCreateSigningKeypair(env);
-  const publicKey = await crypto.subtle.importKey(
-    "jwk",
-    keypair.publicKeyJwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["verify"],
-  );
+  const decoded = decodeJwtUnsafe(token);
+  if (!decoded || typeof decoded.header.kid !== "string") return null;
+  const issuer = typeof decoded.payload.iss === "string" ? decoded.payload.iss : null;
+  const selfIssuer = `https://${env.REGISTRAR_DOMAIN}`;
+
+  let publicKey: CryptoKey | null;
+  let checkLocalRevocation: boolean;
+  if (issuer === selfIssuer) {
+    const keypair = await getOrCreateSigningKeypair(env);
+    publicKey = await crypto.subtle.importKey("jwk", keypair.publicKeyJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+    checkLocalRevocation = true;
+  } else {
+    const trusted = (env.FEDERATED_TRUSTED_ISSUERS ?? "").split(",").map((d) => d.trim()).filter(Boolean);
+    if (!issuer || !trusted.includes(new URL(issuer).hostname)) return null;
+    publicKey = await fetchForeignPublicKey(issuer, decoded.header.kid);
+    checkLocalRevocation = false;
+  }
+  if (!publicKey) return null;
+
   const payload = await verifyJwt(token, publicKey);
   if (!payload || typeof payload.sub !== "string") return null;
-  if (typeof payload.jti === "string" && (await isJtiRevoked(env, payload.jti))) return null;
+  if (checkLocalRevocation && typeof payload.jti === "string" && (await isJtiRevoked(env, payload.jti))) return null;
   const scope = typeof payload.scope === "string" ? payload.scope.split(/\s+/).filter(Boolean) : [];
   return { sub: payload.sub, scope };
 }

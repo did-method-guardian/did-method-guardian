@@ -70,4 +70,18 @@ export async function verifyPkce(codeVerifier: string, codeChallenge: string): P
   return b64url(digest) === codeChallenge;
 }
 
-export { b64url };
+/** Decodes a JWT's header and payload without verifying its signature -- only safe to use to decide *how* to verify (which issuer's own key to fetch), never as a substitute for verifyJwt's own signature check. */
+export function decodeJwtUnsafe(token: string): { header: Record<string, unknown>; payload: Record<string, unknown> } | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    return {
+      header: JSON.parse(new TextDecoder().decode(b64urlDecode(parts[0]))),
+      payload: JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1]))),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export { b64url, b64urlDecode };
