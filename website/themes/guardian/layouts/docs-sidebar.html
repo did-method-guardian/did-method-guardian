@@ -40,6 +40,7 @@
   }
   var list = document.createElement('ul');
   list.className = 'toc';
+  var linkByHeadingId = {};
   headings.forEach(function (h) {
     if (!h.id) return;
     var li = document.createElement('li');
@@ -48,8 +49,49 @@
     a.textContent = h.textContent.replace(/#$/, '').trim();
     li.appendChild(a);
     list.appendChild(li);
+    linkByHeadingId[h.id] = a;
   });
   toc.appendChild(list);
+
+  // Scroll-syncs the "on this page" list -- the active heading is the
+  // last one (in document order) whose own top edge has scrolled above a
+  // fixed line near the top of the viewport. An IntersectionObserver keyed
+  // on "is this heading within the top N% of the viewport" sounds like
+  // the obvious tool here, but it isn't: a long section's own heading
+  // spends almost its whole scroll life in the MIDDLE of the viewport, so
+  // the "visible" set is empty most of the time and nothing ever gets
+  // marked active -- confirmed live, not a theoretical concern. Plain
+  // scroll-position math has no such gap.
+  var activeLink = null;
+  function setActive(id) {
+    var next = id ? linkByHeadingId[id] : null;
+    if (next === activeLink) return;
+    if (activeLink) activeLink.classList.remove('active');
+    if (next) next.classList.add('active');
+    activeLink = next || null;
+  }
+  var TRIGGER_LINE_PX = 120;
+  var ticking = false;
+  function updateActive() {
+    ticking = false;
+    var current = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].getBoundingClientRect().top <= TRIGGER_LINE_PX) current = headings[i].id;
+      else break;
+    }
+    setActive(current || headings[0].id);
+  }
+  window.addEventListener(
+    'scroll',
+    function () {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(updateActive);
+      }
+    },
+    { passive: true },
+  );
+  updateActive();
 })();
 </script>
 </body>

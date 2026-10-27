@@ -112,6 +112,7 @@
   top: 1.5rem;
   max-height: calc(100vh - 3rem);
   overflow-y: auto;
+  text-align: left;
 }
 .toc-label {
   font-size: 0.78rem;
@@ -126,6 +127,7 @@ ul.toc {
   padding: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch; /* Pico's own `nav ul { align-items: center }` base rule otherwise wins (this list lives inside a <nav>) and centers each shorter item instead of stretching it full-width -- confirmed live via computed styles, not guessed. */
   gap: 0.05rem;
 }
 ul.toc a {
@@ -140,6 +142,10 @@ ul.toc a {
 ul.toc a:hover {
   color: var(--pico-color);
   background: var(--pico-code-background-color);
+}
+ul.toc a.active {
+  color: var(--guardian-accent);
+  font-weight: 600;
 }
 @media (max-width: 75rem) {
   .toc-sidebar {
