@@ -16,6 +16,16 @@ Every identity method examined while designing this either coupled identity to i
 
 See the [specification](website/content/docs/index.md), or the live copy at [guardianspec.org/docs](https://guardianspec.org/docs/).
 
+## Self-hosting: the bare-domain root identity
+
+Every deployment of `packages/server` auto-provisions one bare-domain identity (`did:guardian:<your-domain>`, e.g. `did:guardian:acme.com`) the first time anything resolves it -- it's never registered the way a named ward is, since there's exactly one per deployment and it belongs to whoever legitimately operates the domain, by construction. It attests every other ward's own genesis operation (the `registrar` field on `custodial_create`), and -- once given a login credential -- is otherwise a fully usable identity like any other: it can log in, rotate its own operational key, deactivate itself, and so on (everything except email forwarding, which needs a real local-part address this identity doesn't have).
+
+A fresh deployment generates its own keypair for this identity automatically. An operator who wants to bring their own key material instead (migrating from somewhere, or managing it outside this registrar's own custodial encryption) sets both `ROOT_WARD_PUBLIC_KEY` and `ROOT_WARD_PRIVATE_KEY` via `wrangler secret put` -- both or neither.
+
+**To actually log in as this identity**, set `ROOT_WARD_LOGIN_SECRET` (also via `wrangler secret put`) to a password of your choosing -- there's no registration flow to set one through otherwise. This takes effect the next time the root identity is accessed, whether that's its first creation on a brand-new deployment or a one-time lazy upgrade on one that's already running (no redeploy or migration needed beyond setting the secret). Sign in with the name field left as `_`, or your bare domain, or `@your-domain` -- all three mean the same thing.
+
+See `packages/server/src/env.ts` for the complete list of environment variables this registrar reads.
+
 ## License
 
 This project is dual-licensed under MIT and Apache 2.0 terms:

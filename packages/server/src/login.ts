@@ -1,6 +1,6 @@
 import type { Env } from "./env.js";
 import { getWardByName, getLoginSession, insertLoginSession } from "./db.js";
-import { hashSecret, randomSecret } from "./secretBox.js";
+import { verifyCredential, randomSecret } from "./secretBox.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
@@ -33,11 +33,21 @@ function normalizeLoginName(input: string): string {
   return sepIdx === -1 ? s : s.slice(0, sepIdx);
 }
 
+/**
+ * "_" or this registrar's own bare domain, typed with no name at all, means
+ * the bare-domain root identity (wards.name's own "" sentinel) -- the same
+ * identity "@acme.com" already reaches today, by construction: normalizeLoginName
+ * splits on the first "@"/":" it finds, and one sitting at position 0 slices
+ * down to "" already. Checked here (verifyLogin has `env`; normalizeLoginName
+ * stays a pure function with no env dependency) rather than inside
+ * normalizeLoginName itself.
+ */
 export async function verifyLogin(env: Env, name: string, loginSecret: string): Promise<string | null> {
-  const ward = await getWardByName(env, normalizeLoginName(name));
+  const trimmed = name.trim();
+  const normalized = trimmed === "_" || trimmed === env.REGISTRAR_DOMAIN ? "" : normalizeLoginName(name);
+  const ward = await getWardByName(env, normalized);
   if (!ward || !ward.login_secret_hash) return null;
-  const hash = await hashSecret(loginSecret);
-  if (hash !== ward.login_secret_hash) return null;
+  if (!(await verifyCredential(loginSecret, ward.login_secret_hash))) return null;
   return ward.did;
 }
 

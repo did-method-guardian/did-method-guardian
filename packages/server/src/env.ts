@@ -21,6 +21,19 @@ export interface Env {
   // first access. Both or neither -- set only one and the other is ignored.
   ROOT_WARD_PUBLIC_KEY?: string;
   ROOT_WARD_PRIVATE_KEY?: string;
+  // The root identity's own login credential -- the only way it ever gets
+  // one, since (same reasoning as the key pair above) there's no
+  // registration flow to set one through: this identity is claimed by
+  // construction, by whoever legitimately operates the domain, not by
+  // request. Set by the operator (the only party who can plausibly prove
+  // that, same trust model as the key-pair secrets above) via `wrangler
+  // secret put`; getOrCreateRootWard (registrar.ts) hashes and stores it
+  // the first time it's seen, whether that's at this identity's own
+  // creation or lazily on an already-provisioned deployment that didn't
+  // have this secret set yet. Unset means the root identity still
+  // resolves and attests other wards' genesis correctly, it just can't
+  // log in anywhere.
+  ROOT_WARD_LOGIN_SECRET?: string;
   // Outbound email (emailProviders.ts) -- which provider this deployment
   // uses, and that provider's own API key. Never hardcoded to one vendor:
   // "mailchannels" | "resend" | "cloudflare-native" | "log" (dev-only,

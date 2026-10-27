@@ -96,9 +96,14 @@ export default {
           return json(result, 201);
         }
         if (suffix === "/email" && request.method === "POST") {
-          // Out of scope for the bare-domain root identity in this pass --
-          // not attempted here rather than half-wired (email forwarding's
-          // own name-keyed lookups assume a real registered name).
+          // The one deliberate exception to the root identity now working
+          // like any other ward (rotate/tombstone/relinquish/remove-self/
+          // remove/adopt/login-secret reissue all do) -- a real, not just
+          // cautious, blocker: inbound mail routing (handleEmail, email.ts)
+          // is name-keyed at the local-part level (message.to.split("@")[0]
+          // -> getWardByName), and the bare-domain identity has no local
+          // part to receive at in the first place ("@acme.com" with
+          // nothing before the "@" isn't a deliverable address).
           if (name === null) return error("email forwarding is not available for the bare-domain identity", 400);
           // Either the ward itself (an active gw_session for its own DID)
           // or a trusted OIDC client (clientAuth.ts) may set up forwarding
@@ -123,15 +128,19 @@ export default {
           // itself (an active gw_session for its own DID) or a trusted
           // OIDC client acting on an already-authenticated session of its
           // own may reissue this -- never an arbitrary caller for a DID
-          // that isn't theirs.
-          if (name === null) return error("the bare-domain identity has no login secret to reissue", 400);
+          // that isn't theirs. Works for the bare-domain root identity
+          // too, now that it can have a login secret at all (env.ts's own
+          // ROOT_WARD_LOGIN_SECRET) -- targetName below ("" for root,
+          // same as reissueLoginSecret's own name param expects).
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
           const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to reissue its login secret", 403);
           }
-          const loginSecret = await reissueLoginSecret(env, name);
+          const body = (await request.json().catch(() => ({}))) as { password?: string };
+          const loginSecret = await reissueLoginSecret(env, targetName, body.password);
           return json({ ok: true, login_secret: loginSecret });
         }
         if (suffix === "/rotate" && request.method === "POST") {
@@ -147,14 +156,14 @@ export default {
           // in a NEW guardian, guardian_transfer, is reached only
           // through /operations, pre-signed, since that hands new
           // authority to a party who never consented here).
-          if (name === null) return error("the bare-domain identity's own key isn't rotatable through this path", 400);
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
           const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
           }
-          const result = await rotateWard(env, name);
+          const result = await rotateWard(env, targetName);
           return json({ ok: true, did: result.did, document: result.document });
         }
         if (suffix === "/relinquish" && request.method === "POST") {
@@ -165,14 +174,14 @@ export default {
           // client-or-self-session gate is enough -- see relinquishWard's
           // own comment for why this is NOT extended to the general
           // guardian_transfer case.
-          if (name === null) return error("the bare-domain identity's own guardians aren't relinquishable through this path", 400);
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
           const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to relinquish its guardians", 403);
           }
-          const result = await relinquishWard(env, name);
+          const result = await relinquishWard(env, targetName);
           return json({ ok: true, did: result.did, document: result.document });
         }
         if (suffix === "/tombstone" && request.method === "POST") {
@@ -180,14 +189,14 @@ export default {
           // the ward's own operational key (tombstone_threshold's
           // default is "any", the lowest bar), so this is exactly as
           // self-contained as rotation.
-          if (name === null) return error("the bare-domain identity isn't tombstonable through this path", 400);
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
           const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to tombstone it", 403);
           }
-          const result = await tombstoneWard(env, name);
+          const result = await tombstoneWard(env, targetName);
           return json({ ok: true, did: result.did, document: result.document });
         }
         if (suffix === "/remove-self" && request.method === "POST") {
@@ -198,7 +207,7 @@ export default {
           // the caller directly; a trusted client must name one explicitly
           // via guardian_did in the body, same split /api/me/pending-
           // signatures uses for the same underlying reason.
-          if (name === null) return error("remove-self does not apply to the bare-domain identity", 400);
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
           let callerDid = sessionDid;
@@ -209,7 +218,7 @@ export default {
             if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
             callerDid = body.guardian_did;
           }
-          const result = await removeSelfAsGuardian(env, name, callerDid);
+          const result = await removeSelfAsGuardian(env, targetName, callerDid);
           return json({ ok: true, did: result.did, document: result.document });
         }
         if (suffix === "/remove" && request.method === "POST") {
@@ -217,7 +226,7 @@ export default {
           // own session or a trusted client may trigger the attempt, but
           // the real authority comes from whichever OTHER guardians this
           // registrar can sign for actually meeting removal_threshold.
-          if (name === null) return error("the bare-domain identity's own guardians aren't forcibly removable through this path", 400);
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
           const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
@@ -226,7 +235,7 @@ export default {
           }
           const body = (await request.json()) as { outgoing_did?: string };
           if (!body.outgoing_did) return error("outgoing_did is required", 400);
-          const result = await forceRemoveGuardian(env, name, body.outgoing_did);
+          const result = await forceRemoveGuardian(env, targetName, body.outgoing_did);
           return json({ ok: true, did: result.did, document: result.document });
         }
         if (suffix === "/adopt" && request.method === "POST") {
@@ -234,7 +243,7 @@ export default {
           // is a different identity than `name` (the ward being adopted),
           // so a session identifies the caller directly, and a trusted
           // client must name one explicitly via guardian_did.
-          if (name === null) return error("adopt does not apply to the bare-domain identity", 400);
+          const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
           const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
           let incomingDid = sessionDid;
@@ -245,7 +254,7 @@ export default {
             if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
             incomingDid = body.guardian_did;
           }
-          const result = await adoptWard(env, name, incomingDid);
+          const result = await adoptWard(env, targetName, incomingDid);
           return json({ ok: true, did: result.did, document: result.document });
         }
       } catch (e) {
@@ -428,7 +437,7 @@ export default {
         return handleRegisterForm(request, env);
       }
       try {
-        const body = (await request.json()) as { name?: string };
+        const body = (await request.json()) as { name?: string; password?: string };
         if (!body.name) return error("name is required", 400);
         // The Managed Identity API (registrar API spec's own §9): a new
         // ward's guardian is never a free-text field a caller supplies --
@@ -450,7 +459,7 @@ export default {
           }
           guardianDid = verified.sub;
         }
-        const result = await registerWard(env, body.name, guardianDid);
+        const result = await registerWard(env, body.name, guardianDid, body.password);
         return json(result, 201);
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);

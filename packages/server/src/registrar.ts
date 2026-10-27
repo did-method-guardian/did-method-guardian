@@ -23,7 +23,7 @@ import type { Did, GuardianLivenessResolver, LogEntry, Operation, ResolvedState,
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, updateWardKeys, type WardRow } from "./db.js";
-import { encryptSecret, decryptSecret, hashSecret, randomSecret } from "./secretBox.js";
+import { encryptSecret, decryptSecret, hashSecret, hashPassword, randomSecret } from "./secretBox.js";
 import { proposeOperation } from "./pendingOps.js";
 
 export class RegistrarError extends Error {
@@ -36,6 +36,18 @@ export class RegistrarError extends Error {
 export function assertValidName(name: string): void {
   if (!isValidName(name)) {
     throw new RegistrarError(`invalid name "${name}" -- must be 3-32 lowercase alphanumeric/hyphen characters, no leading/trailing/double hyphens`, 400);
+  }
+}
+
+// Length alone -- no forced uppercase/digit/symbol complexity rules, the
+// modern (NIST-aligned) guidance that length is the effective, least
+// annoying constraint and composition rules mostly just push people toward
+// predictable substitutions.
+const MIN_PASSWORD_LENGTH = 12;
+
+export function assertValidPassword(password: string): void {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new RegistrarError(`password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400);
   }
 }
 
@@ -80,8 +92,10 @@ export async function registerWard(
   env: Env,
   name: string,
   guardianDid?: string | null,
-): Promise<{ did: string; document: unknown; login_secret: string; pending_guardian_add?: { id: string } }> {
+  password?: string,
+): Promise<{ did: string; document: unknown; login_secret?: string; pending_guardian_add?: { id: string } }> {
   assertValidName(name);
+  if (password) assertValidPassword(password);
   if (await getWardByName(env, name)) {
     throw new RegistrarError(`name "${name}" is already taken`, 409);
   }
@@ -110,10 +124,13 @@ export async function registerWard(
   // The login secret proves control of this ward to THIS registrar's own
   // login/OIDC flow -- a separate credential from the operational key,
   // needed because the custodial model here means the key itself isn't
-  // provable client-side (the server holds it, not the caller). Returned
-  // once, in plaintext, here only -- stored hashed, same as a password.
-  const loginSecret = randomSecret();
-  const loginSecretHash = await hashSecret(loginSecret);
+  // provable client-side (the server holds it, not the caller). A
+  // generated one is returned once, in plaintext, here only -- stored
+  // hashed. A user-chosen password is never returned here at all (the
+  // caller already knows it); see secretBox.ts's hashPassword for why it
+  // needs real key stretching that a generated secret doesn't.
+  const loginSecret = password ? undefined : randomSecret();
+  const loginSecretHash = password ? await hashPassword(password) : await hashSecret(loginSecret!);
 
   const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
   const ward: WardRow = { name, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: loginSecretHash };
@@ -158,17 +175,26 @@ export async function registerWard(
 }
 
 /**
- * Replaces a ward's login secret with a freshly generated one -- the one
- * real recovery path for "I never saved it" or "I think it leaked,"
- * since there's no way to recover the original (only its hash is ever
- * stored). The old secret stops working the instant this runs: nothing
- * here keeps the previous hash around or allows more than one valid
- * secret at a time, same as a password reset invalidating the old
- * password. Callers (index.ts) already gate who may call this at all --
- * either an active session as this exact ward, or a trusted relying
- * party acting on an already-authenticated session of its own.
+ * Replaces a ward's login secret -- the one real recovery path for "I
+ * never saved it" or "I think it leaked," since there's no way to recover
+ * the original (only its hash is ever stored). The old secret stops
+ * working the instant this runs: nothing here keeps the previous hash
+ * around or allows more than one valid secret at a time, same as a
+ * password reset invalidating the old password. Callers (index.ts,
+ * accountPage.ts) already gate who may call this at all -- either an
+ * active session as this exact ward, or a trusted relying party acting on
+ * an already-authenticated session of its own.
+ *
+ * `password`, when given, replaces the "freshly generated" default with
+ * this ward's own chosen one -- the same choice registerWard offers at
+ * creation time, available again any time after.
  */
-export async function reissueLoginSecret(env: Env, name: string): Promise<string> {
+export async function reissueLoginSecret(env: Env, name: string, password?: string): Promise<string | undefined> {
+  if (password) {
+    assertValidPassword(password);
+    await setLoginSecretHash(env, name, await hashPassword(password));
+    return undefined;
+  }
   const loginSecret = randomSecret();
   await setLoginSecretHash(env, name, await hashSecret(loginSecret));
   return loginSecret;
@@ -204,11 +230,15 @@ export async function reissueLoginSecret(env: Env, name: string): Promise<string
  * reissueLoginSecret above.
  */
 export async function rotateWard(env: Env, name: string): Promise<{ did: string; document: unknown }> {
-  // Same exclusion as /email and /login-secret above -- the bare-
-  // domain root identity (findWard's `null` case) isn't reachable
-  // through this name-keyed path at all, deliberately: rotating the
-  // domain's own root credential is a different, more sensitive
-  // operation than anything this zz-driven feature needs.
+  // `name === ""` (the bare-domain root identity's own sentinel) works
+  // here exactly like any other ward -- getWardByName finds it directly,
+  // and rotateWard's own call to updateWardKeys below means every future
+  // registrar attestation (signRegistrarAttestation, used by registerWard)
+  // correctly picks up the rotated key; a past attestation is never
+  // re-verified against it (verifyCustodialCreate only ever runs once, at
+  // submission time), so rotating this identity's key can't retroactively
+  // invalidate anything already in any ward's own log. index.ts gates who
+  // may call this at all, same as for any other ward.
   const ward = await getWardByName(env, name);
   if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
   const log = await loadLog(env, ward.did);
@@ -438,7 +468,20 @@ const ROOT_WARD_NAME = ""; // the `wards.name` sentinel for the bare-domain iden
  */
 export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
   const existing = await getWardByName(env, ROOT_WARD_NAME);
-  if (existing) return existing;
+  if (existing) {
+    // Lazy, one-time upgrade -- same "first access wins" reasoning as the
+    // creation path below, just for a deployment whose root ward was
+    // already provisioned before ROOT_WARD_LOGIN_SECRET existed (every
+    // live deployment at the time this was added). Only ever sets it from
+    // null; never overwrites an already-set one, so this stays a one-shot
+    // bootstrap, not a standing "the env var always wins" override.
+    if (!existing.login_secret_hash && env.ROOT_WARD_LOGIN_SECRET) {
+      const hash = await hashPassword(env.ROOT_WARD_LOGIN_SECRET);
+      await setLoginSecretHash(env, ROOT_WARD_NAME, hash);
+      return { ...existing, login_secret_hash: hash };
+    }
+    return existing;
+  }
 
   const did = didFor(null, env.REGISTRAR_DOMAIN);
   const keypair =
@@ -466,7 +509,15 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();
   const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
-  const ward: WardRow = { name: ROOT_WARD_NAME, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: null };
+  // ROOT_WARD_LOGIN_SECRET (env.ts) is the only way this identity ever
+  // gets a usable login credential -- there's no registration flow to set
+  // one through, by design (spec/header comment above: there's exactly
+  // one of these per deployment, claimed by construction, not by request).
+  // Left null, exactly as before, when the operator hasn't set one -- the
+  // root identity still resolves and attests other wards' genesis either
+  // way, it just can't log in anywhere until this is set.
+  const loginSecretHash = env.ROOT_WARD_LOGIN_SECRET ? await hashPassword(env.ROOT_WARD_LOGIN_SECRET) : null;
+  const ward: WardRow = { name: ROOT_WARD_NAME, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: loginSecretHash };
   await insertWard(env, ward);
   await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
   return ward;

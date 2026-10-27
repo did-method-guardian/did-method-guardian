@@ -59,17 +59,16 @@ function urlName(ward: WardRow): string {
 }
 
 /**
- * rotate/tombstone/relinquish/login-secret-reissue are all deliberately
- * unreachable for the bare-domain root identity -- the same restriction
- * index.ts's own HTTP routes for these already enforce (see each
- * function's own header comment in registrar.ts: "rotating the domain's
- * own root credential is a different, more sensitive operation"). This
- * page matches that policy rather than exposing a path those routes
- * deliberately withhold.
+ * Email forwarding is the one action still unreachable for the bare-domain
+ * root identity -- a real technical blocker (inbound mail routing is
+ * name-keyed at the local-part level, and the root identity has no local
+ * part to receive at), not a blanket restriction. Every other account
+ * action now works for it the same as any named ward -- index.ts's own
+ * HTTP routes already lifted the matching restriction there.
  */
-function requireNamedWard(ward: WardRow): string | Response {
+function requireEmailCapableWard(ward: WardRow): string | Response {
   if (ward.name === "") {
-    return html(pageShell("Not available", `<h1>Not available</h1><p class="error">This action isn't available for the domain's own root identity.</p><p><a href="/account">Back to your account</a></p>`), 400);
+    return html(pageShell("Not available", `<h1>Not available</h1><p class="error">Email forwarding isn't available for the domain's own root identity -- it has no local part to receive mail at.</p><p><a href="/account">Back to your account</a></p>`), 400);
   }
   return ward.name;
 }
@@ -192,20 +191,23 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
       <dt>Activity</dt><dd><ul class="signers">${activityList}</ul></dd>
     </dl>
 
-    ${
-      ward.name === ""
-        ? `<p class="hint">Rotation, login-secret reissue, email forwarding, relinquishing, and deactivation aren't available for the domain's own root identity.</p>`
-        : `
     <h2>Account actions</h2>
     <form method="post" action="/account/rotate"><button type="submit">Rotate operational key</button></form>
-    <form method="post" action="/account/login-secret/reissue"><button type="submit" class="neutral">Reissue login secret</button></form>
+    <form method="post" action="/account/login-secret/reissue"><button type="submit" class="neutral">Get a new generated login secret</button></form>
+    <form method="post" action="/account/login-secret/reissue">
+      <label>Or set your own password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input type="password" name="password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
+      <label>Confirm <input type="password" name="password_confirm" minlength="${MIN_PASSWORD_LENGTH}" required></label>
+      <button type="submit" class="neutral">Set password</button>
+    </form>
     ${
-      forwarding
-        ? `<p class="hint">Email forwarding: ${escapeHtml(forwarding.forward_to)} (verified)</p>`
-        : `<form method="post" action="/account/email">
-             <label>Forwarding email <input name="forward_to" type="email" required></label>
-             <button type="submit" class="neutral">Set up email forwarding</button>
-           </form>`
+      ward.name === ""
+        ? `<p class="hint">Email forwarding isn't available for the domain's own root identity -- it has no local part to receive mail at.</p>`
+        : forwarding
+          ? `<p class="hint">Email forwarding: ${escapeHtml(forwarding.forward_to)} (verified)</p>`
+          : `<form method="post" action="/account/email">
+               <label>Forwarding email <input name="forward_to" type="email" required></label>
+               <button type="submit" class="neutral">Set up email forwarding</button>
+             </form>`
     }
     ${
       state.guardians.length
@@ -213,8 +215,6 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
         : ""
     }
     ${!state.deactivated ? `<p><a href="/account/tombstone">Deactivate this identity</a></p>` : ""}
-    `
-    }
   `;
   return html(pageShell(`Account -- ${escapeHtml(name)}`, body));
 }
@@ -222,8 +222,7 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
 export async function handleAccountRotate(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireNamedWard(session.ward);
-  if (name instanceof Response) return name;
+  const name = session.ward.name;
   try {
     await rotateWard(env, name);
   } catch (e) {
@@ -233,16 +232,32 @@ export async function handleAccountRotate(request: Request, env: Env): Promise<R
   return redirectToAccount("Operational key rotated.");
 }
 
+const MIN_PASSWORD_LENGTH = 12;
+
+/**
+ * Covers both "get me a new generated secret" (the dashboard's own
+ * existing bare-button form) and "set my own password instead" (a new
+ * sibling form on the same page, same underlying reissueLoginSecret call)
+ * -- whichever the submitted form actually included a password field for.
+ */
 export async function handleAccountReissueLoginSecret(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireNamedWard(session.ward);
-  if (name instanceof Response) return name;
+  const name = session.ward.name;
+  const form = await request.formData();
+  const password = form.get("password") ? String(form.get("password")) : undefined;
+  if (password) {
+    const confirm = String(form.get("password_confirm") ?? "");
+    if (password.length < MIN_PASSWORD_LENGTH) return redirectToAccount(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, "error");
+    if (password !== confirm) return redirectToAccount("Passwords don't match.", "error");
+    await reissueLoginSecret(env, name, password);
+    return redirectToAccount("Password set -- sign in with it next time.");
+  }
   const loginSecret = await reissueLoginSecret(env, name);
   const body = `
     <h1>New login secret</h1>
     <p class="hint">Shown once, right now -- write it down. You'll need it (with your account's own name) to sign in again.</p>
-    <dl><dt>Login secret</dt><dd>${secretBox(loginSecret)}</dd></dl>
+    <dl><dt>Login secret</dt><dd>${secretBox(loginSecret!)}</dd></dl>
     <p><a href="/account">Back to your account</a></p>
   `;
   return html(pageShell("New login secret", body));
@@ -251,7 +266,7 @@ export async function handleAccountReissueLoginSecret(request: Request, env: Env
 export async function handleAccountEmail(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireNamedWard(session.ward);
+  const name = requireEmailCapableWard(session.ward);
   if (name instanceof Response) return name;
   const form = await request.formData();
   const forwardTo = String(form.get("forward_to") ?? "");
@@ -265,8 +280,7 @@ export async function handleAccountEmail(request: Request, env: Env): Promise<Re
 export async function handleAccountRelinquish(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireNamedWard(session.ward);
-  if (name instanceof Response) return name;
+  const name = session.ward.name;
   try {
     await relinquishWard(env, name);
   } catch (e) {
@@ -279,13 +293,15 @@ export async function handleAccountRelinquish(request: Request, env: Env): Promi
 export async function handleAccountTombstoneConfirm(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireNamedWard(session.ward);
-  if (name instanceof Response) return name;
+  // The confirm-by-typing value is the URL form ("_" for root), not the
+  // raw storage name -- asking someone to type an empty string to confirm
+  // would be meaningless for the bare-domain identity.
+  const confirmName = urlName(session.ward);
   const body = `
     <h1>Deactivate this identity</h1>
-    <p class="hint">This is permanent. The full history stays publicly resolvable forever (it's never deleted), but no further operation will ever be accepted against it again, and "${escapeHtml(name)}" can never be registered again by anyone, including you.</p>
+    <p class="hint">This is permanent. The full history stays publicly resolvable forever (it's never deleted), but no further operation will ever be accepted against it again${session.ward.name === "" ? "" : `, and "${escapeHtml(confirmName)}" can never be registered again by anyone, including you`}.</p>
     <form method="post" action="/account/tombstone">
-      <label>Type "${escapeHtml(name)}" to confirm <input name="confirm" required></label>
+      <label>Type "${escapeHtml(confirmName)}" to confirm <input name="confirm" required></label>
       <button type="submit" class="danger">Permanently deactivate</button>
     </form>
     <p><a href="/account">Cancel, back to your account</a></p>
@@ -296,11 +312,11 @@ export async function handleAccountTombstoneConfirm(request: Request, env: Env):
 export async function handleAccountTombstone(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireNamedWard(session.ward);
-  if (name instanceof Response) return name;
+  const name = session.ward.name;
+  const confirmName = urlName(session.ward);
   const form = await request.formData();
-  if (String(form.get("confirm") ?? "") !== name) {
-    return html(pageShell("Confirm deactivation", `<h1>Confirm deactivation</h1><p class="error">That didn't match "${escapeHtml(name)}" -- nothing was changed.</p><p><a href="/account/tombstone">Try again</a></p>`), 400);
+  if (String(form.get("confirm") ?? "") !== confirmName) {
+    return html(pageShell("Confirm deactivation", `<h1>Confirm deactivation</h1><p class="error">That didn't match "${escapeHtml(confirmName)}" -- nothing was changed.</p><p><a href="/account/tombstone">Try again</a></p>`), 400);
   }
   try {
     await tombstoneWard(env, name);

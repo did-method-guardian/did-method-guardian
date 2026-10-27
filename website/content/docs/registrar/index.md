@@ -92,6 +92,10 @@ Two independent flows share the same underlying credential (`login_secret`) and 
 
 Named `/guardian-login`, not the shorter `/login` -- a real collision, not a style choice: a registrar is commonly deployed on a domain that already has its own, unrelated human-facing `/login` (zz's own deployment on zzmq.dev does, for its own web app). Worth checking your own host application's routes before adding any new top-level path here, not just this one.
 
+**The bare-domain root identity logs in like any other ward**, once an operator has given it a credential (`ROOT_WARD_LOGIN_SECRET`, see the top-level README's own self-hosting section) -- the name field on either login form accepts `_`, the bare registrar domain, or `@<domain>`, all three resolving to the same identity.
+
+**`login_secret` can be either generated or user-chosen.** `POST /register` (§1) and this registrar's own registration page both offer a choice: let the registrar generate a high-entropy secret (the only option before this), or set a password instead (`{"name": "...", "password": "..."}` in the JSON body; a minimum length is enforced, no further composition rules). A generated secret is returned once, in the response, and never again; a chosen password is never echoed back, since the caller already knows it. Reissuing (`.../login-secret`, §2) takes the same optional `password` either way -- changing your own credential later works identically to setting it at registration.
+
 ### 5.1 Dynamic client registration (RFC 7591)
 
 A relying party no longer needs this registrar's own operator to hand-insert an `oidc_clients` row -- `POST /oauth/register-client` is open, unauthenticated self-service, the same posture every other registration endpoint here already has:
@@ -166,13 +170,13 @@ Shows identity status, current guardians and the effective `GuardianPolicy` thre
 |---|---|---|
 | `GET` | `/account` | the dashboard itself |
 | `POST` | `/account/rotate` | rotate the operational key |
-| `POST` | `/account/login-secret/reissue` | reissue the login secret -- shown once, same convention every other one-time secret here follows |
+| `POST` | `/account/login-secret/reissue` | reissue the login secret (a generated one, shown once, same convention every other one-time secret here follows) -- or, given `password`/`password_confirm` fields instead, set your own password |
 | `POST` | `/account/email` | set up forwarding (§6) |
 | `POST` | `/account/relinquish` | relinquish all guardians |
 | `GET`/`POST` | `/account/tombstone` | a real confirmation page -- requires typing the account's own name, not a bare button -- then deactivates |
 | `POST` | `/account/consents/revoke` | revoke a connected app's own access |
 
-Rotation, login-secret reissue, email forwarding, relinquishing, and deactivation are all unreachable for the domain's own bare-domain root identity -- the same restriction §2's own convenience endpoints already enforce for that identity (each one's own header comment in `registrar.ts` explains why: those are more sensitive operations than anything a name-keyed identity needs). The dashboard hides those actions for that identity and refuses them server-side too, rather than exposing a path those endpoints deliberately withhold.
+Every action here works for the domain's own bare-domain root identity too, the same as any named ward, once an operator has given it a login credential (see the top-level README's own self-hosting section) -- **except email forwarding**, which stays unreachable for it specifically: inbound mail routing is name-keyed at the local-part level, and the root identity has no local part to receive mail at.
 
 ## 9. Managed Identity API
 
