@@ -55,7 +55,12 @@
     // already covered by the .well-known/guardian/* pattern above, this one
     // is just for the new top-level /relay-sign path. No collision with the
     // docs site (website/) hosted on this same domain.
-    { "pattern": "guardianspec.org/relay-sign*", "zone_name": "guardianspec.org" }
+    { "pattern": "guardianspec.org/relay-sign*", "zone_name": "guardianspec.org" },
+    // Admin console (adminPage.ts) -- root-identity-only, for a closed
+    // (REGISTRATION_MODE) deployment's own operator to create accounts
+    // without exposing public registration; available regardless of that
+    // setting. No collision with the docs site (website/) on this domain.
+    { "pattern": "guardianspec.org/admin*", "zone_name": "guardianspec.org" }
   ],
   // Daily reminder sweep for still-collecting proposals (task #113).
   "triggers": {

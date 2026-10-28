@@ -26,6 +26,15 @@ A fresh deployment generates its own keypair for this identity automatically. An
 
 See `packages/server/src/env.ts` for the complete list of environment variables this registrar reads.
 
+## Self-hosting: open vs. closed registration, and the admin console
+
+Two deployment shapes this registrar supports:
+
+- **Open** -- public self-service: anyone can `POST /register` and create an account, no prior authorization needed. This is how this project's own reference registrars (zzmq.dev, guardianspec.org) are deployed. The default; same as leaving `REGISTRATION_MODE` unset.
+- **Closed** -- for an operator who controls the whole domain, personally or as a business, and wants their own root identity usable everywhere did:guardian/did:web is accepted (see above) without exposing that same open door to the public. Set `REGISTRATION_MODE` to `"closed"` (a `vars` entry, not a secret -- see `wrangler.jsonc`'s own commented example). This blocks anonymous self-service at `/register` specifically; a Managed Identity API bearer token still works either way, since that's already gated by real authentication rather than a bare name.
+
+A closed deployment's own root identity creates accounts for other people or agents instead, through the **admin console** (`/admin`, `/admin/create-account`) -- available on every deployment regardless of `REGISTRATION_MODE`, gated to a session authenticated as the root identity specifically. Lists every account on the registrar and offers the same generated-secret-or-set-your-own-password choice self-service registration does, plus an optional initial guardian DID. A family deploying this on a personal domain creates an account for a spouse this way (`wife@calebhailey.com`); a business creates accounts for its whole team and for any agents it manages, the same way, on its own domain.
+
 ## License
 
 This project is dual-licensed under MIT and Apache 2.0 terms:

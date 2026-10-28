@@ -34,6 +34,20 @@ export interface Env {
   // resolves and attests other wards' genesis correctly, it just can't
   // log in anywhere.
   ROOT_WARD_LOGIN_SECRET?: string;
+  // "open" (default, unset means open -- every existing deployment's own
+  // unchanged behavior) lets POST /register create an account for anyone
+  // who asks, no prior authorization needed -- the public registrar this
+  // project itself runs. "closed" is for an operator who controls the
+  // whole domain (personally or as a business) and wants their own root
+  // identity usable everywhere did:guardian/did:web is accepted, without
+  // exposing that same open door: it blocks only *anonymous* self-service
+  // at /register (index.ts) -- a Managed Identity API bearer token
+  // (§9, create:managed-identity scope) still works either way, since
+  // that's already gated by real authentication, not a bare name. The
+  // admin console (adminPage.ts, /admin) is how a closed deployment's own
+  // root identity creates accounts for other people or agents instead --
+  // available on every deployment regardless of this setting.
+  REGISTRATION_MODE?: "open" | "closed";
   // Outbound email (emailProviders.ts) -- which provider this deployment
   // uses, and that provider's own API key. Never hardcoded to one vendor:
   // "mailchannels" | "resend" | "cloudflare-native" | "log" (dev-only,

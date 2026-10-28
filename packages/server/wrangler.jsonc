@@ -20,6 +20,15 @@
   "vars": {
     "REGISTRAR_DOMAIN": "guardianspec.org"
     // "EMAIL_PROVIDER": "cloudflare-native"
+    // Uncomment for a single-operator deployment (a personal domain, or a
+    // business creating accounts for its own team and agents) that
+    // shouldn't let the general public register -- see README.md's own
+    // self-hosting section. Open (the default, same as leaving this unset)
+    // is this project's own public registrars; closed blocks anonymous
+    // self-service at /register, while the admin console (/admin, gated to
+    // the root identity -- see ROOT_WARD_LOGIN_SECRET below) still creates
+    // accounts for other people or agents.
+    // "REGISTRATION_MODE": "closed"
   },
   // Daily reminder sweep for still-collecting proposals (task #113) --
   // noon UTC, an arbitrary but fixed daily time, nothing protocol-level

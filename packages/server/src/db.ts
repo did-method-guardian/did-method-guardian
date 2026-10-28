@@ -36,6 +36,18 @@ export async function insertWard(env: Env, ward: WardRow): Promise<void> {
     .run();
 }
 
+export interface WardSummary {
+  name: string;
+  did: string;
+  created_at: string;
+}
+
+/** For the admin console (adminPage.ts) -- every ward on this registrar, newest first. Projects out public_key/private_key_enc/login_secret_hash deliberately; nothing calling this needs them. */
+export async function listWards(env: Env): Promise<WardSummary[]> {
+  const result = await env.DB.prepare("SELECT name, did, created_at FROM wards ORDER BY created_at DESC").all<WardSummary>();
+  return result.results;
+}
+
 export async function appendOperation(env: Env, op: OperationRow): Promise<void> {
   await env.DB.prepare(
     "INSERT INTO operations (cid, did, prev_cid, op_type, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",

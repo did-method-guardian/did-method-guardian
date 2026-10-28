@@ -9,6 +9,7 @@ import { authenticateOidcClient } from "./clientAuth.js";
 import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
 import { handleRelaySignPage, handleRelaySignApprove } from "./relaySign.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
+import { handleAdminPage, handleAdminCreateAccountPage, handleAdminCreateAccountForm } from "./adminPage.js";
 import { handleAgentCard, handleWebfinger } from "./agentCard.js";
 import {
   handleAccountPage,
@@ -414,6 +415,18 @@ export default {
       return handleAccountRevokeConsent(request, env);
     }
 
+    // Admin console (adminPage.ts) -- root-identity-only, available
+    // regardless of REGISTRATION_MODE (see that gating above).
+    if (path === "/admin" && request.method === "GET") {
+      return handleAdminPage(request, env);
+    }
+    if (path === "/admin/create-account" && request.method === "GET") {
+      return handleAdminCreateAccountPage(request, env);
+    }
+    if (path === "/admin/create-account" && request.method === "POST") {
+      return handleAdminCreateAccountForm(request, env);
+    }
+
     if (path === "/verify-email" && request.method === "GET") {
       const token = url.searchParams.get("token");
       if (!token) return error("token is required", 400);
@@ -423,7 +436,17 @@ export default {
         : error(result.reason, 400);
     }
 
+    // REGISTRATION_MODE (env.ts): "closed" blocks only anonymous
+    // self-service -- a bare name, no prior authorization. A Managed
+    // Identity API bearer token still works either way (already gated by
+    // real authentication); a closed deployment's own root identity
+    // creates accounts instead through the admin console (adminPage.ts).
+    const registrationClosed = env.REGISTRATION_MODE === "closed";
+
     if (path === "/register" && request.method === "GET") {
+      if (registrationClosed) {
+        return html(`<h1>Registration is closed</h1><p class="error">This registrar doesn't accept public registration. If you were given an account, <a href="/guardian-login">sign in</a> instead.</p>`, 403);
+      }
       return handleRegisterPage(url);
     }
 
@@ -434,6 +457,9 @@ export default {
         // registerWard call the JSON API below already makes, never a
         // separate code path. Found missing entirely: /guardian-login's
         // own sign-in form had no way to get here at all.
+        if (registrationClosed) {
+          return html(`<h1>Registration is closed</h1><p class="error">This registrar doesn't accept public registration. If you were given an account, <a href="/guardian-login">sign in</a> instead.</p>`, 403);
+        }
         return handleRegisterForm(request, env);
       }
       try {
@@ -447,7 +473,9 @@ export default {
         // identity) to becoming a guardian, not an arbitrary string some
         // client typed in. A caller with no bearer token at all still gets
         // plain self-service registration, no guardian -- the ordinary,
-        // valid case this endpoint has always served.
+        // valid case this endpoint has always served, unless registration
+        // is closed (REGISTRATION_MODE), in which case a bearer token is
+        // required -- a name alone is anonymous self-service either way.
         const auth = request.headers.get("authorization") ?? "";
         const bearerToken = auth.startsWith("Bearer ") ? auth.slice(7) : null;
         let guardianDid: string | null = null;
@@ -458,6 +486,8 @@ export default {
             return error('this access token was not granted the "create:managed-identity" scope', 403);
           }
           guardianDid = verified.sub;
+        } else if (registrationClosed) {
+          return error("this registrar doesn't accept public registration -- a Managed Identity API access token is required", 403);
         }
         const result = await registerWard(env, body.name, guardianDid, body.password);
         return json(result, 201);
