@@ -23,6 +23,7 @@ import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
 import { readCookie, resolveSession, verifyLogin, createLoginSession } from "./login.js";
 import { getPendingOperationStatus, contributeToOperation, type PendingOperationStatus } from "./pendingOps.js";
 import { getPendingOperation, getWardByDid } from "./db.js";
+import { checkRateLimit, clientIp } from "./rateLimit.js";
 import { decryptWardPrivateKey, RegistrarError } from "./registrar.js";
 import { signPayload } from "@did-guardian/lib";
 
@@ -147,6 +148,12 @@ export async function handleDirectLogin(request: Request, env: Env, url: URL): P
     const loginSecret = String(form.get("login_secret") ?? "");
     const formReturnTo = String(form.get("return_to") ?? "/");
     const safeFormReturnTo = isSafeReturnTo(formReturnTo) ? formReturnTo : "/";
+    // Public and CPU-bound (PBKDF2) -- rate-limited per IP before verifying,
+    // same reasoning as /register (index.ts). A real credential check still
+    // runs on every allowed attempt; this only caps the attempt rate.
+    if (!(await checkRateLimit(env, "login", clientIp(request), 10, 600))) {
+      return html(authPageShell("Sign in", loginFormBody(safeFormReturnTo, { nameValue: name, error: "Too many sign-in attempts from this address. Try again in a few minutes." })), 429);
+    }
     const wardDid = await verifyLogin(env, name, loginSecret);
     if (!wardDid) {
       return html(authPageShell("Sign in", loginFormBody(safeFormReturnTo, { nameValue: name, error: "Invalid name or login secret." })), 401);

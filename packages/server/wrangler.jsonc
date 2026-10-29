@@ -9,6 +9,13 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "guardian-server", "database_id": "REPLACE_ME", "migrations_dir": "migrations" }
   ],
+  // Per-IP rate limiting on /register and /guardian-login (rateLimit.ts) --
+  // optional: checkRateLimit fails open (no limiting) if this isn't bound,
+  // but a real public deployment should configure it. Create with
+  // `wrangler kv namespace create <some-title>`, then fill in the id below.
+  // "kv_namespaces": [
+  //   { "binding": "RATE_LIMIT_KV", "id": "REPLACE_ME" }
+  // ],
   // Outbound email (optional -- see README.md §5). Uncomment both lines
   // below for Cloudflare's own native Email Sending binding (no external
   // account needed, just `wrangler email sending enable <your-domain>`

@@ -16,6 +16,11 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "guardian-server", "database_id": "57833a7f-2dc7-4f88-808d-2c0079e6dd53", "migrations_dir": "migrations" }
   ],
+  // Per-IP rate limiting on /register and /guardian-login (rateLimit.ts) --
+  // see wrangler.zz.jsonc's own comment on this same binding.
+  "kv_namespaces": [
+    { "binding": "RATE_LIMIT_KV", "id": "2a61c8b276b14153a267c86463067dc2" }
+  ],
   // Cloudflare's own native Email Sending binding -- see wrangler.zz.jsonc's
   // own comment on this same binding for the full reasoning.
   "send_email": [{ "name": "EMAIL" }],

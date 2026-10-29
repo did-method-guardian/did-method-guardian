@@ -11,6 +11,12 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "zz-guardian", "database_id": "651d3286-cf1f-4e57-a9fb-7d237e8d8174", "migrations_dir": "migrations" }
   ],
+  // Per-IP rate limiting on /register and /guardian-login (rateLimit.ts) --
+  // optional (checkRateLimit fails open if unbound), but configured here
+  // since this is a real public deployment.
+  "kv_namespaces": [
+    { "binding": "RATE_LIMIT_KV", "id": "b716480119a4426cbc151c93f52d54a0" }
+  ],
   // Cloudflare's own native Email Sending binding (emailProviders.ts's
   // "cloudflare-native" option) -- no external account or API key, just
   // this binding plus `wrangler email sending enable zzmq.dev` (already

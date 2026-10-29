@@ -11,6 +11,7 @@ import { handleRelaySignPage, handleRelaySignApprove } from "./relaySign.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
 import { handleAdminPage, handleAdminCreateAccountPage, handleAdminCreateAccountForm } from "./adminPage.js";
 import { handleAgentCard, handleWebfinger } from "./agentCard.js";
+import { checkRateLimit, clientIp } from "./rateLimit.js";
 import {
   handleAccountPage,
   handleAccountRotate,
@@ -451,6 +452,12 @@ export default {
     }
 
     if (path === "/register" && request.method === "POST") {
+      // Public and CPU-bound (PBKDF2 password hashing) -- rate-limited per
+      // IP before any other work, regardless of which branch below handles
+      // it, since both ultimately call registerWard.
+      if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
+        return error("too many registration attempts from this address -- try again in a few minutes", 429);
+      }
       const contentType = request.headers.get("content-type") ?? "";
       if (contentType.includes("application/x-www-form-urlencoded")) {
         // The browser path -- a real "create an account" page, same

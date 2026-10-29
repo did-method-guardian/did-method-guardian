@@ -1,7 +1,12 @@
-import type { SendEmail } from "@cloudflare/workers-types";
+import type { SendEmail, KVNamespace } from "@cloudflare/workers-types";
 
 export interface Env {
   DB: D1Database;
+  // Per-IP rate limiting on public, CPU-bound endpoints (/register,
+  // /guardian-login -- see rateLimit.ts). Optional: a deployment without
+  // it configured simply has no rate limiting (fails open), rather than
+  // breaking outright -- see checkRateLimit's own comment.
+  RATE_LIMIT_KV?: KVNamespace;
   KEY_ENCRYPTION_KEY: string; // base64, 32 bytes, AES-GCM -- set via `wrangler secret put`
   REGISTRAR_DOMAIN: string; // e.g. "guardianspec.org"
   // Comma-separated registrar domains whose own access tokens this
