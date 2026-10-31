@@ -36,6 +36,7 @@ import {
   listOidcConsentsForWard,
   deleteOidcConsent,
   revokeRefreshTokensForWardAndClient,
+  listOpenRelayInboxForSigner,
   type WardRow,
 } from "./db.js";
 import type { Did, LogEntry } from "@did-guardian/lib";
@@ -151,6 +152,7 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
   const log = await loadLog(env, wardDid);
   const forwarding = await getVerifiedForwardingByDid(env, wardDid);
   const pending = await listPendingForSigner(env, wardDid);
+  const relayInbox = await listOpenRelayInboxForSigner(env, wardDid);
   const consents = await listOidcConsentsForWard(env, wardDid);
 
   const guardiansList = state.guardians.length
@@ -162,6 +164,20 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
         .map((p) => `<li>${escapeHtml(p.op_type)} -- <a href="/.well-known/guardian/${encodeURIComponent(name)}/pending/${p.id}">review and sign</a></li>`)
         .join("")}</ul>`
     : `<p class="hint">Nothing waiting on your own signature right now.</p>`;
+
+  // Durable discovery for cross-registrar requests (registrar API spec
+  // §13) -- independent of whether relay-notify's own email ever landed.
+  // Each entry always re-fetches the real, live status from the ward's own
+  // registrar when opened; this list is only ever an index, never a cache
+  // of truth.
+  const relayInboxList = relayInbox.length
+    ? `<ul class="signers">${relayInbox
+        .map(
+          (r) =>
+            `<li>${escapeHtml(r.op_type)} on ${escapeHtml(r.ward_did)} (another registrar) -- <a href="/relay-sign?ward=${encodeURIComponent(r.ward_did)}&op=${encodeURIComponent(r.pending_operation_id)}">review</a></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="hint">Nothing waiting on your signature on another registrar right now.</p>`;
 
   const consentsList = consents.length
     ? `<ul class="signers">${consents
@@ -187,6 +203,7 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
       <dt>Guardians</dt><dd>${guardiansList}</dd>
       <dt>Policy</dt><dd>${policySection(state.guardianPolicy)}</dd>
       <dt>Needs your signature</dt><dd>${pendingList}</dd>
+      <dt>Needs your signature (another registrar)</dt><dd>${relayInboxList}</dd>
       <dt>Connected apps</dt><dd>${consentsList}</dd>
       <dt>Activity</dt><dd><ul class="signers">${activityList}</ul></dd>
     </dl>

@@ -389,3 +389,33 @@ export async function listStaleTokensForPendingOp(env: Env, pendingOpId: string,
   const result = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE pending_op_id = ? AND last_notified_at < ?").bind(pendingOpId, olderThanIso).all<PendingOperationTokenRow>();
   return result.results;
 }
+
+export interface RelayInboxRow {
+  signer_did: string;
+  pending_operation_id: string;
+  ward_did: string;
+  op_type: string;
+  status: string;
+  created_at: string;
+}
+
+/** handleRelayNotify's own durable record (pendingOps.ts) -- see migration 0010's header comment for why this exists and what it does/doesn't guarantee. An upsert: the same (signer, op) pair can be notified more than once as an operation progresses, and re-opens a previously resolved entry if relay-notify somehow fires again for it (shouldn't happen once genuinely resolved, but never silently drop a real notification over it). */
+export async function upsertRelayInboxEntry(env: Env, row: { signer_did: string; pending_operation_id: string; ward_did: string; op_type: string; created_at: string }): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO relay_inbox (signer_did, pending_operation_id, ward_did, op_type, status, created_at) VALUES (?, ?, ?, ?, 'open', ?) " +
+      "ON CONFLICT(signer_did, pending_operation_id) DO UPDATE SET status = 'open', resolved_at = NULL",
+  )
+    .bind(row.signer_did, row.pending_operation_id, row.ward_did, row.op_type, row.created_at)
+    .run();
+}
+
+/** The account dashboard's own "needs your signature on another registrar" section -- open entries only; a resolved one has already been signed or declined through this registrar's /relay-sign. */
+export async function listOpenRelayInboxForSigner(env: Env, signerDid: string): Promise<RelayInboxRow[]> {
+  const result = await env.DB.prepare("SELECT * FROM relay_inbox WHERE signer_did = ? AND status = 'open' ORDER BY created_at DESC").bind(signerDid).all<RelayInboxRow>();
+  return result.results;
+}
+
+/** Marks an inbox entry resolved once this registrar has actually signed or declined it on the signer's behalf (relaySign.ts) -- a no-op if no matching row exists (e.g. the signer acted before any notification ever arrived). */
+export async function resolveRelayInboxEntry(env: Env, signerDid: string, pendingOperationId: string, now: string): Promise<void> {
+  await env.DB.prepare("UPDATE relay_inbox SET status = 'resolved', resolved_at = ? WHERE signer_did = ? AND pending_operation_id = ?").bind(now, signerDid, pendingOperationId).run();
+}

@@ -40,6 +40,7 @@ import {
   listPendingOperationsCollecting,
   listPendingOperationsForSigner,
   updatePendingOperationState,
+  upsertRelayInboxEntry,
 } from "./db.js";
 import type { PendingOperationRow } from "./db.js";
 import {
@@ -463,6 +464,16 @@ export async function handleRelayNotify(env: Env, body: { ward_did?: string; pen
   if (!status.required_signers.includes(signerDid as Did)) return;
   if (status.signed.includes(signerDid as Did)) return; // already signed -- nothing to notify
 
+  // Durable record first (migration 0010) -- this is now the signer's own
+  // discoverable "needs your signature elsewhere" inbox entry (account
+  // dashboard), independent of whether the email below ever lands.
+  await upsertRelayInboxEntry(env, {
+    signer_did: signerDid,
+    pending_operation_id: pendingOpId,
+    ward_did: wardDid,
+    op_type: status.op_type,
+    created_at: new Date().toISOString(),
+  });
   await notifyRelaySignatureRequested(env, signerDid, wardDid, pendingOpId, status.op_type);
 }
 

@@ -7,7 +7,7 @@ import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./e
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
 import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
-import { handleRelaySignPage, handleRelaySignApprove } from "./relaySign.js";
+import { handleRelaySignPage, handleRelaySignSubmit } from "./relaySign.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
 import { handleAdminPage, handleAdminCreateAccountPage, handleAdminCreateAccountForm } from "./adminPage.js";
 import { handleAgentCard, handleWebfinger } from "./agentCard.js";
@@ -388,7 +388,7 @@ export default {
       return handleRelaySignPage(request, env, url);
     }
     if (path === "/relay-sign" && request.method === "POST") {
-      return handleRelaySignApprove(request, env);
+      return handleRelaySignSubmit(request, env);
     }
 
     if (path === "/account" && request.method === "GET") {

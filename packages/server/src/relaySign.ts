@@ -21,7 +21,7 @@
 import type { Env } from "./env.js";
 import { html, escapeHtml, pageShell } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
-import { getWardByDid } from "./db.js";
+import { getWardByDid, resolveRelayInboxEntry } from "./db.js";
 import { decryptWardPrivateKey, RegistrarError } from "./registrar.js";
 import { signPayload, parseDid, wellKnownPath, type Did } from "@did-guardian/lib";
 
@@ -72,8 +72,11 @@ function reviewBody(wardDid: string, opId: string, status: RemotePendingStatus, 
         : `<form method="post" action="/relay-sign">
              <input type="hidden" name="ward" value="${escapeHtml(wardDid)}">
              <input type="hidden" name="op" value="${escapeHtml(opId)}">
-             <button type="submit">Approve &amp; sign</button>
-           </form>`
+             <button type="submit" name="intent" value="approve">Approve &amp; sign</button>
+             <button type="submit" name="intent" value="decline" class="danger">Veto (decline)</button>
+             <button type="submit" name="intent" value="withdraw" class="neutral">Withdraw (opt out, doesn't block)</button>
+           </form>
+           <p class="hint">Both of these submit a real, signed action to ${escapeHtml(parseDid(wardDid as Did).domain)} -- not just a local dismiss. <strong>Veto</strong> blocks the operation outright, but only works if you're already a current guardian of this ward (e.g. a guardian_remove or policy change) -- it's rejected otherwise. <strong>Withdraw</strong> just removes your own signature from consideration without blocking anyone else -- the right choice if this is a guardian_add naming you for the first time and you don't want to accept.</p>`
     }
   `;
 }
@@ -106,11 +109,12 @@ export async function handleRelaySignPage(request: Request, env: Env, url: URL):
   return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid)));
 }
 
-/** POST /relay-sign -- approve and sign, session-gated. Re-verifies everything server-side; nothing from the GET above is trusted here. */
-export async function handleRelaySignApprove(request: Request, env: Env): Promise<Response> {
+/** POST /relay-sign -- approve-and-sign or decline, session-gated. Re-verifies everything server-side; nothing from the GET above is trusted here. */
+export async function handleRelaySignSubmit(request: Request, env: Env): Promise<Response> {
   const form = await request.formData();
   const wardDid = String(form.get("ward") ?? "");
   const opId = String(form.get("op") ?? "");
+  const intent = String(form.get("intent") ?? "approve");
   if (!wardDid || !opId) return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">Missing ward or op.</p>`), 400);
 
   const sessionId = readCookie(request, "gw_session");
@@ -129,14 +133,52 @@ export async function handleRelaySignApprove(request: Request, env: Env): Promis
   if (!status.required_signers.includes(signerDid)) {
     return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">${escapeHtml(signerDid)} isn't a required signer for this operation.</p>`), 403);
   }
+
+  const { name, domain } = parseDid(wardDid as Did);
+  const privateKey = await decryptWardPrivateKey(env, ward);
+
+  // Decline and withdraw are both real, signed actions submitted to the
+  // ward registrar's own existing endpoints -- not a local dismiss. Each
+  // signs { action, pending_operation_id }, exactly the payload /decline
+  // and /withdraw already accept from anyone who can produce a valid
+  // signature over it (pendingOps.ts's resolveActor), the identical
+  // mechanism a local guardian's own decline/withdraw uses under the hood.
+  // No change needed on the ward registrar's side for either -- this
+  // closes the gap purely by using endpoints that already supported it.
+  if (intent === "decline" || intent === "withdraw") {
+    const path = intent === "decline" ? "decline" : "withdraw";
+    const label = intent === "decline" ? "decline" : "withdrawal";
+    const sig = await signPayload({ action: intent, pending_operation_id: opId }, privateKey);
+    let resp: Response;
+    try {
+      resp = await fetch(`https://${domain}${wellKnownPath(name)}/pending/${opId}/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ signer_did: signerDid, sig }),
+      });
+    } catch {
+      return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: `Couldn't reach ${domain} to submit the ${label}. Try again.` })), 502);
+    }
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => ({ error: "unknown error" }))) as { error?: string };
+      return html(
+        pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: body.error ?? `${domain} rejected the ${label} (status ${resp.status})` })),
+        resp.status,
+      );
+    }
+    await resolveRelayInboxEntry(env, signerDid, opId, new Date().toISOString());
+    const confirmBody =
+      intent === "decline"
+        ? `<p class="hint">Your decline as ${escapeHtml(signerDid)} was submitted to ${escapeHtml(domain)} -- this operation can no longer be finalized.</p>`
+        : `<p class="hint">Your withdrawal as ${escapeHtml(signerDid)} was submitted to ${escapeHtml(domain)} -- you're no longer counted toward this operation, but it can still be finalized by others.</p>`;
+    return html(pageShell(intent === "decline" ? "Declined" : "Withdrawn", `<h1>${intent === "decline" ? "Declined" : "Withdrawn"}</h1>${confirmBody}`));
+  }
+
   if (status.signed.includes(signerDid)) {
     return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid)));
   }
 
-  const privateKey = await decryptWardPrivateKey(env, ward);
   const mySig = await signPayload(status.unsigned_payload, privateKey);
-
-  const { name, domain } = parseDid(wardDid as Did);
   let signResp: Response;
   try {
     signResp = await fetch(`https://${domain}${wellKnownPath(name)}/pending/${opId}/sign`, {
@@ -154,5 +196,6 @@ export async function handleRelaySignApprove(request: Request, env: Env): Promis
       signResp.status,
     );
   }
+  await resolveRelayInboxEntry(env, signerDid, opId, new Date().toISOString());
   return html(pageShell("Signed", `<h1>Signed</h1><p class="hint">Your signature as ${escapeHtml(signerDid)} was submitted to ${escapeHtml(domain)}.</p>`));
 }
