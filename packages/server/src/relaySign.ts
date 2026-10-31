@@ -73,10 +73,9 @@ function reviewBody(wardDid: string, opId: string, status: RemotePendingStatus, 
              <input type="hidden" name="ward" value="${escapeHtml(wardDid)}">
              <input type="hidden" name="op" value="${escapeHtml(opId)}">
              <button type="submit" name="intent" value="approve">Approve &amp; sign</button>
-             <button type="submit" name="intent" value="decline" class="danger">Veto (decline)</button>
-             <button type="submit" name="intent" value="withdraw" class="neutral">Withdraw (opt out, doesn't block)</button>
+             <button type="submit" name="intent" value="decline" class="danger">Decline</button>
            </form>
-           <p class="hint">Both of these submit a real, signed action to ${escapeHtml(parseDid(wardDid as Did).domain)} -- not just a local dismiss. <strong>Veto</strong> blocks the operation outright, but only works if you're already a current guardian of this ward (e.g. a guardian_remove or policy change) -- it's rejected otherwise. <strong>Withdraw</strong> just removes your own signature from consideration without blocking anyone else -- the right choice if this is a guardian_add naming you for the first time and you don't want to accept.</p>`
+           <p class="hint">Declining submits a real, signed decline to ${escapeHtml(parseDid(wardDid as Did).domain)} -- not just a local dismiss. It always blocks this operation: either as a current guardian's veto, or, if this is a guardian_add naming you for the first time, as a refusal of your own nomination (which the operation can never be satisfied without anyway).</p>`
     }
   `;
 }
@@ -137,41 +136,38 @@ export async function handleRelaySignSubmit(request: Request, env: Env): Promise
   const { name, domain } = parseDid(wardDid as Did);
   const privateKey = await decryptWardPrivateKey(env, ward);
 
-  // Decline and withdraw are both real, signed actions submitted to the
-  // ward registrar's own existing endpoints -- not a local dismiss. Each
-  // signs { action, pending_operation_id }, exactly the payload /decline
-  // and /withdraw already accept from anyone who can produce a valid
-  // signature over it (pendingOps.ts's resolveActor), the identical
-  // mechanism a local guardian's own decline/withdraw uses under the hood.
-  // No change needed on the ward registrar's side for either -- this
-  // closes the gap purely by using endpoints that already supported it.
-  if (intent === "decline" || intent === "withdraw") {
-    const path = intent === "decline" ? "decline" : "withdraw";
-    const label = intent === "decline" ? "decline" : "withdrawal";
-    const sig = await signPayload({ action: intent, pending_operation_id: opId }, privateKey);
+  // A real, signed decline submitted to the ward registrar's own existing
+  // /decline -- not a local dismiss. Signs { action: "decline",
+  // pending_operation_id }, exactly the payload /decline already accepts
+  // from anyone who can produce a valid signature over it (pendingOps.ts's
+  // resolveActor), the identical mechanism a local guardian's own decline
+  // uses under the hood. No change needed on the ward registrar's side.
+  // declineOperation itself now allows this from a guardian_add's own
+  // not-yet-live `incoming` party, refusing their own nomination, as well
+  // as from an already-current guardian vetoing anything else -- one verb
+  // covering both, rather than needing a second one (withdraw) for a case
+  // that's already functionally equivalent to a veto for that op type.
+  if (intent === "decline") {
+    const sig = await signPayload({ action: "decline", pending_operation_id: opId }, privateKey);
     let resp: Response;
     try {
-      resp = await fetch(`https://${domain}${wellKnownPath(name)}/pending/${opId}/${path}`, {
+      resp = await fetch(`https://${domain}${wellKnownPath(name)}/pending/${opId}/decline`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ signer_did: signerDid, sig }),
       });
     } catch {
-      return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: `Couldn't reach ${domain} to submit the ${label}. Try again.` })), 502);
+      return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: `Couldn't reach ${domain} to submit the decline. Try again.` })), 502);
     }
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({ error: "unknown error" }))) as { error?: string };
       return html(
-        pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: body.error ?? `${domain} rejected the ${label} (status ${resp.status})` })),
+        pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: body.error ?? `${domain} rejected the decline (status ${resp.status})` })),
         resp.status,
       );
     }
     await resolveRelayInboxEntry(env, signerDid, opId, new Date().toISOString());
-    const confirmBody =
-      intent === "decline"
-        ? `<p class="hint">Your decline as ${escapeHtml(signerDid)} was submitted to ${escapeHtml(domain)} -- this operation can no longer be finalized.</p>`
-        : `<p class="hint">Your withdrawal as ${escapeHtml(signerDid)} was submitted to ${escapeHtml(domain)} -- you're no longer counted toward this operation, but it can still be finalized by others.</p>`;
-    return html(pageShell(intent === "decline" ? "Declined" : "Withdrawn", `<h1>${intent === "decline" ? "Declined" : "Withdrawn"}</h1>${confirmBody}`));
+    return html(pageShell("Declined", `<h1>Declined</h1><p class="hint">Your decline as ${escapeHtml(signerDid)} was submitted to ${escapeHtml(domain)} -- this operation can no longer be finalized.</p>`));
   }
 
   if (status.signed.includes(signerDid)) {

@@ -301,9 +301,22 @@ export async function declineOperation(env: Env, id: string, auth: ActorAuth): P
 
   const ctx = await buildContextForWard(env, row.ward_did as Did);
   const actorDid = await resolveActor(env, id, "decline", auth, ctx);
-  const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
-  if (!live.includes(actorDid)) {
-    throw new RegistrarError(`${actorDid} is not a current guardian of this ward -- only a current guardian may veto a proposal`, 403);
+  const op = JSON.parse(row.partial_op) as Operation;
+  // Veto power is normally reserved for a current, live guardian -- but
+  // guardian_add's own `incoming` party is, by construction (rules.ts'
+  // guardianAddRule), never live yet and always a required signer whose
+  // own consent the operation can never be satisfied without (true at
+  // genesis and when adding to an already-populated set alike). Declining
+  // your own nomination is a refusal, not an exercise of governance power
+  // over someone else's proposal -- allow it as the same single verb
+  // rather than needing a different one (withdraw) for a case that's
+  // already functionally equivalent to a veto for this specific op type.
+  const isOwnNomination = op.type === "guardian_add" && op.incoming === actorDid;
+  if (!isOwnNomination) {
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    if (!live.includes(actorDid)) {
+      throw new RegistrarError(`${actorDid} is not a current guardian of this ward -- only a current guardian may veto a proposal`, 403);
+    }
   }
 
   const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, string>;
@@ -314,7 +327,6 @@ export async function declineOperation(env: Env, id: string, auth: ActorAuth): P
 
   const wardName = await nameForWardDid(env, row.ward_did as Did);
   const requiredSigners = JSON.parse(row.required_signers) as Did[];
-  const op = JSON.parse(row.partial_op) as Operation;
   for (const other of requiredSigners) {
     if (other !== actorDid) await notifyDeclined(env, wardName!, other, id, op.type, actorDid);
   }
