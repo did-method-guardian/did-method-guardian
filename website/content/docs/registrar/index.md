@@ -218,6 +218,8 @@ A2A's own Agent Card -- a JSON manifest advertising an identity's capabilities a
 
 Every card here declares `securitySchemes.oidc` (an `OpenIdConnectSecurityScheme` pointing at this registrar's own `/.well-known/openid-configuration`) -- how an A2A client authenticates with this identity is just this registrar's own OIDC flow, already documented in full above.
 
+**The same WebFinger endpoint also serves OpenID Connect Discovery 1.0's own, unrelated WebFinger usage** -- `rel=http://openid.net/specs/connect/1.0/issuer` -- which is what a relying party that only has a user's identifier calls first, before ever fetching `/.well-known/openid-configuration` (e.g. a "log in with your own identity provider" flow that takes `alice@guardianspec.org` directly, which is how Tailscale's own custom-OIDC login discovers an issuer). The `href` returned is always this registrar's own bare domain -- there's one OIDC issuer per registrar, not one per ward, so this step only ever confirms the identifier exists here at all. `rel` is a filter per RFC 7033: pass it zero or more times to get only matching links, or omit it to get every link this registrar knows for that resource (both the A2A one and the OIDC one, together).
+
 **Deliberately unsigned in this pass.** A2A's own `AgentCardSignature` (JWS, canonicalized) is optional, not required -- plain HTTPS already gives a verifier a real, if weaker, binding to this domain. Signing with a ward's own operational key (already custodied here, already published in its own DID Document) is a natural fit for later, not something this first pass needed to block on.
 
 ## 12. MCP interop

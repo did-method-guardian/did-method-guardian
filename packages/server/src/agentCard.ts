@@ -56,14 +56,32 @@ export async function handleAgentCard(env: Env, name: string | null): Promise<Re
   return json(buildAgentCard(resolved.did, displayName, env));
 }
 
+const OIDC_ISSUER_REL = "http://openid.net/specs/connect/1.0/issuer";
+const A2A_SELF_REL = "self";
+
 /**
- * GET /.well-known/webfinger?resource=acct:<name>@<domain> (RFC 7033 shape,
- * draft-zhao-a2a-webfinger-00's own profile of it) -- resolves a named
- * ward to its own Agent Card's real URL, the multi-tenant discovery step
- * the fixed well-known path alone can't provide. rel: "self" is the
- * draft's own choice (no new link relation defined); type:
- * "application/a2a+json" per the same draft, pending any future IANA
- * registration.
+ * GET /.well-known/webfinger?resource=acct:<name>@<domain>[&rel=...] (RFC
+ * 7033 shape) -- serves two independent discovery profiles over the same
+ * endpoint, since both resolve the same "is this identifier real on this
+ * registrar" question and RFC 7033 itself is rel-filtered, not single-
+ * purpose:
+ *
+ * - draft-zhao-a2a-webfinger-00's own profile (rel: "self", the draft's
+ *   choice -- no new link relation defined): resolves to the ward's own
+ *   Agent Card, the multi-tenant discovery step the fixed well-known path
+ *   alone can't provide.
+ * - OpenID Connect Discovery 1.0's own WebFinger usage (rel:
+ *   "http://openid.net/specs/connect/1.0/issuer"): what a relying party
+ *   that only has a user's identifier (e.g. Tailscale's own "log in with
+ *   your identity provider" flow, given "alice@guardianspec.org") actually
+ *   calls first, before ever fetching /.well-known/openid-configuration.
+ *   Every identity on this registrar shares the same issuer (there's one
+ *   OIDC provider per registrar, not per ward) -- this step is purely
+ *   "does this identifier exist here at all," not a per-ward value.
+ *
+ * `rel` filters per RFC 7033: zero or more `rel` params given means return
+ * only matching links; none given means return every link this registrar
+ * knows for the resource.
  */
 export async function handleWebfinger(env: Env, url: URL): Promise<Response> {
   const resource = url.searchParams.get("resource");
@@ -76,14 +94,20 @@ export async function handleWebfinger(env: Env, url: URL): Promise<Response> {
   const ward = await getWardByName(env, name);
   if (!ward) return json({ error: "not found" }, 404);
 
-  return json({
-    subject: resource,
-    links: [
-      {
-        rel: "self",
-        type: "application/a2a+json",
-        href: `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${name}/agent-card.json`,
-      },
-    ],
-  });
+  const requestedRels = url.searchParams.getAll("rel");
+  const wantsRel = (rel: string) => requestedRels.length === 0 || requestedRels.includes(rel);
+
+  const links: Array<{ rel: string; type?: string; href: string }> = [];
+  if (wantsRel(A2A_SELF_REL)) {
+    links.push({
+      rel: A2A_SELF_REL,
+      type: "application/a2a+json",
+      href: `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${name}/agent-card.json`,
+    });
+  }
+  if (wantsRel(OIDC_ISSUER_REL)) {
+    links.push({ rel: OIDC_ISSUER_REL, href: `https://${env.REGISTRAR_DOMAIN}` });
+  }
+
+  return json({ subject: resource, links });
 }
