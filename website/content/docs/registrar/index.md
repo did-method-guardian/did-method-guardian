@@ -122,9 +122,11 @@ The `authorization_code` grant now always returns a `refresh_token` alongside th
 
 Client authentication (where a client has a secret at all) accepts either `Authorization: Basic` or a `client_secret` body parameter, at both `/token` grant types.
 
-### 5.5 `/userinfo` claims
+### 5.5 `/userinfo` claims, and what's in the `id_token` itself
 
-Always `sub`/`name`. `email`/`email_verified` are included only when the access token's own granted `scope` includes `email` *and* this identity has a verified forwarding address on file (§6) -- never invented, never returned for a scope that didn't ask for it.
+`/userinfo` always returns `sub`/`name`. `email`/`email_verified` are included only when the access token's own granted `scope` includes `email` *and* this identity has a verified forwarding address on file (§6) -- never invented, never returned for a scope that didn't ask for it.
+
+**`email`/`email_verified`, when present, are also duplicated directly into the `id_token`**, not only reachable via a separate `/userinfo` call. This is a deliberate compatibility choice, not spec-mandated (OIDC allows claims to live in either place) -- plenty of real-world relying parties, especially simpler "generic OIDC" integrations, only ever decode the `id_token` and never make a second `/userinfo` round trip. Same exact condition as `/userinfo`'s own check: present only when `email` was granted and the identity has verified forwarding configured, absent otherwise -- there's no separate logic path, just the same fact surfaced in two places. Beyond those two claims, `id_token` stays minimal: `iss`, `sub` (the DID, not an email), `aud`, `iat`, `exp`, `nonce`, `jti` -- a relying party that auto-matches incoming SSO identities against existing user records by email or username, rather than accepting a bare DID as the subject, may still need that identity invited/mapped manually on its own side.
 
 ### 5.6 Finding the right registrar (discovery)
 

@@ -410,8 +410,24 @@ async function issueTokenPair(
   const keypair = await getOrCreateSigningKeypair(env);
   const now = Math.floor(Date.now() / 1000);
   const aud = resource ?? clientId;
+  // email/email_verified duplicated directly into the id_token, not just
+  // /userinfo -- a real-world compatibility need: plenty of relying
+  // parties (simple "generic OIDC" integrations especially) only ever
+  // decode the id_token and never make a separate userinfo call, even
+  // though the spec allows claims to live in either place. Absent
+  // whenever the ward hasn't set up (optional) email forwarding -- same
+  // condition handleUserinfo already uses, not duplicated logic, just a
+  // second place it's applied.
+  const emailClaims: Record<string, unknown> = {};
+  if (scope.includes("email")) {
+    const forwarding = await getVerifiedForwardingByDid(env, wardDid);
+    if (forwarding) {
+      emailClaims.email = forwarding.forward_to;
+      emailClaims.email_verified = true;
+    }
+  }
   const idToken = await signJwt(
-    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret() },
+    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret(), ...emailClaims },
     keypair,
   );
   // scope travels with the access token itself (not just the one-time auth
