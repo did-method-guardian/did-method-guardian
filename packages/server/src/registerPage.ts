@@ -29,14 +29,14 @@ function registerFormBody(returnTo: string, opts: { nameValue?: string; error?: 
           ${opts.error ? `<p class="error"><i class="ph ph-warning-circle"></i> ${escapeHtml(opts.error)}</p>` : ""}
           <form method="post" action="/register" id="register-form">
             <input type="hidden" name="return_to" value="${escapeHtml(returnTo)}">
-            <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]"></label>
+            <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autocomplete="username" autofocus required pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]"></label>
             <fieldset style="border:0; padding:0; margin:1rem 0 0;">
               <label style="display:flex; align-items:center; gap:.4rem; font-weight:400;"><input type="radio" name="credential_mode" value="generate" ${mode === "generate" ? "checked" : ""} style="display:inline; width:auto; min-height:0;"> Generate a secure login secret for me (recommended)</label>
               <label style="display:flex; align-items:center; gap:.4rem; font-weight:400; margin-top:.4rem;"><input type="radio" name="credential_mode" value="password" ${mode === "password" ? "checked" : ""} style="display:inline; width:auto; min-height:0;"> Set my own password</label>
             </fieldset>
             <div id="password-fields" ${mode === "password" ? "" : "hidden"}>
-              <label>Password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input id="password-field" type="password" name="password" minlength="${MIN_PASSWORD_LENGTH}" ${mode === "password" ? "required" : ""}></label>
-              <label>Confirm password <input id="password-confirm-field" type="password" name="password_confirm" minlength="${MIN_PASSWORD_LENGTH}" ${mode === "password" ? "required" : ""}></label>
+              <label>Password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input id="password-field" type="password" name="password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" ${mode === "password" ? "required" : ""}></label>
+              <label>Confirm password <input id="password-confirm-field" type="password" name="password_confirm" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" ${mode === "password" ? "required" : ""}></label>
             </div>
             <button type="submit">Create account</button>
           </form>

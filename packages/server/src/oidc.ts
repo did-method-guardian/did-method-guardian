@@ -75,10 +75,10 @@ function loginForm(action: string, hidden: Record<string, string>, opts: { nameV
           ${opts.error ? `<p class="error"><i class="ph ph-warning-circle"></i> ${escapeHtml(opts.error)}</p>` : ""}
           <form method="post" action="${escapeHtml(action)}">
             ${hiddenInputs}
-            <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
+            <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autocomplete="username" autofocus required></label>
             <label>Login secret <small>(shown once, at creation)</small></label>
             <div class="field-eye">
-              <input id="login-secret-field" name="login_secret" type="password" required>
+              <input id="login-secret-field" name="login_secret" type="password" autocomplete="current-password" required>
               <button type="button" aria-label="Show login secret" onclick="var f=document.getElementById('login-secret-field'); var show=f.type==='password'; f.type=show?'text':'password'; this.querySelector('i').className=show?'ph ph-eye-slash':'ph ph-eye';"><i class="ph ph-eye"></i></button>
             </div>
             <button type="submit">Sign in</button>

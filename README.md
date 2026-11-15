@@ -22,7 +22,13 @@ Every deployment of `packages/server` auto-provisions one bare-domain identity (
 
 A fresh deployment generates its own keypair for this identity automatically. An operator who wants to bring their own key material instead (migrating from somewhere, or managing it outside this registrar's own custodial encryption) sets both `ROOT_WARD_PUBLIC_KEY` and `ROOT_WARD_PRIVATE_KEY` via `wrangler secret put` -- both or neither.
 
-**To actually log in as this identity**, set `ROOT_WARD_LOGIN_SECRET` (also via `wrangler secret put`) to a password of your choosing -- there's no registration flow to set one through otherwise. This takes effect the next time the root identity is accessed, whether that's its first creation on a brand-new deployment or a one-time lazy upgrade on one that's already running (no redeploy or migration needed beyond setting the secret). Sign in with the name field left as `_`, or your bare domain, or `@your-domain` -- all three mean the same thing.
+**To actually log in as this identity**, set `ROOT_WARD_LOGIN_SECRET` (also via `wrangler secret put`) to a password of your choosing -- there's no registration flow to set one through otherwise. This takes effect the next time the root identity is accessed, whether that's its first creation on a brand-new deployment or a one-time lazy upgrade on one that's already running (no redeploy or migration needed beyond setting the secret). Sign in with the name field left as `_`, your bare domain, `@your-domain`, or `_@your-domain` -- all four mean the same thing. The last one matters in practice: a relying party that forces a `name@domain` shape on its own login form (Tailscale's own custom-OIDC login does) leaves `_@your-domain` as the only way to reach the root identity through that form at all.
+
+**If you forget this password**, there's no self-service recovery flow for it (it's the one credential with no guardian or admin-console path back in) -- reset it directly:
+
+1. Generate a new secret and its stored hash, matching `hashPassword`'s own scheme (`packages/server/src/secretBox.ts`): PBKDF2-HMAC-SHA256, 100,000 iterations, a random 16-byte salt, stored as `pbkdf2$<iterations>$<salt b64>$<hash b64>`. Any language with PBKDF2 support works; this doesn't have to run inside the Worker.
+2. `UPDATE wards SET login_secret_hash = '<the stored hash>' WHERE name = ''` against your own D1 database (`wrangler d1 execute <your-db> --remote --command "..."`).
+3. Save the new secret somewhere durable immediately -- a password manager, not a browser's own save-password prompt, since this credential has no recovery path if it's lost again. `ROOT_WARD_LOGIN_SECRET` itself doesn't need to change for this to work; the stored hash is independent of it once the one-time lazy upgrade has already happened.
 
 See `packages/server/src/env.ts` for the complete list of environment variables this registrar reads.
 

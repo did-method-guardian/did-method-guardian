@@ -213,8 +213,8 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
     <form method="post" action="/account/rotate"><button type="submit">Rotate operational key</button></form>
     <form method="post" action="/account/login-secret/reissue"><button type="submit" class="neutral">Get a new generated login secret</button></form>
     <form method="post" action="/account/login-secret/reissue">
-      <label>Or set your own password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input type="password" name="password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
-      <label>Confirm <input type="password" name="password_confirm" minlength="${MIN_PASSWORD_LENGTH}" required></label>
+      <label>Or set your own password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input type="password" name="password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
+      <label>Confirm <input type="password" name="password_confirm" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
       <button type="submit" class="neutral">Set password</button>
     </form>
     ${

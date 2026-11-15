@@ -44,10 +44,22 @@ function normalizeLoginName(input: string): string {
  * login_hint against an already-logged-in session's own name needs the
  * exact same normalization a real login attempt would get, not a second,
  * possibly-drifting implementation of the same rule.
+ *
+ * `_@acme.com` also means root, not a ward literally named "_" -- confirmed
+ * live this was a real gap, not theoretical: a relying party that forces a
+ * `name@domain` shape on its own login form (Tailscale's own custom-OIDC
+ * login does) leaves `_@domain` as the *only* way to express "the root
+ * identity" through that form at all, since neither bare `_` nor bare
+ * `@domain` fits what the form demands. Checked on the name normalizeLoginName
+ * actually extracts, not the raw trimmed input -- "_" has to survive having
+ * an "@domain" sliced off after it, the same way a real ward's own name
+ * already does.
  */
 export function normalizeLoginIdentifier(env: Env, input: string): string {
   const trimmed = input.trim();
-  return trimmed === "_" || trimmed === env.REGISTRAR_DOMAIN ? "" : normalizeLoginName(input);
+  if (trimmed === env.REGISTRAR_DOMAIN) return "";
+  const name = normalizeLoginName(trimmed);
+  return name === "_" ? "" : name;
 }
 
 export async function verifyLogin(env: Env, name: string, loginSecret: string): Promise<string | null> {
