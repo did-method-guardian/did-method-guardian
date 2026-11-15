@@ -197,6 +197,7 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
   const body = `
     <h1>Your account</h1>
     <p class="hint">${escapeHtml(wardDid)}</p>
+    <form method="post" action="/guardian-logout" class="inline"><button type="submit" class="neutral">Log out</button></form>
     ${banner(message ?? null, messageKind)}
     <dl>
       <dt>Status</dt><dd><span class="state">${state.deactivated ? "Deactivated" : "Active"}</span></dd>

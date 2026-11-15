@@ -20,7 +20,7 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
-import { readCookie, resolveSession, verifyLogin, createLoginSession } from "./login.js";
+import { readCookie, resolveSession, verifyLogin, createLoginSession, endSession } from "./login.js";
 import { getPendingOperationStatus, contributeToOperation, type PendingOperationStatus } from "./pendingOps.js";
 import { getPendingOperation, getWardByDid } from "./db.js";
 import { checkRateLimit, clientIp } from "./rateLimit.js";
@@ -196,4 +196,32 @@ function loginFormBody(returnTo: string, opts: { nameValue?: string; error?: str
       </div>
     </section>
   `;
+}
+
+/**
+ * POST /guardian-logout?return_to=<path> -- named "-logout" (not "/logout")
+ * for the same reason "/guardian-login" isn't "/login": zz-maintainer's own
+ * catch-all already serves a bare "/logout" of its own on zzmq.dev,
+ * confirmed by reading its route table directly, not assumed.
+ *
+ * There was no way to end a session at all before this -- confirmed a real
+ * gap, not theoretical: a stale session from an earlier login silently
+ * authenticated a relying-party flow as the wrong identity, with no way to
+ * clear it short of the browser's own cookie TTL or manually deleting
+ * cookies. POST, not GET, same reasoning as every other state-changing
+ * action here (an email client's own link-prefetch scanner must never be
+ * able to trigger this just by visiting a link).
+ */
+export async function handleLogout(request: Request, env: Env, url: URL): Promise<Response> {
+  const returnTo = url.searchParams.get("return_to") ?? "/";
+  const safeReturnTo = isSafeReturnTo(returnTo) ? returnTo : "/";
+  const sessionId = readCookie(request, SESSION_COOKIE);
+  if (sessionId) await endSession(env, sessionId);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: safeReturnTo,
+      "set-cookie": `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
+    },
+  });
 }

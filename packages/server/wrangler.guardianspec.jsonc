@@ -49,6 +49,12 @@
     { "pattern": "guardianspec.org/userinfo*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/api/me/pending-signatures*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/guardian-login*", "zone_name": "guardianspec.org" },
+    // Logout (votingPage.ts's handleLogout). Its own pattern, not covered
+    // by "/guardian-login*" above -- the two strings diverge at their 13th
+    // character ("login" vs "logout"), so a prefix match on one never
+    // reaches the other. No collision with the docs site (website/) also
+    // hosted on this domain.
+    { "pattern": "guardianspec.org/guardian-logout*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/oauth/*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/revoke*", "zone_name": "guardianspec.org" },
     { "pattern": "guardianspec.org/account*", "zone_name": "guardianspec.org" },

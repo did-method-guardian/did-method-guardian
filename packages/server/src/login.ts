@@ -1,5 +1,5 @@
 import type { Env } from "./env.js";
-import { getWardByName, getLoginSession, insertLoginSession } from "./db.js";
+import { getWardByName, getLoginSession, insertLoginSession, deleteLoginSession } from "./db.js";
 import { verifyCredential, randomSecret } from "./secretBox.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
@@ -38,13 +38,20 @@ function normalizeLoginName(input: string): string {
  * the bare-domain root identity (wards.name's own "" sentinel) -- the same
  * identity "@acme.com" already reaches today, by construction: normalizeLoginName
  * splits on the first "@"/":" it finds, and one sitting at position 0 slices
- * down to "" already. Checked here (verifyLogin has `env`; normalizeLoginName
- * stays a pure function with no env dependency) rather than inside
- * normalizeLoginName itself.
+ * down to "" already. Checked here (needs `env`; normalizeLoginName stays a
+ * pure function with no env dependency) rather than inside normalizeLoginName
+ * itself. Exported for oidc.ts's own use -- comparing a relying party's
+ * login_hint against an already-logged-in session's own name needs the
+ * exact same normalization a real login attempt would get, not a second,
+ * possibly-drifting implementation of the same rule.
  */
+export function normalizeLoginIdentifier(env: Env, input: string): string {
+  const trimmed = input.trim();
+  return trimmed === "_" || trimmed === env.REGISTRAR_DOMAIN ? "" : normalizeLoginName(input);
+}
+
 export async function verifyLogin(env: Env, name: string, loginSecret: string): Promise<string | null> {
-  const trimmed = name.trim();
-  const normalized = trimmed === "_" || trimmed === env.REGISTRAR_DOMAIN ? "" : normalizeLoginName(name);
+  const normalized = normalizeLoginIdentifier(env, name);
   const ward = await getWardByName(env, normalized);
   if (!ward || !ward.login_secret_hash) return null;
   if (!(await verifyCredential(loginSecret, ward.login_secret_hash))) return null;
@@ -64,6 +71,11 @@ export async function resolveSession(env: Env, sessionId: string): Promise<strin
   if (!session) return null;
   if (new Date(session.expires_at).getTime() < Date.now()) return null;
   return session.ward_did;
+}
+
+/** Logs out -- deletes the session row server-side (not just the cookie client-side), so the old session id can't be replayed even if it somehow survives the browser clearing it. */
+export async function endSession(env: Env, sessionId: string): Promise<void> {
+  await deleteLoginSession(env, sessionId);
 }
 
 export function readCookie(request: Request, name: string): string | null {

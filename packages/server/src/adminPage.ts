@@ -12,7 +12,8 @@ import type { Env } from "./env.js";
 import { html, escapeHtml, pageShell, secretBox } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
 import { registerWard, RegistrarError } from "./registrar.js";
-import { getWardByDid, listWards, type WardRow } from "./db.js";
+import { registerOidcClient } from "./oidc.js";
+import { getWardByDid, listWards, listOidcClients, deleteOidcClient, type WardRow } from "./db.js";
 
 const SESSION_COOKIE = "gw_session";
 const MIN_PASSWORD_LENGTH = 12;
@@ -46,6 +47,7 @@ export async function handleAdminPage(request: Request, env: Env): Promise<Respo
     <p class="hint">Accounts on this registrar -- ${wards.length} total.</p>
     ${rows}
     <p><a href="/admin/create-account">Create a new account</a></p>
+    <p><a href="/admin/apps">Manage OAuth apps</a> <span class="hint">(for third-party sign-in integrations like Tailscale, Vercel, etc.)</span></p>
     <p><a href="/account">Back to your own account</a></p>
   `;
   return html(pageShell("Admin console", body));
@@ -142,4 +144,122 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
     <p><a href="/admin/create-account">Create another</a> -- <a href="/admin">Back to admin console</a></p>
   `;
   return html(pageShell("Account created", body), 201);
+}
+
+// OAuth Apps -- the admin-console UI for RFC 7591 dynamic client
+// registration (oidc.ts), for a third-party product's own "custom OIDC"
+// integration (Tailscale, Vercel, etc.): the registrar-wide equivalent of
+// "create an account," but for an application instead of a person. One
+// app registration here serves every account on this registrar, the same
+// way a company's own Okta/Azure AD admin sets up a third-party
+// integration once for the whole directory, not once per employee --
+// registering a client was never tied to any one ward (no owner column on
+// oidc_clients), this just gives that existing fact a UI instead of
+// requiring curl and raw JSON to use it.
+//
+// Deliberately minimal: name + one or more redirect URIs is everything a
+// real third-party integration's own setup docs ever ask the admin to
+// provide on this side. Always a confidential client (client_secret_basic)
+// -- a public client (token_endpoint_auth_method: "none") is for a
+// different situation (a native/mobile app with no secret to protect)
+// that doesn't fit "set up Tailscale SSO," and isn't exposed here to keep
+// the form from asking a non-technical admin to make a decision that
+// doesn't apply to what they're actually doing.
+
+function appsListBody(apps: Array<{ client_id: string; name: string; redirect_uris: string; created_at: string }>): string {
+  const rows = apps.length
+    ? `<ul class="signers">${apps
+        .map((a) => {
+          const uris = (JSON.parse(a.redirect_uris) as string[]).map(escapeHtml).join(", ");
+          return `<li>${escapeHtml(a.name)} <span class="hint">(${uris}, created ${escapeHtml(a.created_at)})</span>
+            <form method="post" action="/admin/apps/${encodeURIComponent(a.client_id)}/delete" class="inline" onsubmit="return confirm('Remove ${escapeHtml(a.name).replace(/'/g, "\\'")}? Anyone currently signed in through it will be signed out.');">
+              <button type="submit" class="danger">Remove</button>
+            </form></li>`;
+        })
+        .join("")}</ul>`
+    : `<p class="hint">No apps registered yet.</p>`;
+  return `
+    <h1>OAuth apps</h1>
+    <p class="hint">Third-party applications that let someone sign in with a Guardian ID on this registrar -- ${apps.length} total.</p>
+    ${rows}
+    <p><a href="/admin/apps/new">Add an app</a></p>
+    <p><a href="/admin">Back to admin console</a></p>
+  `;
+}
+
+export async function handleAdminAppsPage(request: Request, env: Env): Promise<Response> {
+  const session = await requireRootSession(request, env);
+  if (session instanceof Response) return session;
+  const apps = await listOidcClients(env);
+  return html(pageShell("OAuth apps", appsListBody(apps)));
+}
+
+function newAppFormBody(opts: { nameValue?: string; redirectUrisValue?: string; error?: string } = {}): string {
+  return `
+    <h1>Add an app</h1>
+    <p class="hint">For a third-party product's own "sign in with OIDC" or "custom OIDC" setup. It'll ask you to paste the Client ID and Client Secret shown after you submit this -- check its own setup docs for the exact redirect URI it needs first.</p>
+    ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
+    <form method="post" action="/admin/apps/new">
+      <label>App name <small>(for your own reference)</small> <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required placeholder="e.g. Tailscale"></label>
+      <label>Redirect URI(s) <small>(one per line, exactly as the app's own docs specify)</small>
+        <textarea name="redirect_uris" rows="3" required placeholder="https://example.com/oauth/callback">${escapeHtml(opts.redirectUrisValue ?? "")}</textarea>
+      </label>
+      <button type="submit">Create app</button>
+    </form>
+    <p><a href="/admin/apps">Back to OAuth apps</a></p>
+  `;
+}
+
+export async function handleAdminAppsNewPage(request: Request, env: Env): Promise<Response> {
+  const session = await requireRootSession(request, env);
+  if (session instanceof Response) return session;
+  return html(pageShell("Add an app", newAppFormBody()));
+}
+
+export async function handleAdminAppsNewForm(request: Request, env: Env): Promise<Response> {
+  const session = await requireRootSession(request, env);
+  if (session instanceof Response) return session;
+
+  const form = await request.formData();
+  const name = String(form.get("name") ?? "").trim();
+  const redirectUrisRaw = String(form.get("redirect_uris") ?? "");
+  const redirectUris = redirectUrisRaw
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (!name) {
+    return html(pageShell("Add an app", newAppFormBody({ redirectUrisValue: redirectUrisRaw, error: "App name is required." })), 400);
+  }
+  if (redirectUris.length === 0) {
+    return html(pageShell("Add an app", newAppFormBody({ nameValue: name, error: "At least one redirect URI is required." })), 400);
+  }
+  for (const uri of redirectUris) {
+    try {
+      new URL(uri);
+    } catch {
+      return html(pageShell("Add an app", newAppFormBody({ nameValue: name, redirectUrisValue: redirectUrisRaw, error: `"${uri}" isn't a valid URL.` })), 400);
+    }
+  }
+
+  const result = await registerOidcClient(env, redirectUris, name, "client_secret_basic");
+
+  const body = `
+    <h1>App created</h1>
+    <p class="hint">${escapeHtml(name)} can now be used for sign-in by any account on this registrar.</p>
+    <p class="hint">Client Secret -- shown once, right now. Paste both of these into ${escapeHtml(name)}'s own OIDC setup now; there's no other way to see the secret again (removing this app and creating a new one is the only way to get a new one).</p>
+    <dl>
+      <dt>Client ID</dt><dd>${secretBox(result.client_id)}</dd>
+      <dt>Client Secret</dt><dd>${secretBox(result.client_secret ?? "")}</dd>
+    </dl>
+    <p><a href="/admin/apps">Back to OAuth apps</a></p>
+  `;
+  return html(pageShell("App created", body), 201);
+}
+
+export async function handleAdminAppsDelete(request: Request, env: Env, clientId: string): Promise<Response> {
+  const session = await requireRootSession(request, env);
+  if (session instanceof Response) return session;
+  await deleteOidcClient(env, clientId);
+  return new Response(null, { status: 302, headers: { location: "/admin/apps" } });
 }

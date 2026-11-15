@@ -1,4 +1,4 @@
-import { generateKeypair, liveGuardians } from "@did-guardian/lib";
+import { generateKeypair, liveGuardians, parseDid, type Did } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { resolveState, makeGuardianLivenessResolver } from "./registrar.js";
 import {
@@ -21,8 +21,8 @@ import {
 } from "./db.js";
 import { encryptSecret, decryptSecret, randomSecret, hashSecret } from "./secretBox.js";
 import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, decodeJwtUnsafe, type SigningKeypair } from "./jwt.js";
-import { verifyLogin, createLoginSession, resolveSession, readCookie } from "./login.js";
-import { html, escapeHtml, pageStyles } from "./htmlPage.js";
+import { verifyLogin, createLoginSession, resolveSession, readCookie, normalizeLoginIdentifier } from "./login.js";
+import { html, escapeHtml, authPageShell } from "./htmlPage.js";
 
 const SESSION_COOKIE = "gw_session";
 const AUTH_CODE_TTL_MS = 1000 * 60 * 5; // 5 minutes
@@ -52,29 +52,43 @@ function err(message: string, status: number): Response {
 /**
  * This is one of the few pages in the whole registrar a real end user
  * actually looks at directly (everything else here is JSON, consumed by a
- * relying party's own code, or the voting UI in votingPage.ts) --
- * confirmed live it was previously bare, unstyled HTML with no visual
- * continuity from whatever relying-party page sent someone here, which
- * reads as a broken/wrong page rather than a real step in the same flow.
- * pageStyles/html/escapeHtml now live in htmlPage.ts, shared with
- * votingPage.ts's own login form -- same look, one definition.
+ * relying party's own code, or the voting UI in votingPage.ts) -- same
+ * authPageShell/signin-hero treatment votingPage.ts's own /guardian-login
+ * uses, not a separate, bare-HTML page with no visual continuity from
+ * whatever relying-party page sent someone here (confirmed live this read
+ * as a broken/wrong page, not a real step in the same flow, before this).
  */
 function loginForm(action: string, hidden: Record<string, string>, opts: { nameValue?: string; error?: string } = {}): string {
   const hiddenInputs = Object.entries(hidden)
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`)
     .join("\n");
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${pageStyles()}</head><body>
-<h1>Sign in with your Guardian ID</h1>
-<p class="hint">Your name alone (e.g. "alice") or your full id (e.g. "alice@acme.com") both work -- the domain part is ignored here if you include it. Plus the login secret you were shown once when it was created.</p>
-${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
-<form method="post" action="${action}">
-  ${hiddenInputs}
-  <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
-  <label>Login secret <small>(shown once, at creation)</small><input name="login_secret" type="password" required></label>
-  <button type="submit">Sign in</button>
-</form>
-<p><a href="/register?return_to=${encodeURIComponent(action)}">Don't have an account? Create one</a></p>
-</body></html>`;
+  return authPageShell(
+    "Sign in",
+    `
+    <section class="signin-hero">
+      <div class="signin-grid">
+        <div class="signin-copy">
+          <h1>Sign in with your <span class="hl">Guardian ID</span></h1>
+          <p>Your name alone (e.g. "alice") or your full id (e.g. "alice@acme.com") both work -- the domain part is ignored here if you include it. Plus the login secret you were shown once when it was created.</p>
+        </div>
+        <div class="signin-card">
+          ${opts.error ? `<p class="error"><i class="ph ph-warning-circle"></i> ${escapeHtml(opts.error)}</p>` : ""}
+          <form method="post" action="${escapeHtml(action)}">
+            ${hiddenInputs}
+            <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autofocus required></label>
+            <label>Login secret <small>(shown once, at creation)</small></label>
+            <div class="field-eye">
+              <input id="login-secret-field" name="login_secret" type="password" required>
+              <button type="button" aria-label="Show login secret" onclick="var f=document.getElementById('login-secret-field'); var show=f.type==='password'; f.type=show?'text':'password'; this.querySelector('i').className=show?'ph ph-eye-slash':'ph ph-eye';"><i class="ph ph-eye"></i></button>
+            </div>
+            <button type="submit">Sign in</button>
+          </form>
+          <p style="text-align:center; margin-top: 1rem;"><a href="/register?return_to=${encodeURIComponent(action)}">Don't have an account? Create one</a></p>
+        </div>
+      </div>
+    </section>
+  `,
+  );
 }
 
 /** Previously-granted scope already covers a newly requested one iff every requested token is already present -- a returning user is only re-asked when the requested scope actually grows, the same posture every major OAuth provider already takes. */
@@ -83,10 +97,11 @@ function scopeSatisfied(granted: string, requested: string): boolean {
   return requested.split(/\s+/).filter(Boolean).every((s) => grantedSet.has(s));
 }
 
-/** The "App X wants access -- Allow/Deny" step handleAuthorize previously skipped entirely. POSTs back to the same /authorize URL (same query string) with just a consent decision -- the session cookie set when this page was rendered is what lets that follow-up POST resolve the ward without asking for credentials again. */
+/** The "App X wants access -- Allow/Deny" step handleAuthorize previously skipped entirely. POSTs back to the same /authorize URL (same query string) with just a consent decision -- the session cookie set when this page was rendered is what lets that follow-up POST resolve the ward without asking for credentials again. Same authPageShell/signin-hero treatment as loginForm above -- the whole /authorize flow stays visually one piece, not login-styled-then-consent-bare. */
 function consentPage(action: string, clientName: string, scope: string): string {
   const scopeLabels: Record<string, string> = {
     openid: "Your Guardian identity",
+    profile: "Your basic profile info (name)",
     email: "Your verified email address",
     "create:managed-identity": "Create new identities with you as their real, signed guardian",
   };
@@ -95,18 +110,29 @@ function consentPage(action: string, clientName: string, scope: string): string 
     .filter(Boolean)
     .map((s) => `<li>${escapeHtml(scopeLabels[s] ?? s)}</li>`)
     .join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${pageStyles()}</head><body>
-<h1>${escapeHtml(clientName)} wants access to:</h1>
-<ul>${items}</ul>
-<form method="post" action="${escapeHtml(action)}">
-  <input type="hidden" name="consent" value="allow">
-  <button type="submit">Allow</button>
-</form>
-<form method="post" action="${escapeHtml(action)}">
-  <input type="hidden" name="consent" value="deny">
-  <button type="submit" class="neutral">Deny</button>
-</form>
-</body></html>`;
+  return authPageShell(
+    "Allow access?",
+    `
+    <section class="signin-hero">
+      <div class="signin-grid">
+        <div class="signin-copy">
+          <h1>${escapeHtml(clientName)} wants access to:</h1>
+        </div>
+        <div class="signin-card">
+          <ul class="signers">${items}</ul>
+          <form method="post" action="${escapeHtml(action)}">
+            <input type="hidden" name="consent" value="allow">
+            <button type="submit">Allow</button>
+          </form>
+          <form method="post" action="${escapeHtml(action)}">
+            <input type="hidden" name="consent" value="deny">
+            <button type="submit" class="neutral">Deny</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  `,
+  );
 }
 
 export async function handleOidcRequest(request: Request, env: Env): Promise<Response> {
@@ -190,6 +216,55 @@ export async function handleOidcRequest(request: Request, env: Env): Promise<Res
  * own client_secret check is already conditional on the client actually
  * supplying one, so a public client simply never triggers it.
  */
+export interface RegisteredOidcClient {
+  client_id: string;
+  client_id_issued_at: number;
+  redirect_uris: string[];
+  client_name: string;
+  token_endpoint_auth_method: string;
+  client_secret?: string;
+  registration_access_token: string;
+  registration_client_uri: string;
+}
+
+/**
+ * The actual client-creation logic, shared by the RFC 7591 HTTP endpoint
+ * below and the admin console's own "add an app" form (adminPage.ts) --
+ * one code path, never duplicated, same discipline as registerWard being
+ * the one place a ward is ever created. Takes already-validated inputs;
+ * callers own their own validation (HTTP body shape vs. form fields look
+ * different enough that sharing a validator wasn't worth it, but the
+ * actual secret-generation and DB-write logic is identical either way).
+ */
+export async function registerOidcClient(env: Env, redirectUris: string[], clientName: string, authMethod: "none" | "client_secret_basic"): Promise<RegisteredOidcClient> {
+  const clientId = randomSecret();
+  const clientSecret = randomSecret(); // public clients still get a never-issued placeholder, see header comment
+  const registrationAccessToken = randomSecret();
+  const now = new Date().toISOString();
+
+  await insertOidcClient(env, {
+    client_id: clientId,
+    client_secret_hash: await hashSecret(clientSecret),
+    redirect_uris: JSON.stringify(redirectUris),
+    name: clientName,
+    token_endpoint_auth_method: authMethod,
+    registration_access_token_hash: await hashSecret(registrationAccessToken),
+    created_at: now,
+  });
+
+  const response: RegisteredOidcClient = {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.parse(now) / 1000),
+    redirect_uris: redirectUris,
+    client_name: clientName,
+    token_endpoint_auth_method: authMethod,
+    registration_access_token: registrationAccessToken,
+    registration_client_uri: `https://${env.REGISTRAR_DOMAIN}/oauth/register-client/${clientId}`,
+  };
+  if (authMethod !== "none") response.client_secret = clientSecret;
+  return response;
+}
+
 async function handleRegisterClient(request: Request, env: Env): Promise<Response> {
   let body: unknown;
   try {
@@ -204,31 +279,7 @@ async function handleRegisterClient(request: Request, env: Env): Promise<Respons
   const authMethod = b.token_endpoint_auth_method === "none" ? "none" : "client_secret_basic";
   const clientName = typeof b.client_name === "string" ? b.client_name : "unnamed client";
 
-  const clientId = randomSecret();
-  const clientSecret = authMethod === "none" ? randomSecret() : randomSecret(); // public clients still get a never-issued placeholder, see header comment
-  const registrationAccessToken = randomSecret();
-  const now = new Date().toISOString();
-
-  await insertOidcClient(env, {
-    client_id: clientId,
-    client_secret_hash: await hashSecret(clientSecret),
-    redirect_uris: JSON.stringify(b.redirect_uris),
-    name: clientName,
-    token_endpoint_auth_method: authMethod,
-    registration_access_token_hash: await hashSecret(registrationAccessToken),
-    created_at: now,
-  });
-
-  const response: Record<string, unknown> = {
-    client_id: clientId,
-    client_id_issued_at: Math.floor(Date.parse(now) / 1000),
-    redirect_uris: b.redirect_uris,
-    client_name: clientName,
-    token_endpoint_auth_method: authMethod,
-    registration_access_token: registrationAccessToken,
-    registration_client_uri: `https://${env.REGISTRAR_DOMAIN}/oauth/register-client/${clientId}`,
-  };
-  if (authMethod !== "none") response.client_secret = clientSecret;
+  const response = await registerOidcClient(env, b.redirect_uris as string[], clientName, authMethod);
   return json(response, 201);
 }
 
@@ -308,6 +359,23 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
   } else {
     const sessionId = readCookie(request, SESSION_COOKIE);
     if (sessionId) wardDid = await resolveSession(env, sessionId);
+    const loginHint = params.get("login_hint");
+    // A relying party naming a specific identity via login_hint takes
+    // precedence over whatever session this browser already happens to
+    // have -- confirmed live this was a real bug, not theoretical: a
+    // stale session from an earlier login silently signed someone in as
+    // the wrong identity here, which the relying party's own identity-
+    // mismatch check then (correctly) caught and refused, with no way on
+    // this end to tell what had actually happened. Don't silently reuse a
+    // session that doesn't match what was actually asked for -- fall
+    // through to a real login prompt instead, same as having no session
+    // at all (votingPage.ts's own handleLogout, POST /guardian-logout, is
+    // the other half of actually being able to fix this without clearing
+    // cookies by hand).
+    if (wardDid && loginHint) {
+      const { name } = parseDid(wardDid as Did);
+      if (normalizeLoginIdentifier(env, loginHint) !== (name ?? "")) wardDid = null;
+    }
     if (!wardDid) {
       // login_hint (standard OIDC authentication request parameter) --
       // a relying party that already parsed "name@domain" on its own
@@ -317,7 +385,7 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
       // this was a real point of confusion: this registrar's own name
       // field never wants the domain part, but a relying party's own
       // login page usually does).
-      return html(loginForm(`${url.pathname}${url.search}`, {}, { nameValue: params.get("login_hint") ?? "" }));
+      return html(loginForm(`${url.pathname}${url.search}`, {}, { nameValue: loginHint ?? "" }));
     }
   }
 
@@ -391,6 +459,39 @@ function isValidResourceIndicator(value: string): boolean {
 }
 
 /**
+ * The `email` claim's own value is this ward's canonical `name@domain` --
+ * never the forwarding address it happens to point mail at. Those are two
+ * different facts: the forwarding address is where mail FOR this identity
+ * currently lands (an arbitrary third-party mailbox, changeable any time,
+ * never itself a second identity), while `email` in OIDC is supposed to
+ * assert something about WHO the user IS. A real relying party can and
+ * does check this: a caller that passed `login_hint=troy@guardianspec.org`
+ * and got back `email: thoward37@gmail.com` (confirmed live, Tailscale's
+ * own identity-mismatch error) reasonably concludes the wrong person came
+ * back, not realizing forwarding and identity were ever separate concepts
+ * here. `email_verified: true` reflects that this ward has confirmed,
+ * working forwarding configured -- proof the identity is reachable by
+ * mail at all -- not that the asserted address is itself a separately-
+ * verified mailbox. No claim at all for the bare-domain root (no local
+ * part to assert as an email identity) or when forwarding isn't set up.
+ *
+ * Also a real privacy improvement, not just a correctness one: a ward's
+ * actual forwarding destination is wherever they personally chose to
+ * route their mail, which is nobody's business but theirs and this
+ * registrar's own notification system -- a third-party relying party
+ * asking for the `email` scope should learn the Guardian ID being signed
+ * in with, never leak where that identity's mail happens to land today.
+ */
+async function emailClaims(env: Env, wardDid: Did, scope: string[]): Promise<{ email?: string; email_verified?: true }> {
+  if (!scope.includes("email")) return {};
+  const forwarding = await getVerifiedForwardingByDid(env, wardDid);
+  if (!forwarding) return {};
+  const { name } = parseDid(wardDid);
+  if (name === null) return {};
+  return { email: `${name}@${env.REGISTRAR_DOMAIN}`, email_verified: true };
+}
+
+/**
  * Every access/id token gets its own jti -- the only way to revoke an
  * otherwise-stateless JWT before its own natural expiry (RFC 7009, via
  * POST /revoke -> oidc_revoked_jti, checked in handleUserinfo). `resource`
@@ -410,24 +511,14 @@ async function issueTokenPair(
   const keypair = await getOrCreateSigningKeypair(env);
   const now = Math.floor(Date.now() / 1000);
   const aud = resource ?? clientId;
-  // email/email_verified duplicated directly into the id_token, not just
-  // /userinfo -- a real-world compatibility need: plenty of relying
-  // parties (simple "generic OIDC" integrations especially) only ever
-  // decode the id_token and never make a separate userinfo call, even
-  // though the spec allows claims to live in either place. Absent
-  // whenever the ward hasn't set up (optional) email forwarding -- same
-  // condition handleUserinfo already uses, not duplicated logic, just a
-  // second place it's applied.
-  const emailClaims: Record<string, unknown> = {};
-  if (scope.includes("email")) {
-    const forwarding = await getVerifiedForwardingByDid(env, wardDid);
-    if (forwarding) {
-      emailClaims.email = forwarding.forward_to;
-      emailClaims.email_verified = true;
-    }
-  }
+  // Duplicated directly into the id_token, not only reachable via a
+  // separate /userinfo call -- plenty of relying parties, simpler
+  // "generic OIDC" integrations especially, only ever decode the id_token
+  // and never make that second round trip. Same emailClaims helper
+  // handleUserinfo uses below, not duplicated logic.
+  const email = await emailClaims(env, wardDid as Did, scope.split(/\s+/).filter(Boolean));
   const idToken = await signJwt(
-    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret(), ...emailClaims },
+    { iss: `https://${env.REGISTRAR_DOMAIN}`, sub: wardDid, aud, iat: now, exp: now + ID_TOKEN_TTL_S, nonce: nonce ?? undefined, jti: randomSecret(), ...email },
     keypair,
   );
   // scope travels with the access token itself (not just the one-time auth
@@ -765,14 +856,6 @@ async function handleUserinfo(request: Request, env: Env): Promise<Response> {
   if (!verified) return unauthorizedWithResourceMetadata(env, "invalid, expired, or revoked token");
 
   const ward = await getWardByDid(env, verified.sub);
-  const claims: Record<string, unknown> = { sub: verified.sub, name: ward?.name };
-
-  if (verified.scope.includes("email")) {
-    const forwarding = await getVerifiedForwardingByDid(env, verified.sub);
-    if (forwarding) {
-      claims.email = forwarding.forward_to;
-      claims.email_verified = true;
-    }
-  }
+  const claims: Record<string, unknown> = { sub: verified.sub, name: ward?.name, ...(await emailClaims(env, verified.sub as Did, verified.scope)) };
   return json(claims);
 }

@@ -86,6 +86,20 @@ export async function getOidcClient(env: Env, clientId: string): Promise<OidcCli
   return row ?? null;
 }
 
+/** The admin console's own "OAuth Apps" list (adminPage.ts) -- every client ever registered on this registrar, newest first. Never projects out client_secret_hash/registration_access_token_hash; nothing calling this needs them. */
+export async function listOidcClients(env: Env): Promise<Array<Omit<OidcClientRow, "client_secret_hash" | "registration_access_token_hash">>> {
+  const result = await env.DB.prepare("SELECT client_id, redirect_uris, name, token_endpoint_auth_method, created_at FROM oidc_clients ORDER BY created_at DESC").all();
+  return result.results as Array<Omit<OidcClientRow, "client_secret_hash" | "registration_access_token_hash">>;
+}
+
+/** Deletes a client and everything that references it (FK-ordered) -- the admin console's own "remove this app" action. oidc_revoked_jti is untouched: it keys on jti, not client_id, and a revoked token should stay revoked regardless of whether its issuing client still exists. */
+export async function deleteOidcClient(env: Env, clientId: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM oidc_refresh_tokens WHERE client_id = ?").bind(clientId).run();
+  await env.DB.prepare("DELETE FROM oidc_auth_codes WHERE client_id = ?").bind(clientId).run();
+  await env.DB.prepare("DELETE FROM oidc_consents WHERE client_id = ?").bind(clientId).run();
+  await env.DB.prepare("DELETE FROM oidc_clients WHERE client_id = ?").bind(clientId).run();
+}
+
 export async function insertOidcClient(env: Env, row: OidcClientRow): Promise<void> {
   await env.DB.prepare(
     "INSERT INTO oidc_clients (client_id, client_secret_hash, redirect_uris, name, token_endpoint_auth_method, registration_access_token_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -263,6 +277,11 @@ export async function insertLoginSession(env: Env, sessionId: string, wardDid: s
 export async function getLoginSession(env: Env, sessionId: string): Promise<{ ward_did: string; expires_at: string } | null> {
   const row = await env.DB.prepare("SELECT ward_did, expires_at FROM login_sessions WHERE session_id = ?").bind(sessionId).first<{ ward_did: string; expires_at: string }>();
   return row ?? null;
+}
+
+/** Logout (login.ts's own endSession) -- a no-op if the session was already gone (expired, or already logged out elsewhere). */
+export async function deleteLoginSession(env: Env, sessionId: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM login_sessions WHERE session_id = ?").bind(sessionId).run();
 }
 
 export interface EmailForwardingRow {

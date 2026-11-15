@@ -6,10 +6,10 @@ import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
-import { renderPendingOpPage, signAsSelf, handleDirectLogin } from "./votingPage.js";
+import { renderPendingOpPage, signAsSelf, handleDirectLogin, handleLogout } from "./votingPage.js";
 import { handleRelaySignPage, handleRelaySignSubmit } from "./relaySign.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
-import { handleAdminPage, handleAdminCreateAccountPage, handleAdminCreateAccountForm } from "./adminPage.js";
+import { handleAdminPage, handleAdminCreateAccountPage, handleAdminCreateAccountForm, handleAdminAppsPage, handleAdminAppsNewPage, handleAdminAppsNewForm, handleAdminAppsDelete } from "./adminPage.js";
 import { handleAgentCard, handleWebfinger } from "./agentCard.js";
 import { checkRateLimit, clientIp } from "./rateLimit.js";
 import {
@@ -384,6 +384,14 @@ export default {
       return handleDirectLogin(request, env, url);
     }
 
+    if (path === "/guardian-logout" && request.method === "POST") {
+      // Named "-logout" not "/logout" for the same reason the login page
+      // above is "/guardian-login" not "/login" -- zz-maintainer's own
+      // catch-all already serves a bare "/logout" of its own on zzmq.dev,
+      // confirmed by reading its route table directly, not assumed.
+      return handleLogout(request, env, url);
+    }
+
     if (path === "/relay-sign" && request.method === "GET") {
       return handleRelaySignPage(request, env, url);
     }
@@ -426,6 +434,19 @@ export default {
     }
     if (path === "/admin/create-account" && request.method === "POST") {
       return handleAdminCreateAccountForm(request, env);
+    }
+    if (path === "/admin/apps" && request.method === "GET") {
+      return handleAdminAppsPage(request, env);
+    }
+    if (path === "/admin/apps/new" && request.method === "GET") {
+      return handleAdminAppsNewPage(request, env);
+    }
+    if (path === "/admin/apps/new" && request.method === "POST") {
+      return handleAdminAppsNewForm(request, env);
+    }
+    const adminAppDeleteMatch = path.match(/^\/admin\/apps\/([^/]+)\/delete$/);
+    if (adminAppDeleteMatch && request.method === "POST") {
+      return handleAdminAppsDelete(request, env, decodeURIComponent(adminAppDeleteMatch[1]));
     }
 
     if (path === "/verify-email" && request.method === "GET") {
