@@ -22,7 +22,12 @@ import { sendEmail } from "./emailProviders.js";
  */
 export async function handleEmail(message: ForwardableEmailMessage, env: Env): Promise<void> {
   const localPart = message.to.split("@")[0];
-  const ward = await getWardByName(env, localPart);
+  // "_" is the same reserved local part login already uses for the
+  // bare-domain root identity (wards.name's own "" sentinel) -- root can
+  // never be found by looking up a ward literally named "_", since
+  // assertValidName already forbids any real ward from ever being named
+  // that.
+  const ward = await getWardByName(env, localPart === "_" ? "" : localPart);
   if (!ward) {
     message.setReject(`no such identity "${localPart}" at this registrar`);
     return;
@@ -48,12 +53,18 @@ export async function requestEmailForwarding(env: Env, name: string, forwardTo: 
   await upsertEmailForwarding(env, { did: ward.did, forward_to: forwardTo, verification_token: token, created_at: new Date().toISOString() });
 
   const verifyUrl = `https://${env.REGISTRAR_DOMAIN}/verify-email?token=${token}`;
+  // The actual addressable local part -- "_" for the bare-domain root
+  // (wards.name's own "" sentinel, same reserved convention login already
+  // uses), the ward's own name otherwise. didFor itself already handles ""
+  // correctly (falsy, produces the bare root DID), so only the literal
+  // mail-address text below needs this.
+  const addressableName = name || "_";
   const result = await sendEmail(env, {
     from: `postmaster@${env.REGISTRAR_DOMAIN}`,
     fromName: "did:guardian",
     to: forwardTo,
     subject: `Confirm mail forwarding for ${didFor(name, env.REGISTRAR_DOMAIN)}`,
-    text: `Someone (hopefully you) asked to forward mail sent to ${name}@${env.REGISTRAR_DOMAIN} to this address.\n\nConfirm: ${verifyUrl}\n\nIf this wasn't you, ignore this message -- forwarding stays off until this link is clicked.`,
+    text: `Someone (hopefully you) asked to forward mail sent to ${addressableName}@${env.REGISTRAR_DOMAIN} to this address.\n\nConfirm: ${verifyUrl}\n\nIf this wasn't you, ignore this message -- forwarding stays off until this link is clicked.`,
   });
   if (!result.ok) {
     return {

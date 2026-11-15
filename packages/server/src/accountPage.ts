@@ -59,21 +59,6 @@ function urlName(ward: WardRow): string {
   return ward.name === "" ? "_" : ward.name;
 }
 
-/**
- * Email forwarding is the one action still unreachable for the bare-domain
- * root identity -- a real technical blocker (inbound mail routing is
- * name-keyed at the local-part level, and the root identity has no local
- * part to receive at), not a blanket restriction. Every other account
- * action now works for it the same as any named ward -- index.ts's own
- * HTTP routes already lifted the matching restriction there.
- */
-function requireEmailCapableWard(ward: WardRow): string | Response {
-  if (ward.name === "") {
-    return html(pageShell("Not available", `<h1>Not available</h1><p class="error">Email forwarding isn't available for the domain's own root identity -- it has no local part to receive mail at.</p><p><a href="/account">Back to your account</a></p>`), 400);
-  }
-  return ward.name;
-}
-
 function opSummary(entry: LogEntry): string {
   const op = entry.op as { type: string; incoming?: string; outgoing?: string };
   switch (op.type) {
@@ -218,14 +203,12 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
       <button type="submit" class="neutral">Set password</button>
     </form>
     ${
-      ward.name === ""
-        ? `<p class="hint">Email forwarding isn't available for the domain's own root identity -- it has no local part to receive mail at.</p>`
-        : forwarding
-          ? `<p class="hint">Email forwarding: ${escapeHtml(forwarding.forward_to)} (verified)</p>`
-          : `<form method="post" action="/account/email">
-               <label>Forwarding email <input name="forward_to" type="email" required></label>
-               <button type="submit" class="neutral">Set up email forwarding</button>
-             </form>`
+      forwarding
+        ? `<p class="hint">Email forwarding: ${escapeHtml(forwarding.forward_to)} (verified)</p>`
+        : `<form method="post" action="/account/email">
+             <label>Forwarding email <input name="forward_to" type="email" required></label>
+             <button type="submit" class="neutral">Set up email forwarding</button>
+           </form>${ward.name === "" ? `<p class="hint">Mail for this identity routes through <code>_@${escapeHtml(env.REGISTRAR_DOMAIN)}</code>, the same reserved local part already used to log in as root.</p>` : ""}`
     }
     ${
       state.guardians.length
@@ -284,8 +267,7 @@ export async function handleAccountReissueLoginSecret(request: Request, env: Env
 export async function handleAccountEmail(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = requireEmailCapableWard(session.ward);
-  if (name instanceof Response) return name;
+  const name = session.ward.name;
   const form = await request.formData();
   const forwardTo = String(form.get("forward_to") ?? "");
   if (!forwardTo) return redirectToAccount("An email address is required.", "error");

@@ -472,8 +472,17 @@ function isValidResourceIndicator(value: string): boolean {
  * here. `email_verified: true` reflects that this ward has confirmed,
  * working forwarding configured -- proof the identity is reachable by
  * mail at all -- not that the asserted address is itself a separately-
- * verified mailbox. No claim at all for the bare-domain root (no local
- * part to assert as an email identity) or when forwarding isn't set up.
+ * verified mailbox. No claim at all when forwarding isn't set up.
+ *
+ * The bare-domain root uses "_" as its own addressable local part
+ * (email.ts's own convention, the same reserved value login already
+ * uses) once it has forwarding configured -- root is no longer
+ * structurally email-less; it just has no *name*-shaped local part,
+ * which is a different thing. Confirmed live this mattered in practice,
+ * not just for completeness: giving root a verified email address
+ * (packages/server/src/email.ts) still produced no `email` claim here
+ * until this matched that same "_" convention instead of suppressing
+ * the claim outright for any DID with no name segment.
  *
  * Also a real privacy improvement, not just a correctness one: a ward's
  * actual forwarding destination is wherever they personally chose to
@@ -487,8 +496,7 @@ async function emailClaims(env: Env, wardDid: Did, scope: string[]): Promise<{ e
   const forwarding = await getVerifiedForwardingByDid(env, wardDid);
   if (!forwarding) return {};
   const { name } = parseDid(wardDid);
-  if (name === null) return {};
-  return { email: `${name}@${env.REGISTRAR_DOMAIN}`, email_verified: true };
+  return { email: `${name ?? "_"}@${env.REGISTRAR_DOMAIN}`, email_verified: true };
 }
 
 /**
