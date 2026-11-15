@@ -856,6 +856,13 @@ async function handleUserinfo(request: Request, env: Env): Promise<Response> {
   if (!verified) return unauthorizedWithResourceMetadata(env, "invalid, expired, or revoked token");
 
   const ward = await getWardByDid(env, verified.sub);
-  const claims: Record<string, unknown> = { sub: verified.sub, name: ward?.name, ...(await emailClaims(env, verified.sub as Did, verified.scope)) };
+  // The bare-domain root's own name is "" (wards.name's own sentinel, not
+  // a real display name) -- confirmed live this was a real problem, not
+  // theoretical: an empty-string name claim is exactly the kind of thing a
+  // relying party's own validation can choke on. Same fallback agentCard.ts
+  // already uses for this identity's display name elsewhere, not a new
+  // convention invented here.
+  const name = ward?.name || env.REGISTRAR_DOMAIN;
+  const claims: Record<string, unknown> = { sub: verified.sub, name, ...(await emailClaims(env, verified.sub as Did, verified.scope)) };
   return json(claims);
 }
