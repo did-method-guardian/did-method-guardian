@@ -88,9 +88,14 @@ export async function handleWebfinger(env: Env, url: URL): Promise<Response> {
   if (!resource) return json({ error: "resource parameter is required" }, 400);
   const m = resource.match(/^acct:([^@]+)@(.+)$/);
   if (!m) return json({ error: 'resource must be an "acct:" URI, e.g. acct:alice@acme.com' }, 400);
-  const [, name, domain] = m;
+  const [, rawName, domain] = m;
   if (domain !== env.REGISTRAR_DOMAIN) return json({ error: `this registrar only resolves resources at ${env.REGISTRAR_DOMAIN}` }, 404);
 
+  // "_" is the bare-domain root identity's own reserved local part
+  // everywhere else (login, email) -- WebFinger resolution never applied
+  // that same translation, so acct:_@domain silently 404'd instead of
+  // resolving root. The stored name for root is "", never the literal "_".
+  const name = rawName === "_" ? "" : rawName;
   const ward = await getWardByName(env, name);
   if (!ward) return json({ error: "not found" }, 404);
 
@@ -102,7 +107,7 @@ export async function handleWebfinger(env: Env, url: URL): Promise<Response> {
     links.push({
       rel: A2A_SELF_REL,
       type: "application/a2a+json",
-      href: `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${name}/agent-card.json`,
+      href: `https://${env.REGISTRAR_DOMAIN}/.well-known/guardian/${name || "_"}/agent-card.json`,
     });
   }
   if (wantsRel(OIDC_ISSUER_REL)) {
