@@ -774,6 +774,7 @@ body.page-docs .nav-login:hover {
   padding: 56px var(--gutter) 96px;
 }
 .toc-sidebar {
+  grid-column: 1;
   position: sticky;
   top: 24px;
   align-self: start;
@@ -825,6 +826,7 @@ ul.toc a.active {
   font-weight: 500;
 }
 .content {
+  grid-column: 2;
   min-width: 0;
 }
 .prose {
@@ -904,6 +906,10 @@ ul.toc a.active {
   .docs-body {
     grid-template-columns: 1fr;
     gap: 28px;
+  }
+  .toc-sidebar,
+  .content {
+    grid-column: 1;
   }
   .toc-sidebar {
     position: static;
