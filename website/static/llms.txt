@@ -1,0 +1,23 @@
+# did:guardian
+
+> A distributed identity built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance.
+
+did:guardian merges did:plc's operation log and key-rotation model with did:web's domain-scoped resolution, adding group guardianship as a first-class part of the method itself. Guardianship means a configurable group of other identities -- people, organizations, or other identities -- can recover, revoke, transfer, or act on behalf of a ward. This covers both recovery (restoring access after a lost key) and standing authorization (the same role a legal guardian plays for a dependent who can't make a decision alone, or a human overseer plays for an AI agent that shouldn't have full authority on its own).
+
+## Docs
+
+- [Guide](https://guardianspec.org/docs/): plain-language introduction -- what did:guardian is, why it exists, how guardianship works, use cases, and an orientation to the rest of the project.
+- [Formal specification](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method -- identifier syntax, the operation log, every operation and signature rule (each with a stable REQ-<section>-<n> id), security and privacy considerations.
+- [Registrar API](https://guardianspec.org/docs/registrar/): the reference registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint (standard OIDC provider, admin console, agent-identity API) this specific implementation adds.
+
+## Code
+
+- [GitHub repository](https://github.com/did-method-guardian/did-method-guardian): reference library (packages/lib), reference registrar (packages/server), interoperability test fixtures (interop_tests), and this site's own source. Dual-licensed MIT/Apache-2.0.
+
+## Try it
+
+- [guardianspec.org](https://guardianspec.org) and zzmq.dev are both live, independently-operated instances of the reference registrar -- create an identity on either one to see the method work end to end, including signing in to a third-party app via standard OIDC.
+
+## Full text
+
+- [llms-full.txt](https://guardianspec.org/llms-full.txt): the guide, formal specification, and registrar API concatenated into one file.
