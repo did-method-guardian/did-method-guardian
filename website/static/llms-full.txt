@@ -42,17 +42,17 @@ Three situations come up often enough to need a standard answer:
 ## How it works
 
 
-By default, a `did:guardian` identity functions no differently than a standard DID. It controls itself with its own keys. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy the ward's own registrar enforces. \
+By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy the ward's registrar enforces. \
 \
-A simple example of this is a human that manages an agent. The agent has its own fully functional id, and the human also has its own id, but the human can be assigned as the agent's *guardian*.
+A simple example of this is a human that manages an agent. The agent has a fully functional id, and the human has a separate id, but the human can be assigned as the agent's *guardian*.
 
 
 A few rules hold regardless of how many guardians there are or who they are:
 
-- **Guardianship is explicit and consensual.** A guardian has to sign to accept the role; nobody can be named a guardian without agreeing to it. Adding or removing a guardian is itself a signed, auditable action, visible in the identity's history afterward.
+- **Guardianship is explicit and consensual.** A guardian has to sign to accept the role; nobody can be named a guardian without agreeing to it. Adding or removing a guardian is also a signed, auditable action, visible in the identity's history afterward.
 - **A guardian can act on the ward's behalf for things the ward can't authorize alone.** This covers recovery, but also ongoing authorization, similar to how a legal guardian already can act on behalf of a dependent, like a minor child.
 - **A threshold decides how many guardians need to act together.** A ward can require any one guardian, a majority, all of them, or a specific count, choosing the appropriate policy for the level of trust the situation calls for.
-- **Each guardian action is signed with that guardian's own key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to the specific guardian who performed the action, in the ward identity's own history.
+- **Each guardian action is signed with that specific guardian's key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to whichever guardian performed it, in the identity's history.
 - **Guardianship is temporary by design.** It can be handed off, shared among several guardians, reduced to none at all, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor).
 
 See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise definitions of each operation and signature.
@@ -73,11 +73,11 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 
 
-**did:guardian's contribution:** group guardianship as a first-class part of the method itself. A configurable group of other identities can hold standing authority over a ward -- recovering it, acting on its behalf, with membership that can change hands over time -- verified the same way any other operation in the log is, with no separate credential, smart contract, or external system required. Neither `did:plc` nor `did:web` nor the W3C DID Core spec itself builds this in natively; `did:guardian` does.
+**did:guardian's contribution:** group guardianship as a first-class part of the method. A configurable group of other identities can hold standing authority over a ward -- recovering it, acting on its behalf, with membership that can change hands over time -- verified the same way any other operation in the log is, with no separate credential, smart contract, or external system required. Neither `did:plc` nor `did:web` nor the W3C DID Core spec builds this in natively; `did:guardian` does.
 
 
 
-**Compatibility.** Resolving a `did:guardian` identifier returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document. Any tool that already understands DID documents understands this one. The guardian relationship itself lives in the method's own operation log, which keeps the document shape itself fully ordinary.
+**Compatibility.** Resolving a `did:guardian` identifier returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document. Any tool that already understands DID documents understands this one. The guardian relationship lives in the method's operation log, which keeps the document shape fully ordinary.
 
 
 ## The identifier
@@ -90,7 +90,7 @@ did:guardian:acme.com
 
 
 
-A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's root organizational identity, auto-provisioned for the domain itself.
+A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's root organizational identity, auto-provisioned for the domain.
 
 
 
@@ -110,7 +110,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 **Recover an identity after losing access to it.** If a ward's key is lost, a group of its guardians (meeting the threshold configured in its policy) can issue it a fresh key. If a key was stolen and already used, the same guardians can undo that specific change within the 72-hour recovery window, exactly as `did:plc` already supports.
 
 
-**Hand off responsibility cleanly.** Moving guardianship from one party to another, adding a second guardian, or dissolving guardianship entirely are each a single signed operation, recorded permanently in the identity's own history.
+**Hand off responsibility cleanly.** Moving guardianship from one party to another, adding a second guardian, or dissolving guardianship entirely are each a single signed operation, recorded permanently in the identity's history.
 
 ## The parts of this project
 
@@ -119,15 +119,15 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 
 
-**The reference library** (`packages/lib`). A portable implementation of the method's own cryptographic and verification logic, such as signing and verifying operations, replaying a log into current state, checking threshold rules. Implemented in JavaScript so it runs in Node, in a browser, or for example, serverless infrastructure like Cloudflare Workers.
+**The reference library** (`packages/lib`). A portable implementation of the method's cryptographic and verification logic, such as signing and verifying operations, replaying a log into current state, checking threshold rules. Implemented in JavaScript so it runs in Node, in a browser, or for example, serverless infrastructure like Cloudflare Workers.
 
 
 
-**The reference registrar** (`packages/server`). A self-hostable server implementing the method, plus a working identity provider built on top of it: standard OpenID Connect (dynamic client registration, PKCE, refresh tokens, a full consent screen), an account dashboard, an admin console for an operator managing accounts on behalf of others, and an agent-identity API for a platform that creates and manages identities programmatically. All of this is documented separately in the [registrar API spec](/docs/registrar/). A custom registrar could implement only the method itself and remain fully conformant.
+**The reference registrar** (`packages/server`). A self-hostable server implementing the method, plus a working identity provider built on top of it: standard OpenID Connect (dynamic client registration, PKCE, refresh tokens, a full consent screen), an account dashboard, an admin console for an operator managing accounts on behalf of others, and an agent-identity API for a platform that creates and manages identities programmatically. All of this is documented separately in the [registrar API spec](/docs/registrar/). A custom registrar could implement only the method and remain fully conformant.
 
 
 
-**The running reference deployment.** [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar. Consider running the registrar on your domain, and see how separate registrars operate independently, each resolving their own `did:guardian` identities. Creating an identity is the fastest way to see the method work end to end.
+**The running reference deployment.** [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar. Consider running the registrar on your domain, and see how separate registrars operate independently -- names are scoped per domain, so nothing overlaps between them. Creating an identity is the fastest way to see the method work end to end.
 
 
 
@@ -136,7 +136,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 - [**Get Started**](/docs/how-to/): a quickstart (create an identity, resolve it, add a guardian) plus task-oriented how-to guides -- give an AI agent a revocable identity, sign in via custom OIDC, self-host a registrar, recover after a lost key.
 - [**Prior art and comparisons**](/docs/prior-art/): how did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when each fits better.
 - [**The formal specification**](/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
-- [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method itself, including the OIDC provider, the account dashboard, the agent-identity API, etc.
+- [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method, including the OIDC provider, the account dashboard, the agent-identity API, etc.
 - [**The GitHub repository**](https://github.com/did-method-guardian/did-method-guardian): source for the method's reference library, the reference registrar, and this website.
 
 
@@ -468,7 +468,7 @@ Named `/guardian-login`/`/guardian-logout`, not the shorter `/login`/`/logout`, 
 
 **A relying party's own `login_hint` always takes precedence over an already-active session.** `/authorize` compares a normalized `login_hint` against the current session's own name (the same normalization a login attempt itself goes through), and falls through to a login prompt -- pre-filled with the hint, same as having no session at all -- whenever they don't match, rather than silently proceeding as whoever happens to still be logged in.
 
-**The bare-domain root identity logs in like any other ward**, once an operator has given it a credential (`ROOT_WARD_LOGIN_SECRET`, see the top-level README's own self-hosting section) -- the name field on either login form accepts `_`, the bare registrar domain, `@<domain>`, or `_@<domain>`, all four resolving to the same identity. The last form matters in practice, not just for completeness: a relying party that forces a `name@domain` shape on its own login form (Tailscale's own custom-OIDC login does) leaves `_@<domain>` as the only way to reach the root identity through that form at all, since neither bare `_` nor bare `@<domain>` fits what the form demands. `normalizeLoginIdentifier` (login.ts) checks the *extracted* name against `"_"` rather than the raw, untrimmed input, so `_` survives having `@domain` sliced off after it, the same way a ward's own name does. No self-service recovery if this password is lost -- see the README's own section on resetting it directly against `wards.login_secret_hash`.
+**The bare-domain root identity logs in like any other ward**, once an operator has given it a credential (`ROOT_WARD_LOGIN_SECRET`, see the top-level README's self-hosting section) -- the name field on either login form accepts `_`, the bare registrar domain, `@<domain>`, or `_@<domain>`, all four resolving to the same identity. The last form matters in practice, not just for completeness: a relying party that forces a `name@domain` shape on its login form (Tailscale's custom-OIDC login does) leaves `_@<domain>` as the only way to reach the root identity through that form at all, since neither bare `_` nor bare `@<domain>` fits what the form demands. `normalizeLoginIdentifier` (login.ts) checks the *extracted* name against `"_"` rather than the raw, untrimmed input, so `_` survives having `@domain` sliced off after it, the same way a ward's name does. No self-service recovery if this password is lost -- see the README's section on resetting it directly against `wards.login_secret_hash`.
 
 **`login_secret` can be either generated or user-chosen.** `POST /register` (§1) and this registrar's own registration page both offer a choice: let the registrar generate a high-entropy secret (the only option before this), or set a password instead (`{"name": "...", "password": "..."}` in the JSON body; a minimum length is enforced, no further composition rules). A generated secret is returned once, in the response, and never again; a chosen password is never echoed back, since the caller already knows it. Reissuing (`.../login-secret`, §2) takes the same optional `password` either way -- changing your own credential later works identically to setting it at registration.
 
@@ -532,7 +532,7 @@ async function loginWithGuardian(identifier, redirectUri) {
 
 `POST .../email` (set up forwarding), `GET /verify-email` (confirm a forwarding address). See `packages/server/src/email.ts`. Reused, not modified, by §3's own signer-notification need.
 
-**The bare-domain root identity uses `_` as its own reserved local part** (the same convention §5's own login already uses) -- `_@<domain>` both addresses mail to it and is the value `email.ts` writes into `email_forwarding`, so inbound routing (name-keyed at the local part, per `handleEmail`) can find it the same way it finds any named ward. Root previously couldn't set up forwarding at all ("no local part to receive mail at"), which also meant it could never satisfy a relying party that hard-requires an `email` claim (§5.5) -- Tailscale's own custom-OIDC login does. Once root has verified forwarding configured the same way a named ward does, its OIDC `email` claim becomes `_@<domain>`, verifiable like any other.
+**The bare-domain root identity uses `_` as its reserved local part** (the same convention §5's login already uses) -- `_@<domain>` both addresses mail to it and is the value `email.ts` writes into `email_forwarding`, so inbound routing (name-keyed at the local part, per `handleEmail`) can find it the same way it finds any named ward. Root previously couldn't set up forwarding at all ("no local part to receive mail at"), which also meant it could never satisfy a relying party that hard-requires an `email` claim (§5.5) -- Tailscale's custom-OIDC login does. Once root has verified forwarding configured the same way a named ward does, its OIDC `email` claim becomes `_@<domain>`, verifiable like any other.
 
 Outbound sending (the verification link itself, and every §3 notification) goes through `emailProviders.ts`. This registrar's own choice of provider is a deployment config, not a protocol or method detail: `EMAIL_PROVIDER` (a `wrangler.jsonc` var) names one of `mailchannels` | `resend` | `cloudflare-native` | `log` (dev-only -- prints instead of sending). Nothing here is specific to this provider list -- adding another is one more small function, never a reason to touch any caller. Unconfigured, outbound sending fails with a clear configuration error rather than a vendor-specific HTTP status.
 
@@ -600,7 +600,7 @@ A2A's own Agent Card -- a JSON manifest advertising an identity's capabilities a
 
 Every card here declares `securitySchemes.oidc` (an `OpenIdConnectSecurityScheme` pointing at this registrar's own `/.well-known/openid-configuration`) -- how an A2A client authenticates with this identity is just this registrar's own OIDC flow, already documented in full above.
 
-**The same WebFinger endpoint also serves OpenID Connect Discovery 1.0's own, unrelated WebFinger usage** -- `rel=http://openid.net/specs/connect/1.0/issuer` -- which is what a relying party that only has a user's identifier calls first, before ever fetching `/.well-known/openid-configuration` (e.g. a "log in with your own identity provider" flow that takes `alice@guardianspec.org` directly, which is how Tailscale's own custom-OIDC login discovers an issuer). The `href` returned is always this registrar's own bare domain -- there's one OIDC issuer per registrar, not one per ward, so this step only ever confirms the identifier exists here at all. `rel` is a filter per RFC 7033: pass it zero or more times to get only matching links, or omit it to get every link this registrar knows for that resource (both the A2A one and the OIDC one, together).
+**The same WebFinger endpoint also serves OpenID Connect Discovery 1.0's unrelated WebFinger usage** -- `rel=http://openid.net/specs/connect/1.0/issuer` -- which is what a relying party that only has a user's identifier calls first, before ever fetching `/.well-known/openid-configuration` (e.g. a "log in with your identity provider" flow that takes `alice@guardianspec.org` directly, which is how Tailscale's custom-OIDC login discovers an issuer). The `href` returned is always the registrar's bare domain -- there's one OIDC issuer per registrar, not one per ward, so this step only ever confirms the identifier exists here at all. `rel` is a filter per RFC 7033: pass it zero or more times to get only matching links, or omit it to get every link this registrar knows for that resource (both the A2A one and the OIDC one, together).
 
 **Deliberately unsigned in this pass.** A2A's own `AgentCardSignature` (JWS, canonicalized) is optional, not required -- plain HTTPS already gives a verifier a weaker binding to this domain. Signing with a ward's own operational key (already custodied here, already published in its own DID Document) is a natural fit for later, not something this first pass needed to block on.
 

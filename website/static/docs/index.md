@@ -44,17 +44,17 @@ Three situations come up often enough to need a standard answer:
 ## How it works
 
 
-By default, a `did:guardian` identity functions no differently than a standard DID. It controls itself with its own keys. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy the ward's own registrar enforces. \
+By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy the ward's registrar enforces. \
 \
-A simple example of this is a human that manages an agent. The agent has its own fully functional id, and the human also has its own id, but the human can be assigned as the agent's *guardian*.
+A simple example of this is a human that manages an agent. The agent has a fully functional id, and the human has a separate id, but the human can be assigned as the agent's *guardian*.
 
 
 A few rules hold regardless of how many guardians there are or who they are:
 
-- **Guardianship is explicit and consensual.** A guardian has to sign to accept the role; nobody can be named a guardian without agreeing to it. Adding or removing a guardian is itself a signed, auditable action, visible in the identity's history afterward.
+- **Guardianship is explicit and consensual.** A guardian has to sign to accept the role; nobody can be named a guardian without agreeing to it. Adding or removing a guardian is also a signed, auditable action, visible in the identity's history afterward.
 - **A guardian can act on the ward's behalf for things the ward can't authorize alone.** This covers recovery, but also ongoing authorization, similar to how a legal guardian already can act on behalf of a dependent, like a minor child.
 - **A threshold decides how many guardians need to act together.** A ward can require any one guardian, a majority, all of them, or a specific count, choosing the appropriate policy for the level of trust the situation calls for.
-- **Each guardian action is signed with that guardian's own key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to the specific guardian who performed the action, in the ward identity's own history.
+- **Each guardian action is signed with that specific guardian's key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to whichever guardian performed it, in the identity's history.
 - **Guardianship is temporary by design.** It can be handed off, shared among several guardians, reduced to none at all, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor).
 
 See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise definitions of each operation and signature.
@@ -75,11 +75,11 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 
 
-**did:guardian's contribution:** group guardianship as a first-class part of the method itself. A configurable group of other identities can hold standing authority over a ward -- recovering it, acting on its behalf, with membership that can change hands over time -- verified the same way any other operation in the log is, with no separate credential, smart contract, or external system required. Neither `did:plc` nor `did:web` nor the W3C DID Core spec itself builds this in natively; `did:guardian` does.
+**did:guardian's contribution:** group guardianship as a first-class part of the method. A configurable group of other identities can hold standing authority over a ward -- recovering it, acting on its behalf, with membership that can change hands over time -- verified the same way any other operation in the log is, with no separate credential, smart contract, or external system required. Neither `did:plc` nor `did:web` nor the W3C DID Core spec builds this in natively; `did:guardian` does.
 
 
 
-**Compatibility.** Resolving a `did:guardian` identifier returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document. Any tool that already understands DID documents understands this one. The guardian relationship itself lives in the method's own operation log, which keeps the document shape itself fully ordinary.
+**Compatibility.** Resolving a `did:guardian` identifier returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document. Any tool that already understands DID documents understands this one. The guardian relationship lives in the method's operation log, which keeps the document shape fully ordinary.
 
 
 ## The identifier
@@ -92,7 +92,7 @@ did:guardian:acme.com
 
 
 
-A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's root organizational identity, auto-provisioned for the domain itself.
+A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's root organizational identity, auto-provisioned for the domain.
 
 
 
@@ -112,7 +112,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 **Recover an identity after losing access to it.** If a ward's key is lost, a group of its guardians (meeting the threshold configured in its policy) can issue it a fresh key. If a key was stolen and already used, the same guardians can undo that specific change within the 72-hour recovery window, exactly as `did:plc` already supports.
 
 
-**Hand off responsibility cleanly.** Moving guardianship from one party to another, adding a second guardian, or dissolving guardianship entirely are each a single signed operation, recorded permanently in the identity's own history.
+**Hand off responsibility cleanly.** Moving guardianship from one party to another, adding a second guardian, or dissolving guardianship entirely are each a single signed operation, recorded permanently in the identity's history.
 
 ## The parts of this project
 
@@ -121,15 +121,15 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 
 
-**The reference library** (`packages/lib`). A portable implementation of the method's own cryptographic and verification logic, such as signing and verifying operations, replaying a log into current state, checking threshold rules. Implemented in JavaScript so it runs in Node, in a browser, or for example, serverless infrastructure like Cloudflare Workers.
+**The reference library** (`packages/lib`). A portable implementation of the method's cryptographic and verification logic, such as signing and verifying operations, replaying a log into current state, checking threshold rules. Implemented in JavaScript so it runs in Node, in a browser, or for example, serverless infrastructure like Cloudflare Workers.
 
 
 
-**The reference registrar** (`packages/server`). A self-hostable server implementing the method, plus a working identity provider built on top of it: standard OpenID Connect (dynamic client registration, PKCE, refresh tokens, a full consent screen), an account dashboard, an admin console for an operator managing accounts on behalf of others, and an agent-identity API for a platform that creates and manages identities programmatically. All of this is documented separately in the [registrar API spec](/docs/registrar/). A custom registrar could implement only the method itself and remain fully conformant.
+**The reference registrar** (`packages/server`). A self-hostable server implementing the method, plus a working identity provider built on top of it: standard OpenID Connect (dynamic client registration, PKCE, refresh tokens, a full consent screen), an account dashboard, an admin console for an operator managing accounts on behalf of others, and an agent-identity API for a platform that creates and manages identities programmatically. All of this is documented separately in the [registrar API spec](/docs/registrar/). A custom registrar could implement only the method and remain fully conformant.
 
 
 
-**The running reference deployment.** [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar. Consider running the registrar on your domain, and see how separate registrars operate independently, each resolving their own `did:guardian` identities. Creating an identity is the fastest way to see the method work end to end.
+**The running reference deployment.** [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar. Consider running the registrar on your domain, and see how separate registrars operate independently -- names are scoped per domain, so nothing overlaps between them. Creating an identity is the fastest way to see the method work end to end.
 
 
 
@@ -138,5 +138,5 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 - [**Get Started**](/docs/how-to/): a quickstart (create an identity, resolve it, add a guardian) plus task-oriented how-to guides -- give an AI agent a revocable identity, sign in via custom OIDC, self-host a registrar, recover after a lost key.
 - [**Prior art and comparisons**](/docs/prior-art/): how did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when each fits better.
 - [**The formal specification**](/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
-- [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method itself, including the OIDC provider, the account dashboard, the agent-identity API, etc.
+- [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method, including the OIDC provider, the account dashboard, the agent-identity API, etc.
 - [**The GitHub repository**](https://github.com/did-method-guardian/did-method-guardian): source for the method's reference library, the reference registrar, and this website.
