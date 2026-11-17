@@ -118,7 +118,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 
 
-**The running reference deployment.** [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar. Consider running ther registrar on your domain, and see how separate registrars operate independently, each resolving their own `did:guardian` identities. Creating an identity is the fastest way to see the method work end to end.
+**The running reference deployment.** [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar. Consider running the registrar on your domain, and see how separate registrars operate independently, each resolving their own `did:guardian` identities. Creating an identity is the fastest way to see the method work end to end.
 
 
 
