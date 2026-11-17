@@ -114,6 +114,72 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 **Hand off responsibility cleanly.** Moving guardianship from one party to another, adding a second guardian, or dissolving guardianship entirely are each a single signed operation, recorded permanently in the identity's own history.
 
+## Quickstart
+
+The "Try it" widget above does this interactively. Here's the same thing in plain `curl` and a short script, if you'd rather run it yourself.
+
+**Create an identity.** Any registrar's `/register` endpoint takes just a name:
+
+```
+curl -X POST https://guardianspec.org/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "alice"}'
+```
+
+```json
+{
+  "did": "did:guardian:guardianspec.org:alice",
+  "document": { "...": "a W3C DID Core document" },
+  "login_secret": "shown once -- save it, there's no recovery path if you lose it"
+}
+```
+
+**Resolve it.** No authentication needed -- this works for anyone, anywhere:
+
+```
+curl https://guardianspec.org/.well-known/guardian/alice
+```
+
+That returns the current DID document. The full signed operation history behind it is at `/.well-known/guardian/alice/log`.
+
+**Add a guardian.** This is the one step `curl` alone can't do, and that reflects something true about guardianship itself. The registrar holds your identity's key in custody, encrypted, so it can sign ordinary logins and rotations for you, but it deliberately can't produce a guardian's own signature on your behalf -- a guardian relationship exists only when the guardian's own key signs for it. Using [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, with two keypairs you hold yourself:
+
+```js
+import { generateKeypair } from "@did-guardian/lib/dist/src/crypto.js";
+import { signCustodialCreate, signGuardianAdd, cidFor } from "@did-guardian/lib/dist/src/operations.js";
+import { replay, toDidDocument } from "@did-guardian/lib/dist/src/document.js";
+
+const alice = await generateKeypair();
+const bob = await generateKeypair();
+const aliceDid = "did:guardian:example.com:alice";
+const bobDid = "did:guardian:example.com:bob";
+
+// Genesis can't name a guardian directly (REQ-7.1-1) -- guardianship is
+// always a separate, later operation.
+const genesis = await signCustodialCreate({
+  type: "custodial_create", name: "alice",
+  operationalKeys: [alice.publicKey], verificationMethods: { "key-1": alice.publicKey },
+  services: {}, outgoing: [], incoming: [], prev: null,
+}, {});
+const genesisCid = await cidFor(genesis);
+
+// Zero-to-one guardian_add (REQ-7.2-5): both bob's own key and alice's own
+// key have to sign -- a guardian relationship starting without the
+// guardian's own consent isn't one.
+const addOp = await signGuardianAdd(
+  { type: "guardian_add", incoming: bobDid, prev: genesisCid },
+  { [bobDid]: bob.privateKey, [aliceDid]: alice.privateKey },
+  [bobDid, aliceDid],
+);
+
+const log = [{ cid: genesisCid, op: genesis }, { cid: await cidFor(addOp), op: addOp }];
+const state = replay(aliceDid, log);
+console.log(state.guardians);          // [ "did:guardian:example.com:bob" ]
+console.log(toDidDocument(state));     // an ordinary DID document -- bob never appears in it
+```
+
+That log is exactly what you'd submit to a registrar (`POST /.well-known/guardian/alice/operations`) to make it live. The [registrar API doc](/docs/registrar/) covers the asynchronous version of this -- proposing an operation and collecting the second signature over separate requests, for when both signers aren't available in the same process.
+
 ## The parts of this project
 
 
