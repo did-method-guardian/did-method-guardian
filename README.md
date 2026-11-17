@@ -1,6 +1,6 @@
 # DID Guardian Method (did:guardian)
 
-DID Guardian is a self-authenticating [DID](https://www.w3.org/TR/did-core/) method for any identity that may need an external party's custodial oversight -- key recovery, revocation, and transfer -- without that oversight ever amounting to impersonation. It generalizes guardianship (a human managing another human's identity, a human managing an autonomous agent's, an organization managing an account on its own behalf) as a single, cryptographically-enforced relationship: transferable, terminable, and governed by configurable, self-governing consensus thresholds rather than any one hardcoded rule.
+DID Guardian is a self-authenticating [DID](https://www.w3.org/TR/did-core/) method for any identity that needs an external party's custodial oversight: key recovery, revocation, transfer, and ongoing authorization for things the identity can't approve on its own. It generalizes guardianship (a human managing another human's identity, a human managing an autonomous agent's, an organization managing an account on its own behalf) as a single, cryptographically-enforced relationship: transferable, terminable, and governed by configurable, self-governing consensus thresholds rather than any one hardcoded rule.
 
 An example DID is: `did:guardian:acme.com:alice`
 
@@ -10,7 +10,7 @@ This git repository contains a TypeScript reference implementation (`packages/li
 
 ## Motivation
 
-Every identity method examined while designing this either coupled identity to infrastructure that can disappear, or had no native concept of one party holding custodial responsibility for another's keys without that amounting to full impersonation. `did:guardian` was built specifically because an increasing number of identities -- autonomous agents, accounts an organization holds on someone's behalf, a person's own accounts under a domain they don't fully control -- need recoverable, transferable, group-governable custodial oversight as a first-class protocol property, not a convention layered on top.
+Each identity method examined while designing this either coupled identity to infrastructure that can disappear, or had no native concept of one party holding standing custodial responsibility for another's keys -- recovering them, or acting on that identity's behalf. `did:guardian` was built specifically because an increasing number of identities -- autonomous agents, accounts an organization holds on someone's behalf, a person's own accounts under a domain they don't fully control -- need recoverable, transferable, group-governable custodial oversight as a first-class protocol property.
 
 ## How it works
 
