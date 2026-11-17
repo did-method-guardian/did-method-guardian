@@ -3,6 +3,17 @@ layout: docs-sidebar
 title: "did:guardian Registrar API, v1 (the reference registrar)"
 description: "This reference registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint and signature-collection mechanism this specific implementation adds on top."
 ---
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "did:guardian Registrar API, v1",
+  "description": "This reference registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint and signature-collection mechanism this specific implementation adds on top.",
+  "url": "https://guardianspec.org/docs/registrar/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # Registrar API (the reference registrar's own)
 
 **Version 1.** This document describes exactly one registrar implementation's own HTTP surface: `packages/server` in this repository, deployed identically as both zzmq.dev's and guardianspec.org's registrar. It is versioned and evolves independently of [the formal method specification](/docs/did-guardian-spec-v0.2.0/) -- adding, removing, or reshaping anything here never changes method conformance, and a different registrar implementation is free to expose none of it. Only [§1](#1-method-required-endpoints) restates an actual method requirement; everything else is this registrar's own operational choice.

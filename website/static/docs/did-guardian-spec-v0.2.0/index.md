@@ -4,6 +4,17 @@ title: "DID Guardian Method Specification, v0.2.0"
 description: "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements."
 versionTag: true
 ---
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "DID Guardian Method Specification, v0.2.0",
+  "description": "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements.",
+  "url": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # DID Guardian Method Specification
 
 `did:guardian` merges [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s own operation log and key-rotation model with [`did:web`](https://w3c-ccg.github.io/did-method-web/)'s domain-scoped, directory-free resolution, adding group guardianship on top of both -- a configurable, cryptographically-enforced set of parties able to recover, revoke, or transfer an identity.

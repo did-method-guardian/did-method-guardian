@@ -10,6 +10,17 @@ description: >-
 stage: published
 updated_at: '2026-11-17T08:27:06.596Z'
 ---
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "did:guardian",
+  "description": "A distributed identity built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance.",
+  "url": "https://guardianspec.org/docs/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # did:guardian
 
 **did:guardian is a distributed identity built around the concept of guardianship.** In most identity systems, control lives in a single keypair, and losing it means losing the identity for good. A did:guardian identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.

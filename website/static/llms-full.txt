@@ -8,6 +8,17 @@ This file concatenates the three documents that make up did:guardian's own docum
 
 Canonical URL: https://guardianspec.org/docs/
 
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "did:guardian",
+  "description": "A distributed identity built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance.",
+  "url": "https://guardianspec.org/docs/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # did:guardian
 
 **did:guardian is a distributed identity built around the concept of guardianship.** In most identity systems, control lives in a single keypair, and losing it means losing the identity for good. A did:guardian identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.
@@ -132,6 +143,17 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 # Formal specification
 
 Canonical URL: https://guardianspec.org/docs/did-guardian-spec-v0.2.0/
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "DID Guardian Method Specification, v0.2.0",
+  "description": "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements.",
+  "url": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
 
 # DID Guardian Method Specification
 
@@ -318,6 +340,17 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 # Registrar API
 
 Canonical URL: https://guardianspec.org/docs/registrar/
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "did:guardian Registrar API, v1",
+  "description": "This reference registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint and signature-collection mechanism this specific implementation adds on top.",
+  "url": "https://guardianspec.org/docs/registrar/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
 
 # Registrar API (the reference registrar's own)
 
