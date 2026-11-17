@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/policy_update.schema.json",
+  "title": "policy_update",
+  "description": "Formal spec §7.2 (REQ-7.2-9/10). Replaces GuardianPolicy wholesale.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "policy_update" },
+    "policy": { "$ref": "../guardian-policy.schema.json" },
+    "prev": { "type": "string" },
+    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "REQ-7.2-9: enough current guardians to meet the currently-effective policy_threshold. REQ-7.2-10: rejected while the current guardian set is empty." }
+  },
+  "required": ["type", "policy", "prev", "sigs"],
+  "additionalProperties": false
+}

@@ -334,6 +334,23 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - **Key reuse (correlation risk)**: reusing an operational or guardian key across more than one identity can leak a relationship between them that was never meant to be public.
 - **Cross-registrar identity unification**: two `did:guardian` identities under different registrars are never provably the same party by this method alone, including when they share a name -- this method makes no correlation between them possible by default.
 
+## Conformance
+
+A conformant implementation must replay and verify every fixture in [`interop_tests/`](https://github.com/did-method-guardian/did-method-guardian/tree/main/interop_tests) the same way this reference implementation does -- accepting every fixture whose own `expect` is `accept`, rejecting every one whose `expect` is `reject`, each for the specific reason its own `note` states. [`requirements.json`](https://guardianspec.org/requirements.json) lists every requirement in this document by id, cross-referenced with the reference implementation's own tests that name it. [JSON Schemas](https://guardianspec.org/schemas/operation.schema.json) for `GuardianPolicy` and every operation type are also available, matching this document's own field-by-field requirements.
+
+**Accept:**
+
+- `genesis_two_guardians.json`: Genesis establishing a two-member guardian set, both consenting.
+- `guardian_relinquish_unanimous.json`: Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.
+- `rotate_then_guardian_transfer.json`: Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.
+- `tombstone_any_single_key.json`: Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.
+
+**Reject:**
+
+- `forged_guardian_claim.json`: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.
+- `relinquish_quorum_not_met.json`: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.
+- `unilateral_coguardian_removal.json`: troy attempts to remove jane from a two-guardian set, but the signature claimed as jane's was produced with troy's own key, not jane's.
+
 ## Changelog
 
 - **v0.2.0** (2026-10-24, current): domain-first identifier grammar (`did:guardian:<domain>:<name>`, matching `did:web`'s own convention); the bare-domain identity as a first-class concept ([§2.1](#21-the-bare-domain-identity)); the nullification window ([REQ-6-9](#req-6-9)); every requirement given a stable `REQ-<section>-<n>` id.

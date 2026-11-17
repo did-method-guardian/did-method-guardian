@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/guardian_add.schema.json",
+  "title": "guardian_add",
+  "description": "Formal spec §7.2 (REQ-7.2-3/4/5/11). Adds exactly one new guardian, named in incoming.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "guardian_add" },
+    "incoming": { "type": "string", "description": "The DID being added as a guardian. REQ-7.2-11: MUST NOT be the ward's own identity." },
+    "prev": { "type": "string" },
+    "sigs": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "REQ-7.2-4 (non-empty guardian set): incoming's own key plus enough current guardians to meet addition_threshold. REQ-7.2-5 (empty set): incoming's own key plus the ward's own current operational key."
+    }
+  },
+  "required": ["type", "incoming", "prev", "sigs"],
+  "additionalProperties": false
+}

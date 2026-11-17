@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/guardian_relinquish.schema.json",
+  "title": "guardian_relinquish",
+  "description": "Formal spec §7.2 (REQ-7.2-8). Sets the guardian set to [] -- full dissolution.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "guardian_relinquish" },
+    "prev": { "type": "string" },
+    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Enough current guardians to meet removal_threshold, evaluated against the full current guardian set." }
+  },
+  "required": ["type", "prev", "sigs"],
+  "additionalProperties": false
+}

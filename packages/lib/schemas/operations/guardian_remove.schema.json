@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/guardian_remove.schema.json",
+  "title": "guardian_remove",
+  "description": "Formal spec §7.2 (REQ-7.2-6/7a/7b). Removes exactly one current guardian, named in outgoing.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "guardian_remove" },
+    "outgoing": { "type": "string", "description": "The guardian being removed. REQ-7.2-6: MUST be a current guardian and not the only one." },
+    "prev": { "type": "string" },
+    "sigs": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "REQ-7.2-7a (voluntary): outgoing's own key, alone. REQ-7.2-7b (forced): enough of the other current guardians to meet removal_threshold, evaluated against the full current guardian set."
+    }
+  },
+  "required": ["type", "outgoing", "prev", "sigs"],
+  "additionalProperties": false
+}

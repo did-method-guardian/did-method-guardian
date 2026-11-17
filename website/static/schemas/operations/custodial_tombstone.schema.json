@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/custodial_tombstone.schema.json",
+  "title": "custodial_tombstone",
+  "description": "Formal spec §7.3 (REQ-7.3-1). Deactivates the identity.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "custodial_tombstone" },
+    "prev": { "type": "string" },
+    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Enough of (the ward's own operational key(s) union the current guardian set) to meet tombstone_threshold." }
+  },
+  "required": ["type", "prev", "sigs"],
+  "additionalProperties": false
+}

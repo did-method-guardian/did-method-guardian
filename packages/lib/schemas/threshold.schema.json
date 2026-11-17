@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/threshold.schema.json",
+  "title": "Threshold",
+  "description": "One of the four consensus thresholds a GuardianPolicy knob may be set to (formal spec REQ-5-1).",
+  "oneOf": [
+    { "const": "any", "description": "M = 1 if N > 0, else unsatisfiable." },
+    { "const": "majority", "description": "M = floor(N/2) + 1." },
+    { "const": "unanimous", "description": "M = N." },
+    {
+      "type": "object",
+      "properties": { "at_least": { "type": "integer", "description": "M = max(k, 0)." } },
+      "required": ["at_least"],
+      "additionalProperties": false
+    }
+  ]
+}
