@@ -1,10 +1,17 @@
 {
   "name": "@did-guardian/lib",
   "version": "0.1.0",
-  "description": "Reference implementation of the did:guardian method",
+  "description": "Reference implementation of the did:guardian method: operation log replay, signature verification, threshold rules, and DID document rendering.",
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
+  "files": [
+    "dist/src",
+    "schemas",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "npm run build && node --test dist/tests",
@@ -15,5 +22,16 @@
     "@types/node": "^22.0.0",
     "fast-check": "^3.23.0"
   },
-  "license": "MIT OR Apache-2.0"
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/did-method-guardian/did-method-guardian.git",
+    "directory": "packages/lib"
+  },
+  "homepage": "https://guardianspec.org/docs/",
+  "bugs": "https://github.com/did-method-guardian/did-method-guardian/issues",
+  "keywords": ["did", "decentralized-identity", "ssi", "guardianship", "key-recovery", "did-method"],
+  "engines": {
+    "node": ">=18"
+  }
 }
