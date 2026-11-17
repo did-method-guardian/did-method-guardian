@@ -5,7 +5,7 @@ description: "Deploy packages/server -- the reference registrar -- on your own d
 ---
 # Self-host a registrar
 
-`packages/server` is a self-hostable registrar: `packages/lib` plus an HTTP surface, an OIDC/OAuth2.1 identity provider, an account dashboard, an admin console, and an agent-identity API. Both of this project's own public registrars (guardianspec.org, zzmq.dev) are exactly this code, deployed to Cloudflare Workers.
+`packages/server` is a self-hostable registrar: `packages/lib` plus an HTTP surface, an OIDC/OAuth2.1 identity provider, an account dashboard, an admin console, and an agent-identity API. This project's own public registrar, guardianspec.org, is exactly this code, deployed to Cloudflare Workers.
 
 ## Deploy
 
@@ -46,6 +46,6 @@ Sign in with the name field left as `_`, your bare domain, `@your-domain`, or `_
 
 ## Open vs. closed registration
 
-**Open** (the default, and how guardianspec.org and zzmq.dev both run): anyone can register. **Closed** (`REGISTRATION_MODE: "closed"` in `wrangler.jsonc`'s own `vars`): public self-service is blocked, and the root identity creates accounts for specific people or agents instead, through the admin console (`/admin`, `/admin/create-account`) -- available on every deployment regardless of this setting, gated to a session authenticated as the root identity. This is the shape for an operator who controls the whole domain -- personally, or as a business -- and wants named accounts for their own team or the agents they run, without an open door to the public.
+**Open** (the default, and how guardianspec.org runs): anyone can register. **Closed** (`REGISTRATION_MODE: "closed"` in `wrangler.jsonc`'s own `vars`): public self-service is blocked, and the root identity creates accounts for specific people or agents instead, through the admin console (`/admin`, `/admin/create-account`) -- available on every deployment regardless of this setting, gated to a session authenticated as the root identity. This is the shape for an operator who controls the whole domain -- personally, or as a business -- and wants named accounts for their own team or the agents they run, without an open door to the public.
 
 Full environment-variable reference: [`packages/server/src/env.ts`](https://github.com/did-method-guardian/did-method-guardian/blob/main/packages/server/src/env.ts).

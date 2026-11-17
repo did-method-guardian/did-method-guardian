@@ -16,7 +16,7 @@ did:guardian merges did:plc's operation log and key-rotation model with did:web'
 
 ## Try it
 
-- [guardianspec.org](https://guardianspec.org) and zzmq.dev are both live, independently-operated instances of the reference registrar -- create an identity on either one to see the method work end to end, including signing in to a third-party app via standard OIDC.
+- [guardianspec.org](https://guardianspec.org) is a live instance of the reference registrar -- create an identity there to see the method work end to end, including signing in to a third-party app via standard OIDC.
 
 ## Full text
 
