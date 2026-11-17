@@ -16,6 +16,7 @@
 // looking at their own account directly, not a platform acting for them.
 
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell, secretBox, policyTable, formatThreshold } from "./htmlPage.js";
 import type { PolicyField } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
@@ -245,7 +246,7 @@ export async function handleAccountReissueLoginSecret(request: Request, env: Env
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
   const name = session.ward.name;
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const password = form.get("password") ? String(form.get("password")) : undefined;
   if (password) {
     const confirm = String(form.get("password_confirm") ?? "");
@@ -268,7 +269,7 @@ export async function handleAccountEmail(request: Request, env: Env): Promise<Re
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
   const name = session.ward.name;
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const forwardTo = String(form.get("forward_to") ?? "");
   if (!forwardTo) return redirectToAccount("An email address is required.", "error");
   const result = await requestEmailForwarding(env, name, forwardTo);
@@ -314,7 +315,7 @@ export async function handleAccountTombstone(request: Request, env: Env): Promis
   if (session instanceof Response) return session;
   const name = session.ward.name;
   const confirmName = urlName(session.ward);
-  const form = await request.formData();
+  const form = await safeFormData(request);
   if (String(form.get("confirm") ?? "") !== confirmName) {
     return html(pageShell("Confirm deactivation", `<h1>Confirm deactivation</h1><p class="error">That didn't match "${escapeHtml(confirmName)}" -- nothing was changed.</p><p><a href="/account/tombstone">Try again</a></p>`), 400);
   }
@@ -338,7 +339,7 @@ export async function handleAccountTombstone(request: Request, env: Env): Promis
 export async function handleAccountRevokeConsent(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const clientId = String(form.get("client_id") ?? "");
   if (!clientId) return redirectToAccount("client_id is required.", "error");
   await deleteOidcConsent(env, session.wardDid, clientId);

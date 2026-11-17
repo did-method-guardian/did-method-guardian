@@ -9,6 +9,7 @@
 // registerWard function those already use, never a separate code path.
 
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell, secretBox } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
 import { registerWard, RegistrarError } from "./registrar.js";
@@ -102,7 +103,7 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
   const session = await requireRootSession(request, env);
   if (session instanceof Response) return session;
 
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const name = String(form.get("name") ?? "");
   const guardianDidRaw = String(form.get("guardian_did") ?? "").trim();
   const guardianDid = guardianDidRaw || null;
@@ -220,7 +221,7 @@ export async function handleAdminAppsNewForm(request: Request, env: Env): Promis
   const session = await requireRootSession(request, env);
   if (session instanceof Response) return session;
 
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const name = String(form.get("name") ?? "").trim();
   const redirectUrisRaw = String(form.get("redirect_uris") ?? "");
   const redirectUris = redirectUrisRaw

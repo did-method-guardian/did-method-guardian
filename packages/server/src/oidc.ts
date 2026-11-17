@@ -1,5 +1,6 @@
 import { generateKeypair, liveGuardians, parseDid, type Did } from "@did-guardian/lib";
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { resolveState, makeGuardianLivenessResolver } from "./registrar.js";
 import {
   getOidcClient,
@@ -339,7 +340,7 @@ async function handleAuthorize(request: Request, env: Env, url: URL): Promise<Re
   let consentDecision: "allow" | "deny" | null = null;
 
   if (request.method === "POST") {
-    const form = await request.formData();
+    const form = await safeFormData(request);
     if (form.has("consent")) {
       // This POST is a consent decision, not a login attempt -- the ward
       // was already established by the login (or existing session) that
@@ -609,7 +610,7 @@ function extractClientSecret(request: Request, b: Record<string, string>): strin
 
 async function handleToken(request: Request, env: Env): Promise<Response> {
   const contentType = request.headers.get("content-type") ?? "";
-  const body = contentType.includes("application/json") ? await request.json() : Object.fromEntries((await request.formData()).entries());
+  const body = contentType.includes("application/json") ? await request.json() : Object.fromEntries((await safeFormData(request)).entries());
   const b = body as Record<string, string>;
   const clientSecret = extractClientSecret(request, b);
 
@@ -750,7 +751,7 @@ async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret:
 /** POST /revoke (RFC 7009). A refresh token is looked up and marked revoked directly; an access/id token (a stateless JWT) is decoded (not re-verified -- RFC 7009 doesn't require the token still be valid to revoke it) just far enough to read its own jti, added to the revocation blocklist handleUserinfo already checks. Per RFC 7009 §2.2, an unrecognized or already-invalid token still returns 200 -- revocation is idempotent, never a way to probe which tokens exist. */
 async function handleRevoke(request: Request, env: Env): Promise<Response> {
   const contentType = request.headers.get("content-type") ?? "";
-  const body = contentType.includes("application/json") ? await request.json() : Object.fromEntries((await request.formData()).entries());
+  const body = contentType.includes("application/json") ? await request.json() : Object.fromEntries((await safeFormData(request)).entries());
   const b = body as Record<string, string>;
   if (!b.token) return err("token is required", 400);
 

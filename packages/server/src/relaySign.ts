@@ -19,6 +19,7 @@
 // uses for same-registrar operations.
 
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
 import { getWardByDid, resolveRelayInboxEntry } from "./db.js";
@@ -110,7 +111,7 @@ export async function handleRelaySignPage(request: Request, env: Env, url: URL):
 
 /** POST /relay-sign -- approve-and-sign or decline, session-gated. Re-verifies everything server-side; nothing from the GET above is trusted here. */
 export async function handleRelaySignSubmit(request: Request, env: Env): Promise<Response> {
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const wardDid = String(form.get("ward") ?? "");
   const opId = String(form.get("op") ?? "");
   const intent = String(form.get("intent") ?? "approve");

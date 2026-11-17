@@ -7,6 +7,7 @@
 // the JSON API already uses, never a separate code path.
 
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell, authPageShell, secretBox } from "./htmlPage.js";
 import { isSafeReturnTo } from "./votingPage.js";
 import { registerWard, RegistrarError } from "./registrar.js";
@@ -71,7 +72,7 @@ export async function handleRegisterPage(url: URL): Promise<Response> {
 
 /** POST /register, form-encoded -- the browser path. The existing JSON path (index.ts, programmatic callers) is untouched. */
 export async function handleRegisterForm(request: Request, env: Env): Promise<Response> {
-  const form = await request.formData();
+  const form = await safeFormData(request);
   const name = String(form.get("name") ?? "");
   const returnToRaw = String(form.get("return_to") ?? "/account");
   const returnTo = isSafeReturnTo(returnToRaw) ? returnToRaw : "/account";

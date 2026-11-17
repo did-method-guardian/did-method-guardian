@@ -1,4 +1,5 @@
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
 import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders, handleRelayNotify } from "./pendingOps.js";
@@ -330,7 +331,7 @@ export default {
           const contentType = request.headers.get("content-type") ?? "";
           const isForm = contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data");
           const auth = isForm
-            ? { token: String((await request.formData()).get("token") ?? "") }
+            ? { token: String((await safeFormData(request)).get("token") ?? "") }
             : await (async () => {
                 const body = (await request.json()) as { signer_did?: string; sig?: string; token?: string };
                 return body.token ? { token: body.token } : { signerDid: body.signer_did ?? "", sig: body.sig ?? "" };

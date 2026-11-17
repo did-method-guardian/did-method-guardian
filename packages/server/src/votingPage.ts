@@ -18,6 +18,7 @@
 // token, via this registrar's own existing login_secret/gw_session flow.
 
 import type { Env } from "./env.js";
+import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
 import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
 import { readCookie, resolveSession, verifyLogin, createLoginSession, endSession } from "./login.js";
@@ -143,7 +144,7 @@ export async function handleDirectLogin(request: Request, env: Env, url: URL): P
   const safeReturnTo = isSafeReturnTo(returnTo) ? returnTo : "/";
 
   if (request.method === "POST") {
-    const form = await request.formData();
+    const form = await safeFormData(request);
     const name = String(form.get("name") ?? "");
     const loginSecret = String(form.get("login_secret") ?? "");
     const formReturnTo = String(form.get("return_to") ?? "/");
