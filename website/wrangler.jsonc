@@ -2,8 +2,11 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "guardianspec-org",
   "compatibility_date": "2026-10-19",
+  "main": "src/index.ts",
   "assets": {
-    "directory": "./builds/current"
+    "directory": "./builds/current",
+    "binding": "ASSETS",
+    "run_worker_first": ["/docs/", "/docs/did-guardian-spec-v0.2.0/", "/docs/registrar/"]
   },
   "routes": [
     { "pattern": "guardianspec.org", "custom_domain": true }
