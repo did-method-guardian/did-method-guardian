@@ -16,6 +16,17 @@ Each identity method examined while designing this either coupled identity to in
 
 See the [guide](website/content/docs/index.md) for an introduction, or the [formal specification](website/content/docs/did-guardian-spec-v0.2.0/index.md) for the normative method definition -- both are also live at [guardianspec.org/docs](https://guardianspec.org/docs/).
 
+## Versioning
+
+Four different things in this repository are versioned independently, on purpose, because they're different artifacts that change for different reasons:
+
+- **The method specification** (`v0.2.0`): the normative definition of `did:guardian` itself -- identifier syntax, the operation log, every operation and signature rule. Changes here mean the method's own rules changed.
+- **`packages/lib` and `packages/server`** (`0.1.0`): this reference implementation's own semver, tracking code changes. Many releases of either can happen without the method specification changing at all.
+- **The registrar API** (`v1`): the reference registrar's own HTTP surface, [documented separately](website/content/docs/registrar/index.md) and explicitly versioned apart from the method -- a different registrar implementation is free to expose none of it and remain fully conformant.
+- `website/site.yaml`'s own `version` field is unrelated to all of the above -- it's the static site generator's own config-schema version, not a product version.
+
+A stable `/docs/spec/latest/` alias always points at whichever method specification version is current.
+
 ## Self-hosting: the bare-domain root identity
 
 Every deployment of `packages/server` auto-provisions one bare-domain identity (`did:guardian:<your-domain>`, e.g. `did:guardian:acme.com`) the first time anything resolves it -- it's never registered the way a named ward is, since there's exactly one per deployment and it belongs to whoever legitimately operates the domain, by construction. It attests every other ward's own genesis operation (the `registrar` field on `custodial_create`), and -- once given a login credential -- is a fully usable identity like any other: it can log in, rotate its own operational key, deactivate itself, and set up email forwarding too -- `_` is its own reserved local part everywhere a named ward would use its own name, for both login (`_`, your bare domain, `@your-domain`, or `_@your-domain` all work) and mail (`_@your-domain`).

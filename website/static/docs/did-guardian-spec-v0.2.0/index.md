@@ -3,6 +3,12 @@ layout: docs-sidebar
 title: "DID Guardian Method Specification, v0.2.0"
 description: "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements."
 versionTag: true
+canonical_url: 'https://guardianspec.org/docs/did-guardian-spec-v0.2.0/'
+status: Draft
+date: '2026-10-24'
+editors:
+  - Troy Howard
+updated_at: '2026-11-17'
 ---
 <script type="application/ld+json">
 {
@@ -193,3 +199,8 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - **Data permanence**: the full log stays public forever ([§9](#9-deactivation-and-data-permanence)) -- nothing in `services` should be anything that shouldn't be permanently, publicly linkable to this identity.
 - **Key reuse (correlation risk)**: reusing an operational or guardian key across more than one identity can leak a relationship between them that was never meant to be public.
 - **Cross-registrar identity unification**: two `did:guardian` identities under different registrars are never provably the same party by this method alone, including when they share a name -- this method makes no correlation between them possible by default.
+
+## Changelog
+
+- **v0.2.0** (2026-10-24, current): domain-first identifier grammar (`did:guardian:<domain>:<name>`, matching `did:web`'s own convention); the bare-domain identity as a first-class concept ([§2.1](#21-the-bare-domain-identity)); the nullification window ([REQ-6-9](#req-6-9)); every requirement given a stable `REQ-<section>-<n>` id.
+- **v0.1** (2026-10-19 through 2026-10-23): initial draft, before the method specification, registrar API, and guide were split into separate documents. Never published as its own standalone page.
