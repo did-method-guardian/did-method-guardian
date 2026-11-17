@@ -64,7 +64,7 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 
 
-**did:guardian's contribution:** group guardianship as a first-class relationship. Neither `did:plc` nor `did:web` nor the W3C DID Core spec itself, nor any other DID method, has a concept of a group of other parties with standing authority to manage an identity, to recover it, act on its behalf, and have that membership change hands over time while the identity itself stays the same. `did:guardian` adds that as a configurable property of the method itself.
+**did:guardian's contribution:** group guardianship as a first-class part of the method itself. A configurable group of other identities can hold standing authority over a ward -- recovering it, acting on its behalf, with membership that can change hands over time -- verified the same way any other operation in the log is, with no separate credential, smart contract, or external system required. Neither `did:plc` nor `did:web` nor the W3C DID Core spec itself builds this in natively; `did:guardian` does.
 
 
 

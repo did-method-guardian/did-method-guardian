@@ -4,8 +4,9 @@ base_url: https://guardianspec.org
 # this config needs to change.
 title: "did:guardian"
 description: |
-    A DID method for custodial oversight -- key recovery, revocation, and
-    transfer by one or more guardians, without impersonation.
+    A distributed identity built around guardianship -- a configurable group
+    of other identities that can recover, revoke, transfer, or act on behalf
+    of an identity, under rules its owner sets in advance.
 version: 1
 
 byline:

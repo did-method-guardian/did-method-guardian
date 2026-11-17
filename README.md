@@ -14,7 +14,7 @@ Each identity method examined while designing this either coupled identity to in
 
 ## How it works
 
-See the [specification](website/content/docs/index.md), or the live copy at [guardianspec.org/docs](https://guardianspec.org/docs/).
+See the [guide](website/content/docs/index.md) for an introduction, or the [formal specification](website/content/docs/did-guardian-spec-v0.2.0/index.md) for the normative method definition -- both are also live at [guardianspec.org/docs](https://guardianspec.org/docs/).
 
 ## Self-hosting: the bare-domain root identity
 
