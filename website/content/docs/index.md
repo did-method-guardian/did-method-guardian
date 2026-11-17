@@ -8,7 +8,7 @@ description: >-
   with the power to recover, revoke, transfer, or act on behalf of an identity,
   under rules its owner sets in advance.
 stage: published
-updated_at: '2026-11-17T08:22:02.509Z'
+updated_at: '2026-11-17T08:27:06.596Z'
 ---
 # did:guardian
 
@@ -64,7 +64,7 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 
 
-**did:guardian's contribution: group guardianship as a first-class relationship.** Neither `did:plc` nor `did:web` nor the W3C DID Core spec itself, nor any other DID method, has a concept of a group of other parties with standing authority to manage an identity, to recover it, act on its behalf, and have that membership change hands over time while the identity itself stays the same. `did:guardian` adds that as a configurable property of the method itself.
+**did:guardian's contribution:** group guardianship as a first-class relationship. Neither `did:plc` nor `did:web` nor the W3C DID Core spec itself, nor any other DID method, has a concept of a group of other parties with standing authority to manage an identity, to recover it, act on its behalf, and have that membership change hands over time while the identity itself stays the same. `did:guardian` adds that as a configurable property of the method itself.
 
 
 
@@ -79,11 +79,14 @@ did:guardian:acme.com
 ```
 
 
+
+
 A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's root organizational identity, auto-provisioned for the domain itself.
 
 
 
 Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §2](/docs/did-guardian-spec-v0.2.0/#2-identifier-syntax).
+
 
 
 ## What you can do with it
