@@ -180,6 +180,7 @@ pre {
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  margin: 1rem 0;
 }
 .code-block-bar {
   display: flex;
@@ -873,7 +874,6 @@ ul.toc a.active {
 }
 .prose pre {
   overflow-x: auto;
-  margin: 1rem 0;
 }
 .prose table {
   display: block;
