@@ -5,7 +5,7 @@ description: "A distributed identity built around guardianship: a group of other
 ---
 # did:guardian
 
-**did:guardian is a distributed identity built around the concept of guardianship.** An identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Most identity systems have no equivalent. Control lives in a single keypair, and losing it means losing the identity for good. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.
+**did:guardian is a distributed identity built around the concept of guardianship.** An identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. In most identity systems, control lives in a single keypair, and losing it means losing the identity for good. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.
 
 ## Why this exists
 
