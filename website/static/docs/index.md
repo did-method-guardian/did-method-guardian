@@ -201,6 +201,7 @@ That log is exactly what you'd submit to a registrar (`POST /.well-known/guardia
 
 ## Learn more
 
+- [**How-to guides**](/docs/how-to/): task-oriented walkthroughs -- give an AI agent a revocable identity, sign in via custom OIDC, self-host a registrar, recover after a lost key.
 - [**The formal specification**](/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
 - [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method itself, including the OIDC provider, the account dashboard, the agent-identity API, etc.
 - [**The GitHub repository**](https://github.com/did-method-guardian/did-method-guardian): source for the method's reference library, the reference registrar, and this website.
