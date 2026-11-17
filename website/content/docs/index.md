@@ -8,7 +8,7 @@ description: >-
   with the power to recover, revoke, transfer, or act on behalf of an identity,
   under rules its owner sets in advance.
 stage: published
-updated_at: '2026-11-17T07:44:16.946Z'
+updated_at: '2026-11-17T08:22:02.509Z'
 ---
 # did:guardian
 
@@ -68,7 +68,7 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 
 
-**Compatibility.** Resolving a `did:guardian` identifier returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document. Any tool that already understands DID documents understands this one. The guardian relationship itself lives in the method's own operation log, which keeps the document shape itself fully ordinary. Also, a `did:guardian` identity is fully interchangeable/backwards-compatible with `did:web` identities, and the reference registrar implements a compatibility layer.
+**Compatibility.** Resolving a `did:guardian` identifier returns an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document. Any tool that already understands DID documents understands this one. The guardian relationship itself lives in the method's own operation log, which keeps the document shape itself fully ordinary.
 
 
 ## The identifier
