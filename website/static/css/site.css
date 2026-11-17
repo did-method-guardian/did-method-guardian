@@ -873,6 +873,7 @@ ul.toc a.active {
 }
 .prose pre {
   overflow-x: auto;
+  margin: 1rem 0;
 }
 .prose table {
   display: block;

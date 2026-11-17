@@ -130,7 +130,16 @@
   // --- Code blocks: wrap every <pre> with a toolbar + copy button ---
   article.querySelectorAll("pre").forEach(function (pre) {
     var code = pre.querySelector("code");
-    var text = code ? code.textContent : pre.textContent;
+    var text;
+    if (code) {
+      var clone = code.cloneNode(true);
+      clone.querySelectorAll(".ln").forEach(function (ln) {
+        ln.remove();
+      });
+      text = clone.textContent;
+    } else {
+      text = pre.textContent;
+    }
     var lang = /^\s*[{[]/.test(text) ? "JSON" : /::?=|\*\d/.test(text) ? "ABNF" : "CODE";
     var block = document.createElement("div");
     block.className = "code-block";
