@@ -1,11 +1,11 @@
 ---
 layout: docs-sidebar
 title: "did:guardian"
-description: "A DID method built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance."
+description: "A distributed identity built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance."
 ---
 # did:guardian
 
-**did:guardian is a DID method built around guardianship.** An identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Guardianship is optional, and its exact rules are set by the identity's own owner in advance.
+**did:guardian is a distributed identity built around guardianship.** An identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Guardianship is optional, and its exact rules are set by the identity's own owner in advance.
 
 Most identity systems have no equivalent. Control lives in a single keypair, and losing it means losing the identity for good.
 
