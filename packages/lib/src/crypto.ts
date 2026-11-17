@@ -57,6 +57,75 @@ export interface Keypair {
   privateKey: string; // base64url-encoded PKCS8
 }
 
+const BASE58BTC_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function base58btcEncode(bytes: Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) | BigInt(b);
+  let s = "";
+  while (n > 0n) {
+    const r = Number(n % 58n);
+    n /= 58n;
+    s = BASE58BTC_ALPHABET[r] + s;
+  }
+  let leadingZeros = 0;
+  for (const b of bytes) {
+    if (b !== 0) break;
+    leadingZeros++;
+  }
+  return BASE58BTC_ALPHABET[0].repeat(leadingZeros) + s;
+}
+
+function encodeVarint(value: number): Uint8Array {
+  const out: number[] = [];
+  let n = value;
+  for (;;) {
+    const b = n & 0x7f;
+    n >>>= 7;
+    if (n) {
+      out.push(b | 0x80);
+    } else {
+      out.push(b);
+      break;
+    }
+  }
+  return new Uint8Array(out);
+}
+
+// multicodec code for p256-pub (https://github.com/multiformats/multicodec).
+const P256_PUB_MULTICODEC = 0x1200;
+
+/**
+ * Converts this library's internal base64url-SPKI public key format into a
+ * proper W3C Multikey multibase string: the raw EC point, compressed (33
+ * bytes), prefixed with the p256-pub multicodec varint, base58btc-encoded,
+ * and 'z'-prefixed. Used only when rendering a DID document
+ * (document.ts's toDidDocument) -- internal signing/verification keeps
+ * using the SPKI/PKCS8 base64url format unchanged, so this has no bearing
+ * on any already-signed operation log content and needs no migration.
+ *
+ * The fixed 26-byte SPKI header for P-256's own AlgorithmIdentifier
+ * (ecPublicKey + prime256v1 OIDs) is constant length, confirmed directly
+ * against Web Crypto's own exportKey("spki", ...) output (91 bytes total),
+ * not assumed -- so the trailing 65 bytes are always the raw uncompressed
+ * point (0x04 || X(32) || Y(32)).
+ */
+export function spkiToMultikey(publicKeyB64url: string): string {
+  const der = base64urlToBytes(publicKeyB64url);
+  const point = der.slice(der.length - 65);
+  if (point[0] !== 0x04) throw new Error("expected an uncompressed EC point in SPKI key material");
+  const x = point.slice(1, 33);
+  const y = point.slice(33, 65);
+  const compressed = new Uint8Array(33);
+  compressed[0] = y[31] % 2 === 0 ? 0x02 : 0x03;
+  compressed.set(x, 1);
+  const prefix = encodeVarint(P256_PUB_MULTICODEC);
+  const payload = new Uint8Array(prefix.length + compressed.length);
+  payload.set(prefix, 0);
+  payload.set(compressed, prefix.length);
+  return "z" + base58btcEncode(payload);
+}
+
 const ECDSA_PARAMS = { name: "ECDSA", namedCurve: "P-256" } as const;
 const SIGN_PARAMS = { name: "ECDSA", hash: "SHA-256" } as const;
 

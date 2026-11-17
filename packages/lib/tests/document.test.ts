@@ -7,12 +7,21 @@ function entry(op: LogEntry["op"], cid: string): LogEntry {
   return { cid, op };
 }
 
+// A real base64url-encoded P-256 SPKI public key -- toDidDocument now runs
+// verificationMethods values through spkiToMultikey (real DER parsing +
+// EC point compression), so a placeholder string like the old "did:key:op1"
+// no longer round-trips; any test that calls toDidDocument needs real key
+// material in verificationMethods specifically (operationalKeys is untouched
+// by this, so it can stay a placeholder where a test doesn't exercise it).
+const REAL_SPKI_KEY =
+  "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQFilQ5sp0oxrr46nvSc1XwcRq3bPQ_s33mPgpbcg9ovlpOWatMB86DR5lyNUcFi-99WEMIC_ma-QzEtwHnmJkA";
+
 test("replay resolves genesis correctly, guardians kept method-internal", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
     name: "fred",
     operationalKeys: ["did:key:op1"],
-    verificationMethods: { "key-1": "did:key:op1" },
+    verificationMethods: { "key-1": REAL_SPKI_KEY },
     services: { registrar: { type: "GuardianRegistrarService", endpoint: "https://example.com" } },
     outgoing: [],
     incoming: ["did:guardian:board:example:com"],
@@ -35,7 +44,7 @@ test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all ref
     type: "custodial_create",
     name: "fred",
     operationalKeys: ["did:key:op1"],
-    verificationMethods: { "key-1": "did:key:op1" },
+    verificationMethods: { "key-1": REAL_SPKI_KEY },
     services: {},
     outgoing: [],
     incoming: [],

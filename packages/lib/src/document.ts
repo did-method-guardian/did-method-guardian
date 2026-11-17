@@ -1,5 +1,6 @@
 import { guardianAddRule, guardianRemoveRule, policyUpdateRule, rotateRule, withinRecoveryWindow } from "./rules.js";
 import type { VerificationContext } from "./rules.js";
+import { spkiToMultikey } from "./crypto.js";
 import { DEFAULT_GUARDIAN_POLICY } from "./types.js";
 import type { Did, GuardianPolicy, LogEntry, ResolvedState } from "./types.js";
 
@@ -141,7 +142,7 @@ export function toDidDocument(state: ResolvedState) {
       id: `${state.did}#${id}`,
       type: "Multikey",
       controller: state.did,
-      publicKeyMultibase: key,
+      publicKeyMultibase: spkiToMultikey(key),
     })),
     authentication: vmIds,
     assertionMethod: vmIds,
