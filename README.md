@@ -10,7 +10,7 @@ This git repository contains a TypeScript reference implementation (`packages/li
 
 ## Motivation
 
-Each identity method examined while designing this either coupled identity to infrastructure that can disappear, or had no native concept of one party holding standing custodial responsibility for another's keys -- recovering them, or acting on that identity's behalf. `did:guardian` was built specifically because an increasing number of identities -- autonomous agents, accounts an organization holds on someone's behalf, a person's accounts under a domain they don't fully control -- need recoverable, transferable, group-governable custodial oversight as a first-class protocol property.
+Every identity method examined while designing this had no native concept of one party holding standing custodial responsibility for another's keys -- recovering them, or acting on that identity's behalf, when the identity itself can't. `did:guardian` was built specifically because an increasing number of identities -- autonomous agents, accounts an organization holds on someone's behalf, a person's accounts under a domain they don't fully control -- need recoverable, transferable, group-governable custodial oversight as a first-class protocol property, not something bolted on by whoever happens to operate the registrar.
 
 ## How it works
 

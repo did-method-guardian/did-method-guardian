@@ -317,6 +317,15 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - <a id="req-9-1"></a>**REQ-9-1**: The full operation log *MUST* remain permanently, publicly resolvable after `custodial_tombstone`.
 - <a id="req-9-2"></a>**REQ-9-2**: A name, once registered, *MUST NOT* be returned to the available pool within its registrar after deactivation.
 
+**Domain migration is out of scope for this version.** An identifier's `domain` ([§2](#2-identifier-syntax)) is fixed for the life of that identifier -- this document defines no operation that changes it, and none is planned for v0.x. Moving to a different domain means creating a new identifier there and linking the two, not relocating the existing one:
+
+1. Register the new identifier on the new domain.
+2. Add `alsoKnownAs` entries on each pointing at the other, so a resolver following either arrives at both.
+3. Re-establish guardianship on the new identifier -- it starts guardian-less (REQ-7.1-1) regardless of what the old one had.
+4. Tombstone the old identifier, or leave it resolvable as a historical record -- either is conformant; REQ-9-1 requires its log stay resolvable regardless.
+
+This keeps the anchor and pinning model ([§12.3](#123-pinning)) useful even without migration: an attacker who takes over an abandoned or expired domain gets a blank slate under that domain, never control of an identifier a verifier had already pinned elsewhere.
+
 ## 10. Security considerations
 
 - **Trust model**: a registrar is trusted to order operations and resist denial-of-service against its own log; it is not trusted to forge history, since the log is self-certifying and independently replayable by anyone.
@@ -394,7 +403,7 @@ A conformant implementation must replay and verify every fixture in [`interop_te
 ## Changelog
 
 - **v0.2.0** (2026-10-24, current): domain-first identifier grammar (`did:guardian:<domain>:<name>`, matching `did:web`'s own convention); the bare-domain identity as a first-class concept ([§2.1](#21-the-bare-domain-identity)); the nullification window ([REQ-6-9](#req-6-9)); every requirement given a stable `REQ-<section>-<n>` id.
-  - **2026-11-18**: added [§12, Authority and trust model](#12-authority-and-trust-model) -- the three authorities (control/naming/currency), verification levels L0-L3 and the first-contact-then-pin rule ([REQ-12-1](#req-12-1)/[REQ-12-2](#req-12-2)/[REQ-12-3](#req-12-3)), pinning ([REQ-12-4](#req-12-4)), and non-normative key custody modes ([§12.4](#124-key-custody-modes)). Reworded [REQ-6-3](#req-6-3) -- the anchor (genesis content hash) is a property of the log, not of the identifier, which was never actually hash-derived under this version's domain-first grammar. Tightened [REQ-7.1-5](#req-7.1-5) from `MAY` to `MUST`: every genesis now requires a registrar attestation, not just accepts one if present -- the reference library's `verifyCustodialCreate` function and every interop fixture were updated to match. Added security-considerations entries for log forgery/stale snapshots, domain takeover, equivocation, and custody disclosure.
+  - **2026-11-18**: documented domain migration as explicitly out of scope for this version ([§9](#9-deactivation-and-data-permanence)), with "link, don't move" (a new identifier plus mutual `alsoKnownAs`) as the documented alternative. Added [§12, Authority and trust model](#12-authority-and-trust-model) -- the three authorities (control/naming/currency), verification levels L0-L3 and the first-contact-then-pin rule ([REQ-12-1](#req-12-1)/[REQ-12-2](#req-12-2)/[REQ-12-3](#req-12-3)), pinning ([REQ-12-4](#req-12-4)), and non-normative key custody modes ([§12.4](#124-key-custody-modes)). Reworded [REQ-6-3](#req-6-3) -- the anchor (genesis content hash) is a property of the log, not of the identifier, which was never actually hash-derived under this version's domain-first grammar. Tightened [REQ-7.1-5](#req-7.1-5) from `MAY` to `MUST`: every genesis now requires a registrar attestation, not just accepts one if present -- the reference library's `verifyCustodialCreate` function and every interop fixture were updated to match. Added security-considerations entries for log forgery/stale snapshots, domain takeover, equivocation, and custody disclosure.
 - **v0.1** (2026-10-19 through 2026-10-23): initial draft, before the method specification, registrar API, and guide were split into separate documents. Never published as its own standalone page.
 
 
