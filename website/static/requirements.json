@@ -181,7 +181,7 @@
       "id": "REQ-6-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-3",
       "section": "6. The operation log",
-      "text": "The identifier *MUST* be derived from the genesis operation's own content hash, never assigned independently by a registrar.",
+      "text": "Every identity has an *anchor*: the genesis operation's content hash (a CID, [REQ-6-4](#req-6-4)), computed the same way, by anyone, from the genesis operation alone. The anchor is a property of the log, not of the identifier -- it is never assigned independently by a registrar, and it exists regardless of whether anything ever pins or checks it ([\u00a712.3](#123-pinning)). The identifier itself remains the location-bound `domain[:name]` string defined in [\u00a72](#2-identifier-syntax), which a registrar does assign.",
       "tests": []
     },
     {
@@ -213,6 +213,26 @@
       "section": "6. The operation log",
       "text": "Every operation's `sigs` map is keyed by signer DID; each signature *MUST* be checked against that DID's own independently-resolved keys, never the ward's, and *MUST* cover the full operation content, binding it to this exact operation.",
       "tests": []
+    },
+    {
+      "id": "REQ-6-8",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-8",
+      "section": "6. The operation log",
+      "text": "A guardian-signed `custodial_rotate` meeting `recovery_threshold` ([\u00a77.2](#72-update)) *MAY* name a `prev` earlier than the current log head, provided the operation immediately following the named `prev` (the operation being nullified) was accepted by the registrar less than the recovery window ([REQ-6-9](#req-6-9)) ago.",
+      "tests": [
+        "packages/lib/tests/document-v2.test.ts",
+        "packages/lib/tests/rules.test.ts"
+      ]
+    },
+    {
+      "id": "REQ-6-9",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-9",
+      "section": "6. The operation log",
+      "text": "The recovery window is 72 hours, matching `did:plc`'s own value.",
+      "tests": [
+        "packages/lib/tests/document-v2.test.ts",
+        "packages/lib/tests/rules.test.ts"
+      ]
     },
     {
       "id": "REQ-6-10",
@@ -270,7 +290,7 @@
       "id": "REQ-7.1-5",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-5",
       "section": "7.1 Create",
-      "text": "`registrar` *MAY* be present -- an attestation `{did, sig}` from the accepting registrar's own key. If present, a verifier *MUST* check it against the named `did`'s own resolved key.",
+      "text": "`registrar` *MUST* be present -- an attestation `{did, sig}` from the accepting registrar's key, over the genesis content excluding `registrar`/`sigs`. A verifier *MUST* reject a genesis operation carrying no `registrar` attestation at all, and *MUST* check a present one against the named `did`'s resolved key. (Tightened from `MAY`/checked-only-if-present in this version's [Changelog](#changelog) -- [REQ-12-1](#req-12-1)'s L1 anchoring depends on every genesis actually carrying one.)",
       "tests": [
         "packages/lib/tests/operations.test.ts"
       ]
@@ -433,7 +453,35 @@
       "section": "9. Deactivation and data permanence",
       "text": "A name, once registered, *MUST NOT* be returned to the available pool within its registrar after deactivation.",
       "tests": []
+    },
+    {
+      "id": "REQ-12-1",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-12-1",
+      "section": "12.2 Verification levels",
+      "text": "A verifier *MUST* report, alongside any claim about an identity's state, which level below it actually reached -- never an unqualified \"valid\" with no level attached.",
+      "tests": []
+    },
+    {
+      "id": "REQ-12-2",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-12-2",
+      "section": "12.2 Verification levels",
+      "text": "A verifier's first resolution of a given identifier *MUST* reach L3. An anchor or registrar key *MAY* be pinned from that resolution, or from another channel the verifier already trusts out-of-band, for later L1 checks -- *MUST NOT* be pinned from a resolution that only reached L1 or below, which would just be trusting the claim it was supposed to check.",
+      "tests": []
+    },
+    {
+      "id": "REQ-12-3",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-12-3",
+      "section": "12.2 Verification levels",
+      "text": "Authentication, authorization, or any decision sensitive to revocation *MUST* use L3, or L2 with a maximum acceptable age measured in minutes -- never L1 alone. A log that is internally consistent and correctly anchored can still be missing a revocation that has already happened live; L1 says nothing about how long ago it was last true.",
+      "tests": []
+    },
+    {
+      "id": "REQ-12-4",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-12-4",
+      "section": "12.3 Pinning",
+      "text": "A `guardian_add` operation *SHOULD* record the incoming guardian's anchor ([REQ-6-3](#req-6-3)) alongside its DID, so that a later L1 check of that specific guardian relationship has something to pin against without a separate L3 resolution first. **Not yet implemented in the reference library** -- `guardian_add`'s `incoming` field is a bare DID today; see [issue #5](https://github.com/did-method-guardian/did-method-guardian/issues/5). A relying party in the meantime gets the same effect by storing `{did, anchor}` the first time it resolves a guardian at L3 -- the same pattern as storing a `sub` from an OIDC provider.",
+      "tests": []
     }
   ],
-  "count": 53
+  "count": 59
 }

@@ -2,32 +2,38 @@
   "note": "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEai2M8tBNpoI0C1aPgxanAQcJEfe07A_XO-Kk3O8foo7mzh8g3AroSsrt_X9x1FMGjdn94ZMhjt7EXzzoBVXzvw"
+    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpeB6SzfwkDjvWhM5QZHUSmTnZJsRrwtkIl1tCL8WzdHBDlzRGqtkW_Ek0MhxFqN40qhh2euHedGaSUBQlhUXg",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVAh2XA0vupPaSApAWwYIATM4am7iCouXoxbU2oEGN29K7AZzUVQUM88v4DKIVwwMTZw3djWOhgMm9vq8d2uVlA"
   },
   "log": [
     {
-      "cid": "4be7d181e1dd312f5f274674886bb7c722292e45e0250861571bcbcb28ab34c9",
+      "cid": "1fe7d7427223a53e6234f5a8c0b972b9b9fbdcd38cf37751bc3e554332bbcf1f",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEai2M8tBNpoI0C1aPgxanAQcJEfe07A_XO-Kk3O8foo7mzh8g3AroSsrt_X9x1FMGjdn94ZMhjt7EXzzoBVXzvw"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpeB6SzfwkDjvWhM5QZHUSmTnZJsRrwtkIl1tCL8WzdHBDlzRGqtkW_Ek0MhxFqN40qhh2euHedGaSUBQlhUXg"
         ],
         "verificationMethods": {},
         "services": {},
         "outgoing": [],
         "incoming": [],
         "prev": null,
+        "creator": "did:guardian:example:com",
+        "registrar": {
+          "did": "did:guardian:example:com",
+          "sig": "SSxMKnbPL6lCl-KiH9yEN4hRDMyAfEFbVPgwfeDN_LBFPuk5IXZxsBggQtvet2s64lwYSYRqvResnPtp_RyBfg"
+        },
         "sigs": {}
       }
     },
     {
-      "cid": "1296a6d5e22d9b08a737bbbcbe7f113471298b74116913578f26537ca0bb6f88",
+      "cid": "cb480c638f9e26bd9a8305ab6e3a33944362114c5642a949bc31466b45f261ef",
       "op": {
         "type": "custodial_tombstone",
-        "prev": "4be7d181e1dd312f5f274674886bb7c722292e45e0250861571bcbcb28ab34c9",
+        "prev": "1fe7d7427223a53e6234f5a8c0b972b9b9fbdcd38cf37751bc3e554332bbcf1f",
         "sigs": {
-          "did:guardian:fred:example:com": "T-ht4Fk1rIVgvtx8M6DfD4fIES5aYQSAHlHvUfSegUp5hukpqemk4VqGWE6nqx-XGR3ZQIh8UNZwrMESAym7fQ"
+          "did:guardian:fred:example:com": "NNZBUtHV1JEJEhsnpnt_G4eZafwVmnbh_MqJqqEfj1xInx0LRu_iRyDDDbdLTJwVp_9SsWvV5SwQxE87ouvbMg"
         }
       }
     }

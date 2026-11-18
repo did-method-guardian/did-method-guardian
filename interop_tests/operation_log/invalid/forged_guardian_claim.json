@@ -2,16 +2,17 @@
   "note": "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErTrxlIOxw-3yfubOSV1LcdL2kVxAJVO2_8Fd5OV8mF-W_u9QovY6LBg5znvTy0BJXnokpgXbuv5tz-CPxx8JKA"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8VACrxTIwe3C80GHArMbnyUhLK-IKQkeqgeNy16-B_LF52_5RsClLmBLlUd9b7Qw2npZ2DshMzZVZADbwURgxA",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVAh2XA0vupPaSApAWwYIATM4am7iCouXoxbU2oEGN29K7AZzUVQUM88v4DKIVwwMTZw3djWOhgMm9vq8d2uVlA"
   },
   "log": [
     {
-      "cid": "0620cbd31b4ccfea01d06a236ba78f364114e174c22bfd522cce1cebf14b261b",
+      "cid": "8111409fbd0e1616e9770204b03cfc62d312b975b226dbef35a75e62a9186745",
       "op": {
         "type": "custodial_create",
         "name": "puppet",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEai2M8tBNpoI0C1aPgxanAQcJEfe07A_XO-Kk3O8foo7mzh8g3AroSsrt_X9x1FMGjdn94ZMhjt7EXzzoBVXzvw"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpeB6SzfwkDjvWhM5QZHUSmTnZJsRrwtkIl1tCL8WzdHBDlzRGqtkW_Ek0MhxFqN40qhh2euHedGaSUBQlhUXg"
         ],
         "verificationMethods": {},
         "services": {},
@@ -20,8 +21,13 @@
           "did:guardian:board-a:example:com"
         ],
         "prev": null,
+        "creator": "did:guardian:example:com",
+        "registrar": {
+          "did": "did:guardian:example:com",
+          "sig": "8B3fKHIAUM3f6HE9-EBGzZMc6YkRrXJawceLwifPmkGZGg6B246koXcDO4pluUJWsZA0ew3V0auniuhRS53_Kg"
+        },
         "sigs": {
-          "did:guardian:board-a:example:com": "PAJa6C9bNoWkfeJF_vIcDUk6DV1SXa3vwICbVXMGoR6XW4unOd9r3JngYF1AAGLW6PKC4C3rARcUAA7XeIcR0w"
+          "did:guardian:board-a:example:com": "t_fRQetNzbilKfisUkj7LGy5EA2yKl2RzK5rcPU_Cz3PBv_K9aHPZUYuc1FhaLIVoG5w7mk_SvEk_320Sdx56w"
         }
       }
     }

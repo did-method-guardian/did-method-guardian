@@ -19,7 +19,11 @@ def extract_requirements(spec_text):
     section = None
     subsection = None
     reqs = []
-    req_pattern = re.compile(r'<a id="(req-[\d.a-z-]+)"></a>\*\*(REQ-[\d.A-Za-z-]+)\*\*:\s*(.*)')
+    # The optional `(?:\s*\([^)]*\))?` handles a parenthetical label between
+    # the bolded id and its colon, e.g. "**REQ-6-8** (nullification): ..." --
+    # missing this dropped REQ-6-8/REQ-6-9 silently until caught by REQ-12-2
+    # using the same pattern.
+    req_pattern = re.compile(r'<a id="(req-[\d.a-z-]+)"></a>\*\*(REQ-[\d.A-Za-z-]+)\*\*(?:\s*\([^)]*\))?:\s*(.*)')
     for line in spec_text.split('\n'):
         h2 = re.match(r'^## (\d+)\. (.+)', line)
         h3 = re.match(r'^### ([\d.]+) (.+)', line)

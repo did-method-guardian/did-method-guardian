@@ -68,12 +68,26 @@ test("REQ-7.1-5: a forged registrar attestation (wrong key) is rejected", async 
   assert.equal(result.valid, false);
 });
 
+const REGISTRAR_DID = "did:guardian:registrar.example.com";
+
+/** A valid registrar attestation (REQ-7.1-5) over `partial`, plus a resolver that already knows the registrar's key -- shared by tests below that aren't themselves testing the attestation, so they can still construct an otherwise-valid genesis. */
+async function attestedGenesis(
+  partial: Omit<CustodialCreateOp, "sigs" | "registrar" | "creator">,
+  incomingKeys: Record<string, string>,
+  registrar: { publicKey: string; privateKey: string },
+) {
+  const withCreator = { ...partial, creator: REGISTRAR_DID };
+  const registrarAttestation = await signRegistrarAttestation(withCreator, REGISTRAR_DID, registrar.privateKey);
+  return signCustodialCreate({ ...withCreator, registrar: registrarAttestation }, incomingKeys);
+}
+
 test("genesis with one consenting guardian verifies", async () => {
   const ward = await generateKeypair();
   const guardian = await generateKeypair();
-  const resolve = makeResolver({ "did:guardian:board:example:com": guardian.publicKey });
+  const registrar = await generateKeypair();
+  const resolve = makeResolver({ "did:guardian:board:example:com": guardian.publicKey, [REGISTRAR_DID]: registrar.publicKey });
 
-  const op = await signCustodialCreate(
+  const op = await attestedGenesis(
     {
       type: "custodial_create",
       name: "fred",
@@ -85,6 +99,7 @@ test("genesis with one consenting guardian verifies", async () => {
       prev: null,
     },
     { "did:guardian:board:example:com": guardian.privateKey },
+    registrar,
   );
 
   const result = await verifyCustodialCreate(op, resolve);
@@ -95,11 +110,14 @@ test("forged guardian claim fails -- the named party never signed", async () => 
   const ward = await generateKeypair();
   const realGuardian = await generateKeypair();
   const impostorKey = await generateKeypair(); // the attacker's own key, not the named guardian's
-  const resolve = makeResolver({ "did:guardian:board:example:com": realGuardian.publicKey });
+  const registrar = await generateKeypair();
+  const resolve = makeResolver({ "did:guardian:board:example:com": realGuardian.publicKey, [REGISTRAR_DID]: registrar.publicKey });
 
   // Attacker builds a genesis op naming a real, unwilling party as guardian,
-  // but signs with their own key instead of the named guardian's.
-  const op = await signCustodialCreate(
+  // but signs with their own key instead of the named guardian's. A real
+  // registrar attestation is still attached -- this test is specifically
+  // about the forged guardian signature, not REQ-7.1-5.
+  const op = await attestedGenesis(
     {
       type: "custodial_create",
       name: "puppet",
@@ -111,10 +129,35 @@ test("forged guardian claim fails -- the named party never signed", async () => 
       prev: null,
     },
     { "did:guardian:board:example:com": impostorKey.privateKey }, // forged
+    registrar,
   );
 
   const result = await verifyCustodialCreate(op, resolve);
   assert.equal(result.valid, false, "a forged guardian claim must fail verification");
+});
+
+test("REQ-7.1-5: genesis with no registrar attestation at all is rejected", async () => {
+  const ward = await generateKeypair();
+  const resolve = makeResolver({});
+
+  const op = await signCustodialCreate(
+    {
+      type: "custodial_create",
+      name: "alice",
+      operationalKeys: [ward.publicKey],
+      verificationMethods: { "key-1": ward.publicKey },
+      services: {},
+      outgoing: [],
+      incoming: [],
+      prev: null,
+      creator: REGISTRAR_DID,
+      // no `registrar` field at all -- this is the thing under test
+    },
+    {},
+  );
+
+  const result = await verifyCustodialCreate(op, resolve);
+  assert.equal(result.valid, false, "genesis with no registrar attestation must be rejected");
 });
 
 const WARD_DID = "did:guardian:fred:example:com";

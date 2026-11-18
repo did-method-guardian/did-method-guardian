@@ -102,12 +102,11 @@ export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyR
       return { valid: false, reason: `missing or invalid signature from incoming guardian ${did}` };
     }
   }
-  if (op.registrar) {
-    const keys = await resolve(op.registrar.did);
-    const payload = payloadWithoutSigOrRegistrar(op as any);
-    const ok = !!keys && (await Promise.all(keys.map((pk) => verifyPayload(payload, op.registrar!.sig, pk)))).some(Boolean);
-    if (!ok) return { valid: false, reason: "invalid registrar attestation signature" };
-  }
+  if (!op.registrar) return { valid: false, reason: "registrar attestation is required (REQ-7.1-5)" };
+  const keys = await resolve(op.registrar.did);
+  const payload = payloadWithoutSigOrRegistrar(op as any);
+  const ok = !!keys && (await Promise.all(keys.map((pk) => verifyPayload(payload, op.registrar!.sig, pk)))).some(Boolean);
+  if (!ok) return { valid: false, reason: "invalid registrar attestation signature" };
   return { valid: true };
 }
 

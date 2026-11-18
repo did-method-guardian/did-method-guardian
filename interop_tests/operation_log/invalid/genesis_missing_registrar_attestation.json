@@ -1,0 +1,28 @@
+{
+  "note": "REJECT: genesis carries no registrar attestation at all -- REQ-7.1-5 requires one on every genesis, not only when a registrar happens to include it.",
+  "expect": "reject",
+  "known_keys": {
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVAh2XA0vupPaSApAWwYIATM4am7iCouXoxbU2oEGN29K7AZzUVQUM88v4DKIVwwMTZw3djWOhgMm9vq8d2uVlA"
+  },
+  "log": [
+    {
+      "cid": "d3dba1d47bbcfa1b8697c205088247488bdffeb44cbaf4c89060f1c22bdbcccb",
+      "op": {
+        "type": "custodial_create",
+        "name": "fred",
+        "operationalKeys": [
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpeB6SzfwkDjvWhM5QZHUSmTnZJsRrwtkIl1tCL8WzdHBDlzRGqtkW_Ek0MhxFqN40qhh2euHedGaSUBQlhUXg"
+        ],
+        "verificationMethods": {
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpeB6SzfwkDjvWhM5QZHUSmTnZJsRrwtkIl1tCL8WzdHBDlzRGqtkW_Ek0MhxFqN40qhh2euHedGaSUBQlhUXg"
+        },
+        "services": {},
+        "outgoing": [],
+        "incoming": [],
+        "prev": null,
+        "creator": "did:guardian:example:com",
+        "sigs": {}
+      }
+    }
+  ]
+}
