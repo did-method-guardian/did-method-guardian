@@ -20,7 +20,7 @@ For an introduction to the method, see the [guide](/docs/) first -- this page as
 
 ## Quickstart
 
-Create an identity, resolve it, and add a guardian -- in plain `curl` and a short script.
+Create an identity, resolve it, and add a guardian -- in plain `curl` and a short script. Prefer a CLI over curl? [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) wraps the same operations (`did-guardian register`, `did-guardian resolve`, `did-guardian guardian adopt`), plus key management, offline verification against a pinned anchor, and taking custody of a registrar-held key -- see its README for the full command list.
 
 **Create an identity.** Any registrar's `/register` endpoint takes just a name:
 
@@ -48,7 +48,7 @@ That returns the current DID document. The full signed operation history behind 
 
 **Add a guardian.** This is the one step `curl` alone can't do, and that reflects something true about guardianship: a guardian relationship exists only when that guardian's key actually signs for it. On the reference registrar, `alice`'s key from `/register` above is held in custody, encrypted -- establishing a guardian for her goes through a session-authenticated endpoint (`.../adopt`, see the [registrar API doc](/docs/registrar/)), where the registrar signs with the key it already holds once you're logged in, not through raw signing with a key you hold yourself.
 
-The example below shows the same operation's underlying mechanics with two keypairs generated and held entirely outside any registrar, using [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly. It's accurate cryptography and a good way to see exactly what a `guardian_add` signature requires, but it isn't a live flow against guardianspec.org or any deployment of `packages/server` as it stands today: a registrar's only path for creating a new identity is `/register`, and that path always generates the operational key on the server, never accepts one you supply. ([Tracked as a gap](https://github.com/did-method-guardian/did-method-guardian/issues) -- self-held-key genesis isn't implemented yet.) This code is for embedding `packages/lib` directly: building your own registrar, or working with a log you already have in hand.
+The example below shows the same operation's underlying mechanics with two keypairs generated and held entirely outside any registrar, using [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly. It's accurate cryptography and a good way to see exactly what a `guardian_add` signature requires, but it isn't a live flow against guardianspec.org or any deployment of `packages/server` as it stands today: a registrar's only path for creating a new identity is `/register`, and that path always generates the operational key on the server, never accepts one you supply. ([Tracked as a gap](https://github.com/did-method-guardian/did-method-guardian/issues/4) -- self-held-key genesis isn't implemented yet.) This code is for embedding `packages/lib` directly: building your own registrar, or working with a log you already have in hand.
 
 ```js
 import { generateKeypair } from "@did-guardian/lib/dist/src/crypto.js";
