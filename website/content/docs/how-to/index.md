@@ -46,7 +46,9 @@ curl https://guardianspec.org/.well-known/guardian/alice
 
 That returns the current DID document. The full signed operation history behind it is at `/.well-known/guardian/alice/log`.
 
-**Add a guardian.** This is the one step `curl` alone can't do, and that reflects something true about guardianship. The registrar holds your identity's key in custody, encrypted, so it can sign ordinary logins and rotations for you, but it deliberately can't produce a signature on a guardian's behalf -- a guardian relationship exists only when that guardian's key actually signs for it. Using [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, with two keypairs you hold yourself:
+**Add a guardian.** This is the one step `curl` alone can't do, and that reflects something true about guardianship: a guardian relationship exists only when that guardian's key actually signs for it. On the reference registrar, `alice`'s key from `/register` above is held in custody, encrypted -- establishing a guardian for her goes through a session-authenticated endpoint (`.../adopt`, see the [registrar API doc](/docs/registrar/)), where the registrar signs with the key it already holds once you're logged in, not through raw signing with a key you hold yourself.
+
+The example below shows the same operation's underlying mechanics with two keypairs generated and held entirely outside any registrar, using [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly. It's accurate cryptography and a good way to see exactly what a `guardian_add` signature requires, but it isn't a live flow against guardianspec.org or any deployment of `packages/server` as it stands today: a registrar's only path for creating a new identity is `/register`, and that path always generates the operational key on the server, never accepts one you supply. ([Tracked as a gap](https://github.com/did-method-guardian/did-method-guardian/issues) -- self-held-key genesis isn't implemented yet.) This code is for embedding `packages/lib` directly: building your own registrar, or working with a log you already have in hand.
 
 ```js
 import { generateKeypair } from "@did-guardian/lib/dist/src/crypto.js";
@@ -82,7 +84,7 @@ console.log(state.guardians);          // [ "did:guardian:example.com:bob" ]
 console.log(toDidDocument(state));     // an ordinary DID document -- bob never appears in it
 ```
 
-That log is exactly what you'd submit to a registrar (`POST /.well-known/guardian/alice/operations`) to make it live. The [registrar API doc](/docs/registrar/) covers the asynchronous version of this -- proposing an operation and collecting the second signature over separate requests, for when both signers aren't available in the same process.
+That's the same `guardian_add` a real registrar accepts, but getting it onto a live, registrar-custodied `alice` means calling `.../adopt` with both parties authenticated, not submitting a locally-built log: `.../operations` only accepts new operations appended to a ward that already exists there, and genesis is never one of the operation types it takes. The [registrar API doc](/docs/registrar/) covers `.../adopt` for the zero-to-one case shown here, `.../propose` plus pending-signature collection for a non-empty guardian set or signers who aren't available in the same session, and the cross-registrar case where the incoming guardian is hosted somewhere else entirely.
 
 ## How-to guides
 
