@@ -22,7 +22,7 @@ import {
 import type { Did, GuardianLivenessResolver, LogEntry, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { appendOperation, getOperationLog, getWardByDid, getWardByName, insertWard, setLoginSecretHash, updateWardKeys, type WardRow } from "./db.js";
+import { appendOperation, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, hashPassword, randomSecret } from "./secretBox.js";
 import { proposeOperation } from "./pendingOps.js";
 
@@ -103,7 +103,7 @@ export async function registerWard(
   const did = didFor(name, env.REGISTRAR_DOMAIN);
   const keypair = await generateKeypair();
   const rootWard = await getOrCreateRootWard(env);
-  const rootPrivateKey = await decryptSecret(rootWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
 
   const genesisPartial = {
     type: "custodial_create" as const,
@@ -140,10 +140,10 @@ export async function registerWard(
   let pendingGuardianAdd: { id: string } | undefined;
   if (guardianDid) {
     const guardianWard = await getWardByDid(env, guardianDid);
-    if (guardianWard) {
+    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") {
       // Same registrar, both keys producible server-side -- the one-call
       // convenience this was originally built for.
-      const guardianPrivateKey = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+      const guardianPrivateKey = await decryptWardPrivateKey(env, guardianWard);
       const addOp = await signGuardianAdd(
         { type: "guardian_add", incoming: guardianDid, prev: cid },
         { [guardianDid]: guardianPrivateKey, [did]: keypair.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's own key and the ward's own operational key
@@ -154,15 +154,14 @@ export async function registerWard(
         throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 500);
       }
     } else {
-      // A foreign guardian -- this registrar holds the new ward's own key
-      // but never the incoming guardian's (that key lives, and only ever
-      // lives, on whichever registrar actually custodies them). There's
-      // no way to produce that signature here, so this can't be the same
-      // one-call convenience: propose the guardian_add with only the
-      // ward's own signature attached, same async collection every other
-      // cross-registrar guardian relationship already uses (§3) -- the
-      // guardian signs it themselves, on their own registrar's own
-      // pending-operation page, whenever they do.
+      // Either a foreign guardian (this registrar never holds a key it
+      // doesn't custody) or a same-registrar guardian who's taken custody
+      // of their key -- either way, there's no way to produce that
+      // signature here, so this can't be the same one-call convenience:
+      // propose the guardian_add with only the ward's signature
+      // attached, same async collection every other cross-registrar
+      // guardian relationship already uses (§3) -- the guardian signs it
+      // themselves, whenever they do.
       const addOp = await signGuardianAdd({ type: "guardian_add", incoming: guardianDid, prev: cid }, { [did]: keypair.privateKey }, [did]);
       const proposeResult = await proposeOperation(env, name, addOp);
       pendingGuardianAdd = { id: proposeResult.id };
@@ -246,7 +245,7 @@ export async function rotateWard(env: Env, name: string): Promise<{ did: string;
   if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to rotate from`, 500);
   const state = replay(ward.did as Did, log);
 
-  const oldPrivateKey = await decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const oldPrivateKey = await decryptWardPrivateKey(env, ward);
   const newKeypair = await generateKeypair();
   const op = await signCustodialRotate(
     {
@@ -287,7 +286,7 @@ export async function tombstoneWard(env: Env, name: string): Promise<{ did: stri
   const latestCid = log[log.length - 1]?.cid;
   if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to tombstone from`, 500);
 
-  const ownKey = await decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const ownKey = await decryptWardPrivateKey(env, ward);
   const op = await signCustodialTombstone({ type: "custodial_tombstone", prev: latestCid }, { [ward.did]: ownKey }, [ward.did]);
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`tombstone failed: ${result.reason}`, 500);
@@ -331,7 +330,7 @@ export async function relinquishWard(env: Env, name: string): Promise<{ did: str
   const signerKeys: Record<string, string> = {};
   for (const guardianDid of live) {
     const guardianWard = await getWardByDid(env, guardianDid);
-    if (guardianWard) signerKeys[guardianDid] = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") signerKeys[guardianDid] = await decryptWardPrivateKey(env, guardianWard);
   }
   const signers = Object.keys(signerKeys);
   if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, live)) {
@@ -368,7 +367,7 @@ export async function removeSelfAsGuardian(env: Env, name: string, callerDid: Di
   const latestCid = log[log.length - 1]?.cid;
   if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to remove a guardian from`, 500);
 
-  const callerPrivateKey = await decryptSecret(callerWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const callerPrivateKey = await decryptWardPrivateKey(env, callerWard);
   const op = await signGuardianRemove({ type: "guardian_remove", outgoing: callerDid, prev: latestCid }, { [callerDid]: callerPrivateKey }, [callerDid]);
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`remove-self failed: ${result.reason}`, 400);
@@ -400,7 +399,7 @@ export async function forceRemoveGuardian(env: Env, name: string, outgoingDid: D
   const signerKeys: Record<string, string> = {};
   for (const guardianDid of others) {
     const guardianWard = await getWardByDid(env, guardianDid);
-    if (guardianWard) signerKeys[guardianDid] = await decryptSecret(guardianWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
+    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") signerKeys[guardianDid] = await decryptWardPrivateKey(env, guardianWard);
   }
   const signers = Object.keys(signerKeys);
   if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, live)) {
@@ -440,8 +439,8 @@ export async function adoptWard(env: Env, name: string, incomingDid: Did): Promi
   const live = await liveGuardians(state, makeGuardianLivenessResolver(env));
   if (live.length > 0) throw new RegistrarError(`"${name}" already has a current guardian -- adding another needs the existing committee's own approval (see §3)`, 400);
 
-  const incomingPrivateKey = await decryptSecret(incomingWard.private_key_enc, env.KEY_ENCRYPTION_KEY);
-  const wardPrivateKey = await decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
+  const incomingPrivateKey = await decryptWardPrivateKey(env, incomingWard);
+  const wardPrivateKey = await decryptWardPrivateKey(env, ward);
   const op = await signGuardianAdd(
     { type: "guardian_add", incoming: incomingDid, prev: latestCid },
     { [incomingDid]: incomingPrivateKey, [ward.did]: wardPrivateKey },
@@ -452,6 +451,79 @@ export async function adoptWard(env: Env, name: string, incomingDid: Did): Promi
 
   const document = await resolveDocument(env, name);
   return { did: ward.did, document };
+}
+
+/**
+ * A registrar-held ward rotates to a key it supplies, and this registrar
+ * never keeps a usable copy -- `takeCustodyOfWardKey` overwrites
+ * `private_key_enc` with a non-ciphertext sentinel, not a new one, and
+ * records `custody_mode: "self"` in `ward_custody`. From then on this
+ * registrar can sign nothing on this ward's behalf; every endpoint above
+ * that would have (rotate, tombstone, relinquish, remove-self, adopt)
+ * refuses through `decryptWardPrivateKey`'s check instead. Signing
+ * this rotation is the ward's one remaining chance to use a key this
+ * registrar still custodies, since after this call there won't be one.
+ *
+ * The root identity is excluded outright -- it has to keep producing a
+ * registrar attestation for every new registration (registerWard above),
+ * which only works with a key this registrar can read at request time.
+ *
+ * `force` bypasses the two warnings below, not the hard refusals (already
+ * self-held, is root, or no genesis to rotate from) -- those stay errors
+ * regardless, since there's nothing coherent to do about them here.
+ */
+export async function takeCustody(
+  env: Env,
+  name: string,
+  publicKey: string,
+  force?: boolean,
+): Promise<{ did: string; document: unknown; warnings: string[] }> {
+  if (name === ROOT_WARD_NAME) {
+    throw new RegistrarError("the bare-domain root identity can't take custody of its key -- it has to keep signing registrar attestations for every new registration on this deployment", 400);
+  }
+  const ward = await getWardByName(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  if ((await getWardCustodyMode(env, ward.did)) === "self") throw new RegistrarError(`"${name}" already holds its key -- there's nothing left here to take custody of`, 409);
+  const log = await loadLog(env, ward.did);
+  const latestCid = log[log.length - 1]?.cid;
+  if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to rotate from`, 500);
+  const state = replay(ward.did as Did, log);
+
+  const live = await liveGuardians(state, makeGuardianLivenessResolver(env));
+  const warnings: string[] = [];
+  if (live.length === 0) {
+    warnings.push("this identity has no guardian. Losing the key you're about to hold would be unrecoverable, by anyone, ever.");
+  }
+  for (const guardianDid of live) {
+    const guardianWard = await getWardByDid(env, guardianDid);
+    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar" && meetsThreshold(state.guardianPolicy.recovery_threshold, [guardianDid], live)) {
+      warnings.push(
+        `this registrar custodies guardian "${guardianDid}"'s key, and that one guardian's signature alone satisfies this identity's recovery_threshold (${JSON.stringify(state.guardianPolicy.recovery_threshold)}). After taking custody, this registrar can no longer authorize operations as this identity directly, but it can still rotate this identity's key at any time by signing as that guardian instead (REQ-7.2-1b has no 72-hour restriction) -- taking custody here doesn't fully remove this registrar from this identity's trust model.`,
+      );
+    }
+  }
+  if (warnings.length > 0 && !force) {
+    throw new RegistrarError(`refusing without force -- ${warnings.join(" ")}`, 409);
+  }
+
+  const oldPrivateKey = await decryptWardPrivateKey(env, ward);
+  const op = await signCustodialRotate(
+    {
+      type: "custodial_rotate",
+      operationalKeys: [publicKey],
+      verificationMethods: { "key-1": publicKey },
+      services: state.services,
+      prev: latestCid,
+    },
+    oldPrivateKey,
+  );
+  const result = await submitOperation(env, name, op);
+  if (!result.accepted) throw new RegistrarError(`take-custody failed: ${result.reason}`, 500);
+
+  await takeCustodyOfWardKey(env, ward.did, publicKey);
+
+  const document = await resolveDocument(env, name);
+  return { did: ward.did, document, warnings };
 }
 
 const ROOT_WARD_NAME = ""; // the `wards.name` sentinel for the bare-domain identity (spec §2.1) -- empty string, not NULL, so the table's own existing PRIMARY KEY on `name` enforces "at most one root ward" for free, no schema change needed. Never produced by assertValidName (which requires 3-32 chars), so it can never collide with a real registration.
@@ -753,8 +825,26 @@ export function makeExternalResolver(env: Env) {
   };
 }
 
-/** For this instance's own wards to sign as a guardian of another ward -- used by the OIDC/zz-integration layer, not the public HTTP API directly. */
+/**
+ * The one place this registrar ever decrypts a ward's operational key --
+ * every session-authenticated convenience endpoint below (rotate,
+ * tombstone, relinquish, remove-self, adopt) and the OIDC/zz-integration
+ * layer that signs as a guardian go through this, never `decryptSecret`
+ * directly, so "this ward took custody of its key" has exactly one place
+ * to be enforced. Throws rather than returning undefined: every caller
+ * here already committed to signing on this ward's behalf and has no
+ * fallback if it can't -- a guardian-set-building loop that should skip
+ * a self-held guardian instead (relinquishWard, forceRemoveGuardian,
+ * registerWard's same-registrar convenience) checks `custody_mode`
+ * before calling this, rather than catching.
+ */
 export async function decryptWardPrivateKey(env: Env, ward: WardRow): Promise<string> {
+  if ((await getWardCustodyMode(env, ward.did)) === "self") {
+    throw new RegistrarError(
+      `"${ward.name || ward.did}" took custody of its key -- this registrar can no longer sign on its behalf. Sign and submit the operation directly with that key instead.`,
+      409,
+    );
+  }
   return decryptSecret(ward.private_key_enc, env.KEY_ENCRYPTION_KEY);
 }
 

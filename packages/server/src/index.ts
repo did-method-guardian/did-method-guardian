@@ -1,7 +1,7 @@
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
-import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
+import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, takeCustody, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
 import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders, handleRelayNotify } from "./pendingOps.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
@@ -63,7 +63,7 @@ export default {
     }
 
     const wellKnownMatch = path.match(
-      /^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
+      /^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/take-custody|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
     );
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
@@ -168,6 +168,25 @@ export default {
           }
           const result = await rotateWard(env, targetName);
           return json({ ok: true, did: result.did, document: result.document });
+        }
+        if (suffix === "/take-custody" && request.method === "POST") {
+          // Same two-way trust as /rotate -- this IS a rotation, just to a
+          // key the caller supplies instead of one this registrar
+          // generates. Irreversible from this registrar's side: once it
+          // succeeds, every endpoint above that needs to sign on this
+          // ward's behalf (rotate, tombstone, relinquish, remove-self,
+          // adopt) starts refusing, by design (takeCustody's comment).
+          const targetName = name ?? "";
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
+          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
+          }
+          const body = (await request.json().catch(() => ({}))) as { public_key?: string; force?: boolean };
+          if (!body.public_key) return error("public_key is required", 400);
+          const result = await takeCustody(env, targetName, body.public_key, body.force);
+          return json({ ok: true, did: result.did, document: result.document, warnings: result.warnings });
         }
         if (suffix === "/relinquish" && request.method === "POST") {
           // Same two-way trust as /rotate, same reasoning: self-

@@ -4,7 +4,7 @@ export interface WardRow {
   name: string;
   did: string;
   public_key: string;
-  private_key_enc: string;
+  private_key_enc: string; // a non-ciphertext sentinel ("") once custody_mode is "self" -- see getWardCustodyMode/clearWardPrivateKey below
   created_at: string;
   login_secret_hash: string | null;
 }
@@ -69,6 +69,39 @@ export async function setLoginSecretHash(env: Env, name: string, hash: string): 
 /** Only ever called after a custodial_rotate op this registrar itself just signed and appended has been accepted (registrar.ts's own rotateWard) -- the stored key material this registrar custodies for a ward moves to the new keypair only once the operation it's meant to back is already durable in the log, never before. */
 export async function updateWardKeys(env: Env, did: string, publicKey: string, privateKeyEnc: string): Promise<void> {
   await env.DB.prepare("UPDATE wards SET public_key = ?, private_key_enc = ? WHERE did = ?").bind(publicKey, privateKeyEnc, did).run();
+}
+
+/**
+ * Which of a ward's keys is live where (0011_take_custody.sql): no row in
+ * ward_custody means "registrar", the default and by far the common case
+ * -- a row only ever gets written once a ward actually takes custody, and
+ * custody_mode only ever moves one direction (registrar -> self; there's
+ * no code path that writes it back).
+ */
+export async function getWardCustodyMode(env: Env, did: string): Promise<"registrar" | "self"> {
+  const row = await env.DB.prepare("SELECT custody_mode FROM ward_custody WHERE did = ?").bind(did).first<{ custody_mode: "registrar" | "self" }>();
+  return row?.custody_mode ?? "registrar";
+}
+
+/**
+ * Take-custody (registrar.ts's takeCustody): the caller's supplied public key
+ * replaces this registrar's, and private_key_enc is overwritten with ""
+ * -- not a real ciphertext, so even a KEY_ENCRYPTION_KEY compromise can't
+ * recover a key this registrar no longer holds. Called only after the
+ * custodial_rotate op backing this is already durable in the log, same
+ * ordering updateWardKeys relies on. Two statements, not a transaction --
+ * D1's batch() would be the right tool if this registrar needs
+ * atomicity here beyond what it already has (a half-applied write just
+ * leaves custody_mode as "registrar" until retried, never the reverse).
+ */
+export async function takeCustodyOfWardKey(env: Env, did: string, publicKey: string): Promise<void> {
+  const now = new Date().toISOString();
+  await env.DB.prepare("UPDATE wards SET public_key = ?, private_key_enc = '' WHERE did = ?").bind(publicKey, did).run();
+  await env.DB.prepare(
+    "INSERT INTO ward_custody (did, custody_mode, taken_custody_at) VALUES (?, 'self', ?) ON CONFLICT(did) DO UPDATE SET custody_mode = 'self', taken_custody_at = ?",
+  )
+    .bind(did, now, now)
+    .run();
 }
 
 export interface OidcClientRow {
