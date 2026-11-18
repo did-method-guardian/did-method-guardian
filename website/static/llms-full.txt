@@ -401,11 +401,16 @@ Each of these corresponds to an operation whose formal signer requirement can be
 | Method | Path | Operation produced | Why it's self-contained |
 |---|---|---|---|
 | `POST` | `.../rotate` | `custodial_rotate`, ward-signed | self-rotation grants no new authority |
+| `POST` | `.../take-custody` | `custodial_rotate` to a caller-supplied public key | ward-signed with the key this registrar still custodies -- the last signature it ever produces for this identity |
 | `POST` | `.../remove-self` | `guardian_remove`, voluntary (`outgoing = [caller]`) | needs only the caller's own consent (REQ-7.2-7a) |
 | `POST` | `.../remove` | `guardian_remove`, forced | self-contained **only** when the *other* current guardians (excluding the one being removed) are custodied entirely by this registrar **and** that custodied subset alone meets `removal_threshold` (REQ-7.2-7b); otherwise rejected, directing the caller to §3 |
 | `POST` | `.../relinquish` | `guardian_relinquish` | self-contained **only** when the current guardian set is custodied entirely by this registrar **and** that custodied subset alone meets `removal_threshold` (e.g. a sole guardian, trivially); otherwise rejected with a clear reason directing the caller to §3 |
 | `POST` | `.../tombstone` | `custodial_tombstone`, ward-signed | `tombstone_threshold` defaults to `any`; the ward's own key alone always suffices. If the identity is itself a current guardian of anything, see §4's own acceptance/cascade policy first |
 | `POST` | `.../adopt` | `guardian_add`, zero-to-one case only | needs only the incoming party's own consent plus the ward's own key (REQ-7.2-5) -- rejected if the ward already has any current guardian; use §3 for a non-empty guardian set |
+
+**`.../take-custody` is irreversible in a way nothing else on this page is.** Every other row above produces an operation and nothing changes about who's custodied going forward. This one ends it: body `{public_key, force?}`, and afterward this registrar has overwritten its copy of the private key with a non-ciphertext sentinel -- not set it aside, not kept it for a future rotation, gone. Every row on this page except `.../take-custody` stops working for that identity from then on, with a clear error pointing at submitting pre-signed operations through §1 directly instead.
+
+Refuses with a reason, unless `force: true` is set, when either is true: the identity has no current guardian at all (an unrecoverable identity the instant this key is lost, by anyone, ever), or a current guardian is also custodied by this registrar and alone satisfies `recovery_threshold` -- in that case this registrar can still rotate the identity's key at any time by signing as that guardian (REQ-7.2-1b carries no 72-hour window), so taking custody of the operational key doesn't fully remove this registrar from the identity's trust model. The bare-domain root identity can't call this at all -- it has to keep a key this registrar can read to sign every new registration's attestation.
 
 ## 3. Asynchronous signature collection (`pending_operations`)
 
