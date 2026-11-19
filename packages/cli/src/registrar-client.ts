@@ -2,8 +2,8 @@
 // registrar API spec §1/§2) -- not part of @did-guardian/lib (that package
 // deliberately stops at "operate on a log already in hand," see resolve.ts's
 // note), so this CLI owns the live-HTTP half.
-import { wellKnownPath, parseDid } from "@did-guardian/lib";
-import type { Did, LogEntry, Operation } from "@did-guardian/lib";
+import { wellKnownPath, parseDid, multikeyToSpki } from "@did-guardian/lib";
+import type { Did, LogEntry, LogHeadStatement, Operation } from "@did-guardian/lib";
 
 export interface RegisterResult {
   did: Did;
@@ -27,6 +27,22 @@ export async function resolveDid(did: Did): Promise<unknown> {
   const res = await fetch(`https://${domain}${wellKnownPath(name)}`);
   const body = await res.json();
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `resolution failed with HTTP ${res.status}`);
+  return body;
+}
+
+/** The registrar's public key, in this library's internal SPKI format -- resolved by fetching the bare-domain identity's DID document and converting its Multikey. Needed to check a log-head statement's signature (L2), and to pin the registrar's key alongside a DID's anchor. */
+export async function resolveRegistrarKey(domain: string): Promise<{ did: Did; publicKey: string }> {
+  const res = await fetch(`https://${domain}/.well-known/guardian/_`);
+  const body = (await res.json()) as { id?: Did; verificationMethod?: { publicKeyMultibase: string }[]; error?: string };
+  if (!res.ok || !body.id || !body.verificationMethod?.[0]) throw new Error(body.error ?? `could not resolve ${domain}'s registrar identity`);
+  return { did: body.id, publicKey: multikeyToSpki(body.verificationMethod[0].publicKeyMultibase) };
+}
+
+export async function fetchLogHead(did: Did): Promise<LogHeadStatement> {
+  const { domain, name } = parseDid(did);
+  const res = await fetch(`https://${domain}${wellKnownPath(name)}/log-head`);
+  const body = (await res.json()) as LogHeadStatement & { error?: string };
+  if (!res.ok) throw new Error((body as { error?: string }).error ?? `log-head fetch failed with HTTP ${res.status}`);
   return body;
 }
 

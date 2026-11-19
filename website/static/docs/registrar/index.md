@@ -32,6 +32,10 @@ Required by the formal spec's REQ-8-2; this registrar's own implementation of th
 
 `POST .../operations` accepts any operation type from the formal spec's §7 with all required signatures already attached (per that operation's own REQ-7.x signer rules) and appends it if valid, rejecting with a reason string otherwise. This is the only path by which an *externally* pre-signed operation (e.g. two guardians who coordinated their own signatures out-of-band) reaches the log directly, without going through §3's collection machinery.
 
+| `GET` | `/.well-known/guardian/<name>/log-head` | a signed, timestamped statement about the current log head (spec §12.2, REQ-12-1's L2) |
+
+`.../log-head` isn't a method requirement -- it exists specifically to make L2 ("fresh as of t") achievable without a live round-trip every time. Computed and signed fresh on every call, never stored: `{did, anchor, headCid, seq, timestamp, registrar, sig}`, signed with the same root-identity key REQ-7.1-5's genesis attestation already uses. A caller who holds this can show it to a third party later as evidence the log was at this exact head as of this exact time, without that third party needing to resolve this registrar at all -- the same role OCSP stapling plays for certificate revocation. Public, like the document and the log themselves: a signed claim about where a public log stands is exactly as safe to hand to anyone as the log is.
+
 ## 2. Self-contained convenience endpoints
 
 Each of these corresponds to an operation whose formal signer requirement can be satisfied by a single call from one authenticated party, with this registrar producing every needed signature itself from keys it already custodies -- no new authority is ever granted to a third party by any of these, which is what makes a single bare call safe. Auth model, uniformly: either an active `gw_session` cookie for the target identity itself, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its own caller (e.g. zz, having already confirmed its own user is a current guardian, before ever calling here).

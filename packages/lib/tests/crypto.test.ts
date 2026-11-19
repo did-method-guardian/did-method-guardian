@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeypair, spkiToMultikey } from "../src/crypto.js";
+import { generateKeypair, spkiToMultikey, multikeyToSpki } from "../src/crypto.js";
 
 // Known-answer test: this exact base64url SPKI key (the live root identity's
 // own key on guardianspec.org, at the time this test was written) was
@@ -27,4 +27,22 @@ test("spkiToMultikey: round-trips for a freshly generated keypair without throwi
   const { publicKey } = await generateKeypair();
   const multikey = spkiToMultikey(publicKey);
   assert.equal(multikey[0], "z");
+});
+
+test("multikeyToSpki: inverts the same known-answer value exactly", () => {
+  const spki =
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQFilQ5sp0oxrr46nvSc1XwcRq3bPQ_s33mPgpbcg9ovlpOWatMB86DR5lyNUcFi-99WEMIC_ma-QzEtwHnmJkA";
+  assert.equal(multikeyToSpki("zDnaeUm9Y89WYEtwDKgGeqUnWkUUp2C1cg7tcvhSh6syqzkjL"), spki);
+});
+
+test("multikeyToSpki(spkiToMultikey(k)) round-trips for freshly generated keypairs", async () => {
+  for (let i = 0; i < 10; i++) {
+    const { publicKey } = await generateKeypair();
+    assert.equal(multikeyToSpki(spkiToMultikey(publicKey)), publicKey);
+  }
+});
+
+test("multikeyToSpki rejects malformed input rather than silently returning a wrong key", () => {
+  assert.throws(() => multikeyToSpki("notz-prefixed"));
+  assert.throws(() => multikeyToSpki("z123")); // far too short to contain a multicodec + 33-byte point
 });

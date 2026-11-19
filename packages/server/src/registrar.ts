@@ -18,8 +18,9 @@ import {
   parseDid,
   wellKnownPath,
   DEFAULT_GUARDIAN_POLICY,
+  signLogHeadStatement,
 } from "@did-guardian/lib";
-import type { Did, GuardianLivenessResolver, LogEntry, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
+import type { Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { appendOperation, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
@@ -604,6 +605,31 @@ export async function loadLog(env: Env, did: string): Promise<LogEntry[]> {
 async function genesisAnchor(env: Env, did: string): Promise<string | undefined> {
   const log = await loadLog(env, did);
   return log[0]?.cid;
+}
+
+/**
+ * L2 freshness (spec §12.2, REQ-12-1) -- signs a fresh statement naming
+ * the ward's current log head, anchor, and length, timestamped now. Never
+ * stored or cached: computed and signed anew on every call, with the
+ * root identity's key (the same signer REQ-7.1-5's genesis attestation
+ * uses), so there's nothing to go stale between requests and no new
+ * schema needed. A caller holding this statement can show it to a THIRD
+ * party later as evidence of freshness as of that timestamp, without
+ * that third party needing to resolve this registrar itself.
+ */
+export async function getLogHead(env: Env, name: string | null): Promise<LogHeadStatement> {
+  const ward = await findWard(env, name);
+  if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const log = await loadLog(env, ward.did);
+  const anchor = log[0]?.cid;
+  const headCid = log[log.length - 1]?.cid;
+  if (!anchor || !headCid) throw new RegistrarError(`"${name}" has no genesis operation yet`, 500);
+  const rootWard = await getOrCreateRootWard(env);
+  const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
+  return signLogHeadStatement(
+    { did: ward.did as Did, anchor, headCid, seq: log.length, timestamp: new Date().toISOString(), registrar: rootWard.did as Did },
+    rootPrivateKey,
+  );
 }
 
 /** `name: null` auto-provisions the bare-domain root identity (never missing); a real name that isn't registered yet stays a plain miss. */

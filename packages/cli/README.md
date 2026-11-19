@@ -54,10 +54,12 @@ Creates a registrar-held identity the ordinary way (`POST /register`). This is t
 ### Resolve and verify
 
 ```
-did-guardian resolve <did> [--log] [--json]
-did-guardian verify <did> --log <file>
+did-guardian resolve <did> [--log] [--save-log-head <file>] [--json]
+did-guardian verify <did> --log <file> [--log-head <file>] [--max-age <seconds>]
 ```
-`resolve` always talks to the registrar live (L3) and pins the identity's anchor (genesis CID) the first time it sees that DID -- a later mismatch is reported loudly, not silently accepted. `verify` checks a log you already have *offline*, reporting L0 (internally consistent) or L1 (matches a pin from an earlier `resolve`) -- never a bare "valid".
+`resolve` always talks to the registrar live (L3) and pins the identity's anchor and the registrar's public key the first time it sees that DID -- a later mismatch is reported loudly, not silently accepted. `--save-log-head` also fetches a signed, timestamped statement about the current log head (spec §12.2's L2) and saves it to a file.
+
+`verify` checks a log you already have *offline*: L0 (internally consistent) on its own, L1 if it matches a pin from an earlier `resolve`, or L2 if you also pass `--log-head` with a statement that verifies against the pinned registrar key and is newer than `--max-age` seconds (default 300) -- never a bare "valid".
 
 ### Session (for registrar-held identities)
 

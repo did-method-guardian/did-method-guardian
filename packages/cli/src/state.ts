@@ -34,7 +34,8 @@ export function loadSession(): SessionFile {
 
 export interface Pin {
   anchor: string;
-  registrarKey?: string;
+  registrarDid?: Did;
+  registrarKey?: string; // this library's internal SPKI format, already converted from the Multikey a DID document exposes -- see resolveRegistrarKey
   pinnedAt: string;
 }
 

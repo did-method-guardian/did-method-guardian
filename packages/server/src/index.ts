@@ -1,7 +1,7 @@
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
-import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, rotateWard, takeCustody, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
+import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, getLogHead, rotateWard, takeCustody, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
 import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders, handleRelayNotify } from "./pendingOps.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
@@ -63,7 +63,7 @@ export default {
     }
 
     const wellKnownMatch = path.match(
-      /^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/take-custody|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
+      /^\/\.well-known\/guardian\/([^/]+)(\/log|\/log-head|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/take-custody|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
     );
     if (wellKnownMatch) {
       // "_" is the bare-domain root identity's own reserved path segment
@@ -79,6 +79,13 @@ export default {
         if (suffix === "/log" && request.method === "GET") {
           const log = await resolveLog(env, name);
           return log ? json(log) : error("not found", 404);
+        }
+        if (suffix === "/log-head" && request.method === "GET") {
+          // Public, like /log and the bare document -- a signed statement
+          // about where the log currently stands is exactly as safe to
+          // hand to anyone as the log itself (spec §12.2, REQ-12-1's L2).
+          const statement = await getLogHead(env, name);
+          return json(statement);
         }
         if (suffix === "/agent-card.json" && request.method === "GET") {
           return handleAgentCard(env, name);

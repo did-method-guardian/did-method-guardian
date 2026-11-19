@@ -92,6 +92,39 @@ function encodeVarint(value: number): Uint8Array {
   return new Uint8Array(out);
 }
 
+function base58btcDecode(s: string): Uint8Array {
+  let n = 0n;
+  for (const char of s) {
+    const idx = BASE58BTC_ALPHABET.indexOf(char);
+    if (idx === -1) throw new Error(`invalid base58btc character: ${char}`);
+    n = n * 58n + BigInt(idx);
+  }
+  const bytes: number[] = [];
+  while (n > 0n) {
+    bytes.unshift(Number(n & 0xffn));
+    n >>= 8n;
+  }
+  let leadingZeros = 0;
+  for (const char of s) {
+    if (char !== BASE58BTC_ALPHABET[0]) break;
+    leadingZeros++;
+  }
+  return new Uint8Array([...new Array(leadingZeros).fill(0), ...bytes]);
+}
+
+function decodeVarint(bytes: Uint8Array): [value: number, rest: Uint8Array] {
+  let result = 0;
+  let shift = 0;
+  let i = 0;
+  for (;;) {
+    const b = bytes[i++];
+    result |= (b & 0x7f) << shift;
+    if (!(b & 0x80)) break;
+    shift += 7;
+  }
+  return [result, bytes.slice(i)];
+}
+
 // multicodec code for p256-pub (https://github.com/multiformats/multicodec).
 const P256_PUB_MULTICODEC = 0x1200;
 
@@ -124,6 +157,96 @@ export function spkiToMultikey(publicKeyB64url: string): string {
   payload.set(prefix, 0);
   payload.set(compressed, prefix.length);
   return "z" + base58btcEncode(payload);
+}
+
+// NIST P-256 (secp256r1) curve parameters -- fixed constants of the curve,
+// needed to decompress a point (multikeyToSpki below) since Web Crypto's
+// importKey("spki", ...) only accepts an already-uncompressed point and
+// has no decompression entry point at all.
+const P256_P = BigInt("0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF");
+const P256_B = BigInt("0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B");
+
+function modpow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  let b = base % mod;
+  let e = exp;
+  while (e > 0n) {
+    if (e & 1n) result = (result * b) % mod;
+    e >>= 1n;
+    b = (b * b) % mod;
+  }
+  return result;
+}
+
+function bytesToBigInt(bytes: Uint8Array): bigint {
+  let n = 0n;
+  for (const b of bytes) n = (n << 8n) | BigInt(b);
+  return n;
+}
+
+function bigIntToBytes(n: bigint, length: number): Uint8Array {
+  const out = new Uint8Array(length);
+  let v = n;
+  for (let i = length - 1; i >= 0; i--) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return out;
+}
+
+/**
+ * Recovers the full (x, y) point from a 33-byte compressed EC point
+ * (0x02/0x03 prefix + x). P-256's prime is 3 mod 4, so a square root mod p
+ * is just n^((p+1)/4) mod p -- no need for the general Tonelli-Shanks
+ * algorithm. Throws if the recovered point doesn't actually satisfy the
+ * curve equation, rather than silently returning a wrong point for
+ * malformed input.
+ */
+function decompressPoint(compressed: Uint8Array): { x: Uint8Array; y: Uint8Array } {
+  const prefix = compressed[0];
+  if (prefix !== 0x02 && prefix !== 0x03) throw new Error("expected a compressed EC point (0x02 or 0x03 prefix)");
+  const xBytes = compressed.slice(1, 33);
+  const x = bytesToBigInt(xBytes);
+  let rhs = (modpow(x, 3n, P256_P) - (3n * x) % P256_P + P256_B) % P256_P; // y^2 = x^3 - 3x + b mod p
+  if (rhs < 0n) rhs += P256_P;
+  let y = modpow(rhs, (P256_P + 1n) / 4n, P256_P);
+  const wantEven = prefix === 0x02;
+  if (y % 2n === 0n !== wantEven) y = P256_P - y;
+  if ((y * y) % P256_P !== rhs) throw new Error("not a valid point on the P-256 curve");
+  return { x: xBytes, y: bigIntToBytes(y, 32) };
+}
+
+// The fixed 26-byte SPKI header for P-256's AlgorithmIdentifier
+// (ecPublicKey + prime256v1 OIDs) -- see spkiToMultikey's comment for how
+// this was confirmed against Web Crypto's real exportKey output.
+const SPKI_P256_HEADER = new Uint8Array(
+  "3059301306072a8648ce3d020106082a8648ce3d030107034200".match(/.{2}/g)!.map((h) => parseInt(h, 16)),
+);
+
+/**
+ * The inverse of spkiToMultikey -- recovers this library's internal
+ * base64url-SPKI format from a W3C Multikey string, the only form a
+ * resolved DID document actually exposes (REQ-3-1: every verificationMethod
+ * is type Multikey). Needed by any caller that wants to verify a signature
+ * (a registrar attestation, a log-head statement) against a key it only
+ * has by resolving a DID document, rather than one it already holds in
+ * this library's internal format from signing/generating a key directly.
+ */
+export function multikeyToSpki(multikey: string): string {
+  if (!multikey.startsWith("z")) throw new Error("expected a 'z'-prefixed Multikey string");
+  const decoded = base58btcDecode(multikey.slice(1));
+  const [codec, rest] = decodeVarint(decoded);
+  if (codec !== P256_PUB_MULTICODEC) throw new Error(`expected the p256-pub multicodec (0x1200), got 0x${codec.toString(16)}`);
+  if (rest.length !== 33) throw new Error(`expected a 33-byte compressed P-256 point, got ${rest.length} bytes`);
+  const { x, y } = decompressPoint(rest);
+  const point = new Uint8Array(65);
+  point[0] = 0x04;
+  point.set(x, 1);
+  point.set(y, 33);
+  const spki = new Uint8Array(SPKI_P256_HEADER.length + point.length);
+  spki.set(SPKI_P256_HEADER, 0);
+  spki.set(point, SPKI_P256_HEADER.length);
+  return bytesToBase64url(spki);
 }
 
 const ECDSA_PARAMS = { name: "ECDSA", namedCurve: "P-256" } as const;
