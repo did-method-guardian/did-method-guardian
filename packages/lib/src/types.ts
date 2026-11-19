@@ -71,6 +71,8 @@ export interface GuardianAddOp {
   incoming: Did;
   prev: string;
   sigs: Record<Did, string>;
+  /** REQ-12-4, v0.2.1: incoming's genesis CID, so a later L1 check of this specific guardian relationship has something to pin against without a fresh L3 resolution. RECOMMENDED (SHOULD), not required -- a verifier MUST still accept a guardian_add with no anchor, same as any other optional field. Signed over like any other field in this operation (payloadWithoutSig doesn't special-case it); not independently re-verified against incoming's log by the signature check itself -- see signGuardianAdd's comment for why that's the caller's job, not the signer's. */
+  anchor?: string;
 }
 
 /** v0.2. Removes exactly one current guardian -- REQ-7.2-6/7. */

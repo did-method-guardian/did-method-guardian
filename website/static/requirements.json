@@ -479,8 +479,10 @@
       "id": "REQ-12-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-12-4",
       "section": "12.3 Pinning",
-      "text": "A `guardian_add` operation *SHOULD* record the incoming guardian's anchor ([REQ-6-3](#req-6-3)) alongside its DID, so that a later L1 check of that specific guardian relationship has something to pin against without a separate L3 resolution first. **Not yet implemented in the reference library** -- `guardian_add`'s `incoming` field is a bare DID today; see [issue #5](https://github.com/did-method-guardian/did-method-guardian/issues/5). A relying party in the meantime gets the same effect by storing `{did, anchor}` the first time it resolves a guardian at L3 -- the same pattern as storing a `sub` from an OIDC provider.",
-      "tests": []
+      "text": "A `guardian_add` operation *SHOULD* record the incoming guardian's anchor ([REQ-6-3](#req-6-3)) in its optional `anchor` field, alongside its DID, so that a later L1 check of that specific guardian relationship has something to pin against without a separate L3 resolution first. Not required -- a verifier *MUST* still accept a `guardian_add` carrying no `anchor` at all, and the anchor is covered by the same signatures as every other field (there's no separate signature requirement for it). The reference registrar populates it automatically whenever it already custodies the incoming guardian's log (`registerWard`'s same-registrar convenience, `.../adopt`); a relying party receiving a `guardian_add` with no anchor at all gets the same effect by storing `{did, anchor}` the first time it resolves that guardian at L3 -- the same pattern as storing a `sub` from an OIDC provider.",
+      "tests": [
+        "packages/lib/tests/rules.test.ts"
+      ]
     }
   ],
   "count": 59

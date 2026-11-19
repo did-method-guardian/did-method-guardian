@@ -20,6 +20,16 @@ async function currentHead(did: Did): Promise<{ headCid: string; guardianCount: 
   return { headCid: log[log.length - 1].cid, guardianCount: state.guardians.length };
 }
 
+/** REQ-12-4: an incoming guardian's genesis CID, fetched live if resolvable. Never throws -- a guardian that's still a draft (created offline, not yet accepted anywhere) just doesn't get an anchor recorded, same as the spec's SHOULD rather than MUST. */
+async function bestEffortAnchor(did: Did): Promise<string | undefined> {
+  try {
+    const log = await fetchLog(did);
+    return log[0]?.cid;
+  } catch {
+    return undefined;
+  }
+}
+
 async function confirm(prompt: string, assumeYes?: boolean): Promise<boolean> {
   if (assumeYes) return true;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -58,8 +68,9 @@ export function registerGuardianCommand(program: Command): void {
     .requiredOption("--ward-key <label>", "the ward's saved key")
     .requiredOption("--guardian-key <label>", "the incoming guardian's saved key")
     .option("--keychain", "look up both keys in the OS keychain instead of local files")
+    .option("--guardian-anchor <cid>", "the incoming guardian's genesis CID (REQ-12-4) -- fetched automatically if the guardian is live-resolvable, otherwise omitted")
     .option("--submit", "actually submit the signed operation to the registrar (default: print it only)")
-    .action(async (wardDid: Did, guardianDid: Did, opts: { wardKey: string; guardianKey: string; keychain?: boolean; submit?: boolean }) => {
+    .action(async (wardDid: Did, guardianDid: Did, opts: { wardKey: string; guardianKey: string; keychain?: boolean; guardianAnchor?: string; submit?: boolean }) => {
       const { headCid, guardianCount } = await currentHead(wardDid);
       if (guardianCount > 0) {
         throw new Error(
@@ -68,8 +79,9 @@ export function registerGuardianCommand(program: Command): void {
       }
       const wardKey = await loadKey(opts.wardKey, opts);
       const guardianKey = await loadKey(opts.guardianKey, opts);
+      const anchor = opts.guardianAnchor ?? (await bestEffortAnchor(guardianDid));
       const op = await signGuardianAdd(
-        { type: "guardian_add", incoming: guardianDid, prev: headCid },
+        { type: "guardian_add", incoming: guardianDid, prev: headCid, anchor },
         { [guardianDid]: guardianKey.privateKey, [wardDid]: wardKey.privateKey },
         [guardianDid, wardDid],
       );

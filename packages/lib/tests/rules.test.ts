@@ -256,6 +256,33 @@ test("REQ-7.2-5: zero-to-one guardian_add requires both the incoming guardian's 
   assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs: sigsBoth }, [], ctx), true);
 });
 
+test("REQ-12-4: guardian_add verifies the same whether or not it carries an anchor -- SHOULD, not MUST", async () => {
+  const wardDid = "did:guardian:example.com:alice";
+  const ward = await generateKeypair();
+  const incomingDid = "did:guardian:example.com:board";
+  const incoming = await generateKeypair();
+  const state = makeState({ did: wardDid, guardians: [] });
+  const resolveKey = makeResolver({ [wardDid]: ward.publicKey, [incomingDid]: incoming.publicKey });
+  const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
+  const signerKeys = { [incomingDid]: incoming.privateKey, [wardDid]: ward.privateKey };
+  const signers = [incomingDid, wardDid];
+
+  const withoutAnchor = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0" };
+  const sigsWithout = await signMap(withoutAnchor, signerKeys, signers);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...withoutAnchor, sigs: sigsWithout }, [], ctx), true);
+
+  const withAnchor = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0", anchor: "cid-of-board-genesis" };
+  const sigsWith = await signMap(withAnchor, signerKeys, signers);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...withAnchor, sigs: sigsWith }, [], ctx), true);
+
+  // The anchor is covered by the signature like any other field -- a
+  // signature produced over the anchor-less payload must NOT verify
+  // against a payload where an attacker has since attached a different
+  // anchor, since that's a different signed statement.
+  const tampered = { ...withoutAnchor, anchor: "attacker-supplied-anchor", sigs: sigsWithout };
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied(tampered, [], ctx), false);
+});
+
 test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's own key plus enough of the current guardians to meet addition_threshold", async () => {
   const wardDid = "did:guardian:example.com:alice";
   const g1Did = "did:guardian:example.com:g1";

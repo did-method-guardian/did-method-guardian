@@ -145,8 +145,8 @@ export async function registerWard(
       // convenience this was originally built for.
       const guardianPrivateKey = await decryptWardPrivateKey(env, guardianWard);
       const addOp = await signGuardianAdd(
-        { type: "guardian_add", incoming: guardianDid, prev: cid },
-        { [guardianDid]: guardianPrivateKey, [did]: keypair.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's own key and the ward's own operational key
+        { type: "guardian_add", incoming: guardianDid, prev: cid, anchor: await genesisAnchor(env, guardianDid) },
+        { [guardianDid]: guardianPrivateKey, [did]: keypair.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's key and the ward's operational key
         [guardianDid, did],
       );
       const result = await submitOperation(env, name, addOp);
@@ -442,7 +442,7 @@ export async function adoptWard(env: Env, name: string, incomingDid: Did): Promi
   const incomingPrivateKey = await decryptWardPrivateKey(env, incomingWard);
   const wardPrivateKey = await decryptWardPrivateKey(env, ward);
   const op = await signGuardianAdd(
-    { type: "guardian_add", incoming: incomingDid, prev: latestCid },
+    { type: "guardian_add", incoming: incomingDid, prev: latestCid, anchor: await genesisAnchor(env, incomingDid) },
     { [incomingDid]: incomingPrivateKey, [ward.did]: wardPrivateKey },
     [incomingDid, ward.did],
   );
@@ -598,6 +598,12 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
 export async function loadLog(env: Env, did: string): Promise<LogEntry[]> {
   const rows = await getOperationLog(env, did);
   return rows.map((r) => ({ cid: r.cid, op: JSON.parse(r.payload) as Operation, acceptedAt: r.created_at }));
+}
+
+/** REQ-12-4: a ward's anchor is its genesis entry's cid -- the first entry in the log, always, regardless of how many operations have followed. Used to populate guardian_add's optional `anchor` field for a guardian this registrar already custodies, where the log is already a local lookup away. */
+async function genesisAnchor(env: Env, did: string): Promise<string | undefined> {
+  const log = await loadLog(env, did);
+  return log[0]?.cid;
 }
 
 /** `name: null` auto-provisions the bare-domain root identity (never missing); a real name that isn't registered yet stays a plain miss. */

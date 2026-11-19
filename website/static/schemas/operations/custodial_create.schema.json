@@ -12,7 +12,7 @@
     "services": { "type": "object", "description": "REQ-7.1-3: must be present." },
     "registrar": {
       "type": "object",
-      "description": "REQ-7.1-5: an optional attestation from the accepting registrar's own key.",
+      "description": "REQ-7.1-5: a required attestation from the accepting registrar's key. A verifier MUST reject a genesis operation with this field absent.",
       "properties": { "did": { "type": "string" }, "sig": { "type": "string" } },
       "required": ["did", "sig"],
       "additionalProperties": false
@@ -24,6 +24,6 @@
     "creator": { "type": "string", "description": "REQ-7.1-4: the DID of whichever party initiated this registration. Carries no signature requirement." },
     "policy": { "$ref": "../guardian-policy.schema.json", "description": "REQ-7.1-7: optional full or partial GuardianPolicy proposed at genesis." }
   },
-  "required": ["type", "name", "operationalKeys", "verificationMethods", "services", "outgoing", "incoming", "prev", "sigs"],
+  "required": ["type", "name", "operationalKeys", "verificationMethods", "services", "registrar", "outgoing", "incoming", "prev", "sigs"],
   "additionalProperties": false
 }
