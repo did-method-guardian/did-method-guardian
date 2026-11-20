@@ -103,7 +103,7 @@ function printLevelLine(did: Did, anchor: string, registrarKey: { did: Did; publ
   const pin = getPin(did);
   if (!pin) {
     savePin(did, { anchor, registrarDid: registrarKey?.did, registrarKey: registrarKey?.publicKey });
-    console.log(`${level}. Pinned anchor ${anchor}${registrarKey ? ` and registrar key for ${registrarKey.did}` : ""} for ${did} (first resolution).`);
+    console.log(`${level}. First resolution of ${did} -- pinned anchor ${anchor}${registrarKey ? ` and registrar key (${registrarKey.did})` : ""}.`);
   } else if (pin.anchor !== anchor) {
     console.log(`${level}. ANCHOR MISMATCH: pinned ${pin.anchor}, this resolution has ${anchor} -- this is not the identity previously seen under this DID.`);
   } else {

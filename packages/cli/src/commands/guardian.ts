@@ -94,9 +94,10 @@ export function registerGuardianCommand(program: Command): void {
     .requiredOption("--guardian-key <label>", "the signing guardian's saved key")
     .option("--keychain", "look up the guardian key in the OS keychain instead of a local file")
     .option("--new-key <label>", "an existing saved key to install as the ward's new operational key (default: generate and save a fresh one under \"<ward-did>-recovered\")")
+    .option("--prev <cid>", "nullification (REQ-6-8) -- name a cid earlier than the current head to roll back a fraudulent rotation accepted less than 72h ago, instead of just rotating forward from it (default: the current head)")
     .option("--submit", "actually submit the signed operation to the registrar (default: print it only)")
-    .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; newKey?: string; submit?: boolean }) => {
-      const { headCid } = await currentHead(wardDid);
+    .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; newKey?: string; prev?: string; submit?: boolean }) => {
+      const prev = opts.prev ?? (await currentHead(wardDid)).headCid;
       const guardianKey = await loadKey(opts.guardianKey, opts);
       let newKey: StoredKey;
       if (opts.newKey) {
@@ -115,7 +116,7 @@ export function registerGuardianCommand(program: Command): void {
           operationalKeys: [newKey.publicKey],
           verificationMethods: { "key-1": newKey.publicKey },
           services: {},
-          prev: headCid,
+          prev,
         },
         { [guardianDid]: guardianKey.privateKey },
         [guardianDid],

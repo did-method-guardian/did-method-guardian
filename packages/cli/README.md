@@ -73,10 +73,10 @@ did-guardian guardian adopt <ward-did>
 
 ```
 did-guardian guardian add <ward-did> <guardian-did> --ward-key <label> --guardian-key <label> [--submit]
-did-guardian guardian recover <ward-did> <guardian-did> --guardian-key <label> [--new-key <label>] [--submit]
+did-guardian guardian recover <ward-did> <guardian-did> --guardian-key <label> [--new-key <label>] [--prev <cid>] [--submit]
 did-guardian guardian tombstone <ward-did> <guardian-did> --guardian-key <label> [--submit] [-y]
 ```
-These sign directly with keys you hold and only touch the network with `--submit`. `add` needs *both* parties to hold a key directly (via `create` or `key take-custody`) -- for a ward that's still registrar-held, use `guardian adopt` instead. `recover` and `tombstone` only ever need the guardian's key, so they work regardless of the ward's custody mode.
+These sign directly with keys you hold and only touch the network with `--submit`. `add` needs *both* parties to hold a key directly (via `create` or `key take-custody`) -- for a ward that's still registrar-held, use `guardian adopt` instead. `recover` and `tombstone` only ever need the guardian's key, so they work regardless of the ward's custody mode. `recover --prev <cid>` is nullification (spec REQ-6-8): point it at the cid immediately before a fraudulent rotation, within 72 hours of that rotation, to roll it back instead of just rotating forward from it.
 
 ## What this doesn't do yet
 
