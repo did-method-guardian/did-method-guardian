@@ -82,7 +82,7 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 ## The identifier
 
-```
+```text {linenos=false}
 did:guardian:acme.com:alice
 did:guardian:acme.com
 ```
@@ -171,7 +171,7 @@ A registrar: an HTTP server operating one or more `did:guardian` namespaces, one
 
 ## 2. Identifier syntax
 
-```
+```text {linenos=false}
 did-guardian-identifier = "did:guardian:" domain [ ":" name ]
 name         = 3*32(ALPHA / DIGIT / "-")
 domain       = domain-label *( "." domain-label )
@@ -206,7 +206,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 
 ## 5. GuardianPolicy
 
-```json
+```json {linenos=false}
 {
   "recovery_threshold": "any",
   "tombstone_threshold": "any",
@@ -250,7 +250,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 
 ### 7.1 Create
 
-```json
+```json {linenos=false}
 {
   "type": "custodial_create",
   "name": "alice",
@@ -535,7 +535,7 @@ Named `/guardian-login`/`/guardian-logout`, not the shorter `/login`/`/logout`, 
 
 A relying party no longer needs this registrar's own operator to hand-insert an `oidc_clients` row -- `POST /oauth/register-client` is open, unauthenticated self-service, the same posture every other registration endpoint here already has:
 
-```json
+```json {linenos=false}
 { "redirect_uris": ["https://app.example.com/callback"], "client_name": "Example App", "token_endpoint_auth_method": "client_secret_basic" }
 ```
 
@@ -569,7 +569,7 @@ Client authentication (where a client has a secret at all) accepts either `Autho
 
 This is a client-side problem, not a missing endpoint -- a Guardian identifier already names its own registrar (`domain:name`), so an RP's own "Login with Guardian" button just needs to turn a person's `alice@acme.com`-shaped input into that domain's own `/.well-known/openid-configuration`, then redirect through the ordinary flow above. A minimal reference implementation:
 
-```js
+```js {linenos=false}
 async function loginWithGuardian(identifier, redirectUri) {
   const [name, domain] = identifier.split("@");
   const discovery = await fetch(`https://${domain}/.well-known/openid-configuration`).then((r) => r.json());
@@ -635,7 +635,7 @@ A platform wanting to use this needs its own OIDC client (§5.1) and a token for
 
 A managed identity (§9) often needs to be *acted as* later, not just created once -- a platform letting its own user operate an agent it guards, say. `POST /token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` (RFC 8693) mints a token whose `sub` is a target identity (`resource`, a DID this registrar custodies), given a `subject_token` (the caller's own existing access token) proving who's actually asking:
 
-```
+```text {linenos=false}
 POST /token
 {
   "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
@@ -669,7 +669,7 @@ MCP's own authorization spec is OAuth 2.1 plus mandatory Resource Indicators (RF
 
 **`GET /.well-known/oauth-protected-resource`** (RFC 9728, Protected Resource Metadata): this registrar is both its own authorization server and, for endpoints like `/userinfo`, a protected resource in its own right. The document names itself as both:
 
-```json
+```json {linenos=false}
 {
   "resource": "https://acme.com",
   "authorization_servers": ["https://acme.com"],
@@ -690,7 +690,7 @@ A `401` from `/userinfo` (missing, invalid, expired, or revoked token) carries a
 
 **`POST /.well-known/guardian/relay-notify`** -- a best-effort, advisory push from a ward's registrar to a required signer's own registrar, sent alongside every ordinary `notifyAwaitingSignature`/`notifyProgress` email for a signer this registrar doesn't custody:
 
-```json
+```json {linenos=false}
 { "ward_did": "did:guardian:acme.com:alice", "pending_operation_id": "<id>", "signer_did": "did:guardian:otherdomain.com:bob" }
 ```
 

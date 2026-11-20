@@ -9,11 +9,11 @@ An agent gets an identity, with a key. A human (or a team) becomes its guardian,
 
 ## Register the agent's identity
 
-```
+```text {linenos=false}
 did-guardian register support-bot-7 --registrar guardianspec.org
 ```
 
-```
+```text {linenos=false}
 Created did:guardian:guardianspec.org:support-bot-7
 
 Login secret (shown once -- store it with the agent, not with the human guardian):
@@ -24,13 +24,13 @@ Login secret (shown once -- store it with the agent, not with the human guardian
 
 Guardianship can't be set at registration (genesis never names a guardian directly -- that's REQ-7.1-1). It's a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
 
-```
+```text {linenos=false}
 did-guardian register priya --registrar guardianspec.org
 ```
 
 Then log in as the human and adopt the agent:
 
-```
+```text {linenos=false}
 did-guardian login did:guardian:guardianspec.org:priya --login-secret <priya's secret>
 did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7
 ```

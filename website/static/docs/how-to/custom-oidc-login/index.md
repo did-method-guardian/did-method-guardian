@@ -11,13 +11,13 @@ Any did:guardian registrar runs as a standard OpenID Connect provider. A relying
 
 Dynamic client registration ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)) needs no prior account on the registrar:
 
-```
+```text {linenos=false}
 curl -X POST https://guardianspec.org/oauth/register-client \
   -H "Content-Type: application/json" \
   -d '{"redirect_uris": ["https://your-app.example.com/oauth/callback"], "client_name": "My App"}'
 ```
 
-```json
+```json {linenos=false}
 {
   "client_id": "...",
   "client_secret": "...",

@@ -22,17 +22,17 @@ For an introduction to the method, see the [guide](/docs/) first -- this page as
 
 Create an identity, resolve it, and add a guardian, using [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli):
 
-```
+```text {linenos=false}
 npm install -g @did-guardian/cli
 ```
 
 **Create an identity:**
 
-```
+```text {linenos=false}
 did-guardian register alice --registrar guardianspec.org
 ```
 
-```
+```text {linenos=false}
 Created did:guardian:guardianspec.org:alice
 
 Login secret (shown once -- save it now, there's no recovery path if you lose it):
@@ -41,11 +41,11 @@ Login secret (shown once -- save it now, there's no recovery path if you lose it
 
 **Resolve it.** No authentication needed -- this works for anyone, anywhere:
 
-```
+```text {linenos=false}
 did-guardian resolve did:guardian:guardianspec.org:alice
 ```
 
-```
+```text {linenos=false}
 L3 (Live). First resolution of did:guardian:guardianspec.org:alice -- pinned anchor <cid> and registrar key (did:guardian:guardianspec.org).
 { "...": "an ordinary W3C DID Core document" }
 ```
@@ -54,7 +54,7 @@ That pin is the CLI's record that this is the same `alice` it saw before -- a la
 
 **Add a guardian.** Register a second identity for whoever's becoming the guardian, log in as them, and adopt:
 
-```
+```text {linenos=false}
 did-guardian register bob --registrar guardianspec.org
 did-guardian login did:guardian:guardianspec.org:bob --login-secret <bob's secret>
 did-guardian guardian adopt did:guardian:guardianspec.org:alice
@@ -68,7 +68,7 @@ Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.we
 
 Everything above leaves the registrar holding both keys, encrypted. If you'd rather hold a key yourself from the start:
 
-```
+```text {linenos=false}
 did-guardian key take-custody did:guardian:guardianspec.org:alice
 ```
 

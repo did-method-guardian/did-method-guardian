@@ -9,7 +9,7 @@ description: "Deploy packages/server -- the reference registrar -- on your own d
 
 ## Deploy
 
-```bash
+```bash {linenos=false}
 git clone https://github.com/did-method-guardian/did-method-guardian
 cd did-method-guardian/packages/server
 npm install
@@ -38,7 +38,7 @@ That's a working registrar: anyone can `POST /register` and create an identity, 
 
 Every deployment auto-provisions one identity with no name at all -- `did:guardian:<your-domain>` -- the first time anything resolves it. It attests every other ward's genesis operation and, once given a login credential, is a fully usable identity like any other.
 
-```bash
+```bash {linenos=false}
 npx wrangler secret put ROOT_WARD_LOGIN_SECRET
 ```
 

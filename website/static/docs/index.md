@@ -84,7 +84,7 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 ## The identifier
 
-```
+```text {linenos=false}
 did:guardian:acme.com:alice
 did:guardian:acme.com
 ```

@@ -11,7 +11,7 @@ This assumes the ward already has at least one guardian. If it doesn't, there's 
 
 ## The recovery itself
 
-```
+```text {linenos=false}
 did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --submit
 ```
 
@@ -23,7 +23,7 @@ A fresh operational key is generated and saved automatically (as `<ward-did>-rec
 
 A key that's lost to theft, not just misplaced, might already have been used to rotate the identity before a guardian ever gets involved. The same guardian-signed `custodial_rotate` above still works -- but within 72 hours of that fraudulent rotation (the nullification window), `--prev <cid>` can point it at the cid immediately *before* the fraudulent rotation instead of the current head, specifically undoing it and rolling back to the state just before, rather than just adding another rotation on top of a compromised one:
 
-```
+```text {linenos=false}
 did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --prev <cid-before-the-fraudulent-rotation> --submit
 ```
 

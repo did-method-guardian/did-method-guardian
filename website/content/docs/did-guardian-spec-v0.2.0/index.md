@@ -35,7 +35,7 @@ A registrar: an HTTP server operating one or more `did:guardian` namespaces, one
 
 ## 2. Identifier syntax
 
-```
+```text {linenos=false}
 did-guardian-identifier = "did:guardian:" domain [ ":" name ]
 name         = 3*32(ALPHA / DIGIT / "-")
 domain       = domain-label *( "." domain-label )
@@ -70,7 +70,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 
 ## 5. GuardianPolicy
 
-```json
+```json {linenos=false}
 {
   "recovery_threshold": "any",
   "tombstone_threshold": "any",
@@ -114,7 +114,7 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 
 ### 7.1 Create
 
-```json
+```json {linenos=false}
 {
   "type": "custodial_create",
   "name": "alice",
