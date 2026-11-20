@@ -6,7 +6,7 @@ An example DID is: `did:guardian:acme.com:alice`
 
 The identifier is domain-first, deliberately isomorphic to `did:web`'s convention (`did:web:<domain>:<path...>`) rather than the reverse-DNS order popularized elsewhere -- did:guardian is that same domain-first shape with at most one flat name segment, which keeps a did:guardian identifier and its equivalent `did:web:acme.com:alice` visually parallel, differing only in the method name. Control over an identity (a "ward") rests with its ordered, tiered rotation keys: an operational tier the ward rotates itself, and a guardian tier that can recover or nullify the operational tier within a bounded recovery window -- directly adopting [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s proven ordered-authority mechanism, extended with group guardianship (multiple guardians, configurable M-of-N consensus) that `did:plc` has no equivalent of.
 
-This git repository contains a TypeScript reference implementation (`packages/lib`), a self-hostable registrar + OIDC provider + account dashboard (`packages/server`), a set of interoperability test fixtures (`interop_tests`), and the specification's website (`website`).
+This git repository contains a TypeScript reference implementation (`packages/lib`), a self-hostable registrar + OIDC provider + account dashboard (`packages/server`), a command-line tool (`packages/cli`, `@did-guardian/cli` on npm), a set of interoperability test fixtures (`interop_tests`), and the specification's website (`website`).
 
 ## Motivation
 
@@ -14,14 +14,14 @@ Every identity method examined while designing this had no native concept of one
 
 ## How it works
 
-See the [guide](website/content/docs/index.md) for an introduction, or the [formal specification](website/content/docs/did-guardian-spec-v0.2.0/index.md) for the normative method definition -- both are also live at [guardianspec.org/docs](https://guardianspec.org/docs/).
+See the [guide](website/content/docs/index.md) for an introduction, or the [formal specification](website/content/docs/did-guardian-spec-v0.2.0/index.md) for the normative method definition -- both are also live at [guardianspec.org/docs](https://guardianspec.org/docs/). To run things directly, [`packages/cli`](packages/cli/README.md) (`npm install -g @did-guardian/cli`) covers key management, registration, resolution, and guardianship end to end; the [Get Started guide](https://guardianspec.org/docs/how-to/) walks through it.
 
 ## Versioning
 
 Four different things in this repository are versioned independently, on purpose, because they're different artifacts that change for different reasons:
 
 - **The method specification** (`v0.2.0`): the normative definition of `did:guardian` -- identifier syntax, the operation log, every operation and signature rule. Changes here mean the method's rules changed.
-- **`packages/lib` and `packages/server`** (`0.1.0`): this reference implementation's semver, tracking code changes. Many releases of either can happen without the method specification changing at all.
+- **`packages/lib`, `packages/server`, and `packages/cli`** (`0.1.0`): this reference implementation's semver, tracking code changes. Many releases of any of them can happen without the method specification changing at all.
 - **The registrar API** (`v1`): the reference registrar's HTTP surface, [documented separately](website/content/docs/registrar/index.md) and explicitly versioned apart from the method -- a different registrar implementation is free to expose none of it and remain fully conformant.
 - `website/site.yaml`'s `version` field is unrelated to all of the above -- it's the static site generator's config-schema version, not a product version.
 
