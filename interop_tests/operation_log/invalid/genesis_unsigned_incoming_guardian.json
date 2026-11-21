@@ -2,17 +2,17 @@
   "note": "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no signature at all -- establishing a guardian this way still requires that guardian's consent.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9hqAb6YTP3R4yL_bMZwCCg3el5FWbImqxs8Mz0VUrBoCQQ0i_ONB_kOeR0dxoFVeN2PQw6WjM2pF44VASI3Fuw",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
   },
   "log": [
     {
-      "cid": "077c65cbac135c3ef3d1c9a8fd6a97e95b2dafc364bade3b1856e8223f04612f",
+      "cid": "2abf5a5e3a916c26daff4e88a560c7dd62cdafba92f845ffa3b78a87ba7a9031",
       "op": {
         "type": "custodial_create",
         "name": "unsigned",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
         ],
         "verificationMethods": {},
         "services": {},
@@ -24,10 +24,10 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "15q_trIJ__aS6t1KACEPvlXtJ3vF6czakJ93V5ScNWvGfFfitULv-tfWlyEmCw5dk7CIix7kbsc8VVUN5YOlAw"
+          "sig": "FWQEtRC3zdDmzxE8t2BcjTL2_GLkTYSfiERNJQB29X3s0aRCDWSu89Pw1pdx9AU8xYg8Y7l3BrhvU03COGrpSg"
         },
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "sP4pRKxGQ13_DFc67qKpn2WsEvBkC4AtinbtDe9-y1XmzI-tAql4FFZihDgPEmSqOXz8kuVqvhW3aZx-bjJ6kg"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "wz6QKY0MsiWV3bmhA65OZ8reXBgPMe1VIrNA2AX2CAlu6AXgqyv6LDq_5v9_LpTodhou0w4Z5PjXwM-jKPcknA"
         },
         "sigs": {}
       }

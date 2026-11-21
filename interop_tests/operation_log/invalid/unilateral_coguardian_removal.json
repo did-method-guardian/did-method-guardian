@@ -2,18 +2,18 @@
   "note": "REJECT: troy attempts to remove jane from a two-guardian set, but the signature claimed as jane's was produced with troy's own key, not jane's.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:troy:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9hqAb6YTP3R4yL_bMZwCCg3el5FWbImqxs8Mz0VUrBoCQQ0i_ONB_kOeR0dxoFVeN2PQw6WjM2pF44VASI3Fuw",
-    "did:guardian:jane:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECHfsz2s4LU526aUiF1rewx_F2JdEZe8XUWnutvbEZwOnvFStN3lgrWPsrgKfczqZzzjpWJmG35pgx60EDAnOZw",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
+    "did:guardian:troy:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
+    "did:guardian:jane:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4P--0RqqYgL9Sjtvpc-5eLd6d37WXgZGIBKMMDM7qSzsqtkZX4kob9uiYMFn3PfICMDgi8YGcq-NAooz_AEtCA",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
   },
   "log": [
     {
-      "cid": "dd06a489a346accba3e0cf59cc3c5a1e397bf318394ca67b2cd1ebe1f8dd12f9",
+      "cid": "d6c538677f17420d434c66e47c1d0ef8ec0e12c81d16dbd90b9e059b6f99dd40",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
         ],
         "verificationMethods": {},
         "services": {},
@@ -26,19 +26,19 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "DmREO_NU_6crBij7UMyLwhKWRgYHYP8RJs5hV3JumZ8Y11qMJXUKH0VLnYIa32Q5tp1YE_dJumXKC9occjswfQ"
+          "sig": "e3WqyF82CcNUw0GEl53JlWw0KurZZrHjN3i5k-NQrAN5DiyuWEEn1uRPUS1pP_AduGIU9ralBCDDMUCYxch_jw"
         },
         "sigs": {
-          "did:guardian:troy:example:com": "2pEoTPrNCbH9aEONPNuJFpYLgbO2UtROz0-bX_tsMZeY2dqDm3_A8diTP-VKjcA68ZXMWzBZODgza6zeGXYATQ",
-          "did:guardian:jane:example:com": "l4iA4ChT4DNSNTb_rw894_0QY78Hs1scI7PIHFwNx8mKZp9gS5r0v7wPKWWaMUJd69mx4Z1rM_6zYnpXTWcE3w"
+          "did:guardian:troy:example:com": "FZf_p1cErndlK2iNZDtgAcCymrcTfqWjvhzZYCxFDhnWWguQXPVewn0YTn3FDkEnZ7y35cHZ6I1kJwi_quT2Iw",
+          "did:guardian:jane:example:com": "ukuHQubmeCvVw8peKlYrTRfyjY0pByqXFu8u2wyWkoIoTNkguCXq0CqphQxCT_sijzWZnilFw2cG2zgaCG6DHw"
         },
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "V_UNJ0oCh84y_ydZACh-__bPOMW-mtiB-lcKJeZBi1BS7sL8gTSjTbxMIg9X5Bs1X6ocbwTDGWCy9jY9Qr8SBg"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "Iz8m4qsjenum5ERNv3KTSndXY9N5_svwY4o29rJBM9nCMOFPm9pZC_hCbyMlymxTtttw9go1FueyXcVFaU2VSg"
         }
       }
     },
     {
-      "cid": "2b4718666c15248aad2ae0f1ebe9a8384096df5ffe6e95ed339c5a4942463803",
+      "cid": "3d671dd4d7e5088f8553c5741edabbeafe86bf4c33b683a49062a88736573e6a",
       "op": {
         "type": "guardian_transfer",
         "outgoing": [
@@ -47,9 +47,9 @@
         "incoming": [
           "did:guardian:troy:example:com"
         ],
-        "prev": "dd06a489a346accba3e0cf59cc3c5a1e397bf318394ca67b2cd1ebe1f8dd12f9",
+        "prev": "d6c538677f17420d434c66e47c1d0ef8ec0e12c81d16dbd90b9e059b6f99dd40",
         "sigs": {
-          "did:guardian:jane:example:com": "q_kL01UiK0FmzLnzv8c63Xe-KgJB3CWx29uOZujNvacXW6biVljkaS3QKD9u_0_-l0lTB7_BNR45OtfglUkgBA"
+          "did:guardian:jane:example:com": "qj5zFlGIPcZCgCq6WALdGe_uGhIYPqvIjwhLsKq3jQqJoaPsa49QkQVq-Qt_B5VlR6yITKtRqiTQ7bwTS2ecTw"
         }
       }
     }

@@ -2,22 +2,22 @@
   "note": "Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9hqAb6YTP3R4yL_bMZwCCg3el5FWbImqxs8Mz0VUrBoCQQ0i_ONB_kOeR0dxoFVeN2PQw6WjM2pF44VASI3Fuw",
-    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECHfsz2s4LU526aUiF1rewx_F2JdEZe8XUWnutvbEZwOnvFStN3lgrWPsrgKfczqZzzjpWJmG35pgx60EDAnOZw",
-    "did:guardian:board-c:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEYT2goIN0erCqhgQbOzxHWes_QXJk6twDjZe4OujbwIHNVDkUK1UHr01Z91oiGcKzce6tyCu2xBfC5cx8GBX40A",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
+    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4P--0RqqYgL9Sjtvpc-5eLd6d37WXgZGIBKMMDM7qSzsqtkZX4kob9uiYMFn3PfICMDgi8YGcq-NAooz_AEtCA",
+    "did:guardian:board-c:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8y9pX_SMgkIL5B_Qo1YFWCi6-sAgm2E3cLLAZmulyyWlk_D5AGVmsgWOis7kSCZ7_xaJvjLzGSYpFWWQ7Xur0w",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
   },
   "log": [
     {
-      "cid": "6f2944d56a2ce05bd0d0ed8552c5d765938a5f300f0c5e4d7602af4c3dc8cd89",
+      "cid": "6ff28916eb30978658499cdadf78c25a407ded2bd9c9c6c12c528ffe72652b00",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
         ],
         "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
         },
         "services": {},
         "outgoing": [],
@@ -29,37 +29,37 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "xgMKxeodX5kDUGCiBwyfXjnlO8rCekNlD4udfnOUnyOv9BQIJaiIxD5HN6m27p1IOGsz-EZh74n1Uyy9GW7irQ"
+          "sig": "4Jgh1ouJN0KBUPavFl01f1-O3Oc3OGUGeO-NHb8xofNpiBll0bPCc0Rp-EfDOGVMIWS_VVjMARp-0MuOzgRehw"
         },
         "sigs": {
-          "did:guardian:board-a:example:com": "5cgp6rlmxpR0ZK7es_KnUiT21-TlQulwp9RastvSibDepD6rZJR6P-apcdkpgJOUo3jsEHz2hvmjvusVRym-OQ",
-          "did:guardian:board-b:example:com": "Mot3su92ZE8_MFAtYP7AfVY4CafhjVJvWd3SHHqDe2SRsojFaFkNTMMCs1Ylcf5Ys6iHC1ppEX67rxXLieI9dA"
+          "did:guardian:board-a:example:com": "ajhc6NJrv0Po-8i0L_gWNp4f7KvCwXZO-kgF_iPJwgXqJBQ0BgLI4Qwd6gKni4K9ODR-zve3lYOUizt6WzZf3A",
+          "did:guardian:board-b:example:com": "D7O60eHcLv86AU3_5cWHcXm26AcKshYrsFAnSHgW09kWzyZbUyCLupaeljHXZkK5cgeK0HUKpAwXAd22kkUSzA"
         },
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "YdH1Q9u9yeNyS0_K2McZFfb1QRxdX6Z4eJZZHVfflPDsDZ0XP8HWkNCbM55ouNaPA7wczM04cMgZ3rl_Gq3dOQ"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "wneQLE7LBCgdXYhAR1xnS9Pqf3YM1XbiyyhQyfS2YBvMZgQ-353T40M5JoZ_-tTQqwproBocdcUopOF9aotzFA"
         }
       }
     },
     {
-      "cid": "867d6d5ae498320e691261dc828e609c0d9992321e68737d7498c268c217b423",
+      "cid": "882171a7a33dd0b6d5d2ce90fcf5b1efddc8d012b897f53ad4c1813f1f2546f6",
       "op": {
         "type": "custodial_rotate",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPiE6SCFb2aAV_l1LcRc2i5nSIlTIyitcTUAyR9dTac1a3umIz2vjKreK0h6rLjOBFgBwqRnQfAuXQ2dCJmsawQ"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEX_pKygjNoR_vJENKeEi4nf-5FWOwfjY6MiI6ZuYJ4tLTn5JVI9fehp8FqGi1XbldMjCyqyX8Triblu2od5SnWw"
         ],
         "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPiE6SCFb2aAV_l1LcRc2i5nSIlTIyitcTUAyR9dTac1a3umIz2vjKreK0h6rLjOBFgBwqRnQfAuXQ2dCJmsawQ"
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEX_pKygjNoR_vJENKeEi4nf-5FWOwfjY6MiI6ZuYJ4tLTn5JVI9fehp8FqGi1XbldMjCyqyX8Triblu2od5SnWw"
         },
         "services": {},
-        "prev": "6f2944d56a2ce05bd0d0ed8552c5d765938a5f300f0c5e4d7602af4c3dc8cd89",
-        "sig": "QfaIEVo0IOzTUoiVoB2AayAEg31xLlWJ-YduJo38aQRuAmg1Qlinr1NDWeTxgR__4wyllwcKfB8nWc2QKs7NRw",
+        "prev": "6ff28916eb30978658499cdadf78c25a407ded2bd9c9c6c12c528ffe72652b00",
+        "sig": "ePJ3372sKQOqr-BF_GtDaxwcVqA3s6HznaYKiYcpv3KRykue5sS5NPWNRonMYYJXPQsVxvBFL_4d0_GbZS1grw",
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEPiE6SCFb2aAV_l1LcRc2i5nSIlTIyitcTUAyR9dTac1a3umIz2vjKreK0h6rLjOBFgBwqRnQfAuXQ2dCJmsawQ": "1QSB7itgQb1QzGQAdT3KOiWjQ745yDKo9_tsximQMP77g3tbRt-XZ-Z5y_HXhJPRlJUTf5UBt8pirQtMV6PQKw"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEX_pKygjNoR_vJENKeEi4nf-5FWOwfjY6MiI6ZuYJ4tLTn5JVI9fehp8FqGi1XbldMjCyqyX8Triblu2od5SnWw": "UWcAaJZSEWpGMXNNtA9838Fe0OS3RTy9ZglTryGOENTtLgDBvTgKAt-vivFQ-nX4-ntHtX8RN06Y7h8at-OBLQ"
         }
       }
     },
     {
-      "cid": "e115922ead555c81b2d33d9079fabc1aa47e5493af007c57eab5249eae1b8dec",
+      "cid": "6c23a539fea9a19532be22c6d71a555b18c5bd6f2ad76faf97dfe8ea0d2b941f",
       "op": {
         "type": "guardian_transfer",
         "outgoing": [
@@ -69,10 +69,10 @@
           "did:guardian:board-b:example:com",
           "did:guardian:board-c:example:com"
         ],
-        "prev": "867d6d5ae498320e691261dc828e609c0d9992321e68737d7498c268c217b423",
+        "prev": "882171a7a33dd0b6d5d2ce90fcf5b1efddc8d012b897f53ad4c1813f1f2546f6",
         "sigs": {
-          "did:guardian:board-a:example:com": "1Q8jV8OmOGCPk7f4t9Ry6A_bl55-gw8nn2ch07UsuCdnK-d4rnsR5dh33pqMbSLAqphS7jwFgF06o_icWf1hpg",
-          "did:guardian:board-c:example:com": "UfVls5TLceDii28TK6WBdiYqvR5JOJojid16hiVCdEGaEMpkk4HM3pDVnOg39NQjb539iuBIsEqX8ZaUEIr2vw"
+          "did:guardian:board-a:example:com": "4Yt1g92WAhOFnG-QuG9LyJ_lF_7NwUGD8X_mdtWxeikdxeFkDzKzTBlhpcb5Lg_APP1i4UnQb9PwMJs8zkU5ng",
+          "did:guardian:board-c:example:com": "yo9oWqCvxO7mCqrnmaWpce7oM3HLgFGLL_VnKTxdMKf5IvjyZ8HTurorjqnJoq5iOaesug3CNgh0eC5_yYu12Q"
         }
       }
     }

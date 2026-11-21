@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { verifyCustodialCreate, verifyCustodialRotate, verifyCustodialTombstone, verifyGuardianRelinquish, verifyGuardianTransfer } from "../src/operations.js";
 import { DEFAULT_GUARDIAN_POLICY } from "../src/types.js";
 import { replay } from "../src/document.js";
+import { verifyByRules } from "../src/rules.js";
 import type { KeyResolver } from "../src/operations.js";
 import type { Did, LogEntry } from "../src/types.js";
 
@@ -33,6 +34,7 @@ async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boole
   const resolve: KeyResolver = (did) => (fixture.known_keys[did] ? [fixture.known_keys[did]] : undefined);
   let currentGuardians: Did[] = [];
   let currentOperationalKeys: string[] = [];
+  const logSoFar: LogEntry[] = [];
 
   for (const entry of fixture.log) {
     const op = entry.op;
@@ -53,11 +55,22 @@ async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boole
       const result = await verifyGuardianRelinquish(op, currentGuardians, DEFAULT_GUARDIAN_POLICY.removal_threshold, resolve);
       if (!result.valid) return result;
       currentGuardians = [];
+    } else if (op.type === "guardian_add" || op.type === "guardian_remove" || op.type === "policy_update") {
+      // These v0.2 operation types have no standalone operations.ts function
+      // at all -- their real acceptance path (registrar.ts's submitOperation)
+      // is rules.ts's verifyByRules, same as here. State as of just before
+      // this entry, same way `replay` itself reconstructs it.
+      const state = replay(wardDid, logSoFar);
+      const result = await verifyByRules(op, { wardDid, state, resolveKey: resolve, isGuardianLive: () => true });
+      if (!result.valid) return result;
+      if (op.type === "guardian_add") currentGuardians = [...currentGuardians, op.incoming];
+      if (op.type === "guardian_remove") currentGuardians = currentGuardians.filter((g) => g !== op.outgoing);
     } else if (op.type === "custodial_tombstone") {
       const eligible = [wardDid, ...currentGuardians];
       const result = await verifyCustodialTombstone(op, eligible, DEFAULT_GUARDIAN_POLICY.tombstone_threshold, resolve);
       if (!result.valid) return result;
     }
+    logSoFar.push(entry);
   }
   return { valid: true };
 }

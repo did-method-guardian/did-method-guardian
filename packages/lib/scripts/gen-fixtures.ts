@@ -7,7 +7,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateKeypair, signPayload } from "../src/crypto.js";
-import { signCustodialCreate, signCustodialRotate, signGuardianTransfer, signGuardianRelinquish, signCustodialTombstone, signRegistrarAttestation, corePayload, cidFor } from "../src/operations.js";
+import { signCustodialCreate, signCustodialRotate, signGuardianAdd, signGuardianTransfer, signGuardianRelinquish, signCustodialTombstone, signRegistrarAttestation, corePayload, cidFor } from "../src/operations.js";
 import type { CustodialCreateOp, Did, LogEntry } from "../src/types.js";
 
 // `here` is dist/scripts when run compiled -- repo root is four levels up
@@ -189,6 +189,51 @@ async function signGenesis(
     "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
     { [wardDid]: ward.publicKey, ...registrarKnownKeys },
     "accept",
+  );
+}
+
+// --- valid: standalone guardian_add (zero-to-one case, REQ-7.2-5) on an otherwise guardian-less ward -- issue #6 ---
+{
+  const genesis = await signGenesis(
+    { type: "custodial_create", name: "fred", operationalKeys: [ward.publicKey], verificationMethods: {}, services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const boardDid = "did:guardian:board:example:com";
+  const addOp = await signGuardianAdd(
+    { type: "guardian_add", incoming: boardDid, prev: genesisCid },
+    { [boardDid]: boardA.privateKey, [wardDid]: ward.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's key and the ward's
+    [boardDid, wardDid],
+  );
+  write(
+    "valid",
+    "guardian_add_zero_to_one",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(addOp), op: addOp }],
+    "A standalone guardian_add establishing the first guardian for a previously guardian-less ward -- both the incoming guardian's and the ward's signatures are present (REQ-7.2-5).",
+    { [wardDid]: ward.publicKey, [boardDid]: boardA.publicKey, ...registrarKnownKeys },
+    "accept",
+  );
+}
+
+// --- invalid: standalone guardian_add missing the ward's required signature (REQ-7.2-5) ---
+{
+  const genesis = await signGenesis(
+    { type: "custodial_create", name: "puppet2", operationalKeys: [ward.publicKey], verificationMethods: {}, services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const boardDid = "did:guardian:board:example:com";
+  const unsigned = { type: "guardian_add" as const, incoming: boardDid, prev: genesisCid };
+  const addOp = { ...unsigned, sigs: { [boardDid]: await signPayload(unsigned, boardA.privateKey) } }; // the ward never signs
+  write(
+    "invalid",
+    "guardian_add_missing_ward_signature",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(addOp), op: addOp }],
+    "REJECT: establishing a guardian from zero needs both the incoming guardian's and the ward's signature (REQ-7.2-5) -- here only the incoming guardian signed.",
+    { [wardDid]: ward.publicKey, [boardDid]: boardA.publicKey, ...registrarKnownKeys },
+    "reject",
   );
 }
 

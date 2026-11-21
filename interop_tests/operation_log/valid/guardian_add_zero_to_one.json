@@ -1,0 +1,47 @@
+{
+  "note": "A standalone guardian_add establishing the first guardian for a previously guardian-less ward -- both the incoming guardian's and the ward's signatures are present (REQ-7.2-5).",
+  "expect": "accept",
+  "known_keys": {
+    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA",
+    "did:guardian:board:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+  },
+  "log": [
+    {
+      "cid": "727bf87267ca179fd5c175e45766693593e41ed8a05e1156f6b2af60afd8d8a0",
+      "op": {
+        "type": "custodial_create",
+        "name": "fred",
+        "operationalKeys": [
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+        ],
+        "verificationMethods": {},
+        "services": {},
+        "outgoing": [],
+        "incoming": [],
+        "prev": null,
+        "creator": "did:guardian:example:com",
+        "registrar": {
+          "did": "did:guardian:example:com",
+          "sig": "Iymth6UnGKckatz38pHdqMRcmUhOdTZd-2tcG0sUAuMvZ6vNedtfupxF5XD6sFWdSp62NBUu3_2PGnhH0Kn7jw"
+        },
+        "sigs": {},
+        "keySigs": {
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "EqJlwMo9Ljp8PvZZqzjGDerXarbLarQUdfknAvAfFGLEhDz92Ti7M_uCk8pkuwmbTCVM4uh0rconpcGKA4grHQ"
+        }
+      }
+    },
+    {
+      "cid": "0808d553b6da6af3235cbe305809e46bb697ee00a75327358387f1df3712d48b",
+      "op": {
+        "type": "guardian_add",
+        "incoming": "did:guardian:board:example:com",
+        "prev": "727bf87267ca179fd5c175e45766693593e41ed8a05e1156f6b2af60afd8d8a0",
+        "sigs": {
+          "did:guardian:board:example:com": "XOGZKpMSGsqDwJAF-I2wyDxIdBidBuIFaC3hGaDQGZDgjxeQkDUxsuDrRZr9MAiXNmEQfAUk2Twr8-lT0XS5TA",
+          "did:guardian:fred:example:com": "-8BX2yh39ciV5yEeGo-cUYVGI0R2wG0AUo5KFTGcY4f-uhKrWYrA_nxcCZWbabLP32-K_LOQo5Gp9SaWP9xJdw"
+        }
+      }
+    }
+  ]
+}
