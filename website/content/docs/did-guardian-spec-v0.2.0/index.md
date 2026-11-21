@@ -185,11 +185,13 @@ Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](htt
 - <a id="req-9-1"></a>**REQ-9-1**: The full operation log *MUST* remain permanently, publicly resolvable after `custodial_tombstone`.
 - <a id="req-9-2"></a>**REQ-9-2**: A name, once registered, *MUST NOT* be returned to the available pool within its registrar after deactivation.
 
+**Ephemeral identities are a normal use, not a special case.** An agent fleet that comes and goes needs no human-chosen name per member -- a generated one (`agent-7f3k2q`, say) satisfies REQ-2-1 like any other. Retiring one is an ordinary `custodial_tombstone`, same as any ward's. REQ-9-1/9-2 still apply in full, by design, not as an oversight: a guardian's historical keys have to stay verifiable for as long as anything it signed might ever need checking, which means nothing it guarded can be deleted out from under that either. A registrar hosting many short-lived identities takes on storage that only grows, never shrinks, as the cost of this.
+
 **Domain migration is out of scope for this version.** An identifier's `domain` ([§2](#2-identifier-syntax)) is fixed for the life of that identifier -- this document defines no operation that changes it, and none is planned for v0.x. Moving to a different domain means creating a new identifier there and linking the two, not relocating the existing one:
 
 1. Register the new identifier on the new domain.
 2. Add `alsoKnownAs` entries on each pointing at the other, so a resolver following either arrives at both.
-3. Re-establish guardianship on the new identifier -- it starts guardian-less (REQ-7.1-1) regardless of what the old one had.
+3. Re-establish guardianship on the new identifier -- either directly at genesis (REQ-7.1-1, v0.3) if the same operator holds both keys, or afterward via `guardian_add`; nothing carries over automatically from the old one.
 4. Tombstone the old identifier, or leave it resolvable as a historical record -- either is conformant; REQ-9-1 requires its log stay resolvable regardless.
 
 This keeps the anchor and pinning model ([§12.3](#123-pinning)) useful even without migration: an attacker who takes over an abandoned or expired domain gets a blank slate under that domain, never control of an identifier a verifier had already pinned elsewhere.
