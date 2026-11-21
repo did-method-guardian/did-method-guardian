@@ -36,18 +36,31 @@ export type KeyResolver = (did: Did, asOf?: Date) => string[] | undefined | Prom
 
 /**
  * Fix 5: the content every proof in an operation's `proof` set signs --
- * the operation with `proof` itself removed. `sigs` is stripped too,
- * purely for `GuardianTransferOp` (the only type that still carries it,
- * v0.1, replay-only -- see its own comment in types.ts); no current
- * type has both fields at once, so stripping both uniformly needs no
- * per-type branching. Per the W3C Data Integrity spec's own proof-set
- * semantics (confirmed directly against the spec text, not assumed):
- * every proof in a set signs the SAME unsecuredDocument, with every
- * proof removed -- never "every other proof," which would make each
- * proof's signing input depend on what order proofs were added in.
+ * the operation with `proof` itself removed. Per the W3C Data Integrity
+ * spec's own proof-set semantics (confirmed directly against the spec
+ * text, not assumed): every proof in a set signs the SAME
+ * unsecuredDocument, with every proof removed -- never "every other
+ * proof," which would make each proof's signing input depend on what
+ * order proofs were added in.
+ *
+ * WS-1.10 (audit): `sigs` is excluded too, but ONLY for
+ * `guardian_transfer` (v0.1, replay-only -- see its own comment in
+ * types.ts) -- that's the one type whose own, separate signature scheme
+ * (signPayload/verifyPayload, not a DataIntegrityProof) needs `sigs`
+ * self-excluded from its signing input, the same way `proof` is self-
+ * excluded for every current type. Stripping `sigs` unconditionally (as
+ * a previous version of this function did) meant any OTHER operation
+ * type could carry an arbitrary extra `sigs` field completely outside
+ * both its cid (cidFor delegates to this same function) and every
+ * signature's own coverage -- unauthenticated data riding along for
+ * free, bound to neither.
  */
-export function unsecuredDocument<T extends { proof?: unknown; sigs?: unknown }>(op: T): Omit<T, "proof" | "sigs"> {
-  const { proof: _proof, sigs: _sigs, ...rest } = op as any;
+export function unsecuredDocument<T extends { proof?: unknown; sigs?: unknown; type?: unknown }>(op: T): Omit<T, "proof" | "sigs"> {
+  const { proof: _proof, ...rest } = op as any;
+  if (rest.type === "guardian_transfer") {
+    const { sigs: _sigs, ...withoutSigs } = rest;
+    return withoutSigs;
+  }
   return rest;
 }
 
