@@ -73,9 +73,49 @@ export async function createProof(unsecuredDoc: unknown, verificationMethod: str
   return { ...proofConfig, proofValue };
 }
 
+const PROOF_FIELDS = ["type", "cryptosuite", "verificationMethod", "proofPurpose", "created", "proofValue"] as const;
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
+
+/**
+ * WS-1.9 (audit): every DataIntegrityProof's own fields, checked before
+ * any cryptographic work. type/cryptosuite/proofPurpose/created aren't
+ * just inputs the signing-input hash happens to cover (a mismatch there
+ * already fails the signature on its own, since createProof's signer
+ * hashed the real values) -- they carry meaning under the W3C Data
+ * Integrity model, and createProof never produces anything but this
+ * fixed shape. Without this, a proof with an unrecognized cryptosuite, a
+ * proofPurpose other than this implementation's one current value (WS-
+ * 5.4 decided a future per-role split -- update PROOF_CONFIG_PURPOSE's
+ * use here to a per-role expected value once that split is actually
+ * implemented in code, not just decided), a created that isn't a real
+ * ISO-8601 UTC instant, or an unexpected extra field would only ever be
+ * caught indirectly, by relying on the signature check to happen to fail
+ * -- which it does today only because nothing has a reason to sign a
+ * different shape, not because anything actually checks for one.
+ */
+export function validateProofShape(proof: DataIntegrityProof): { valid: boolean; reason?: string } {
+  if (proof.type !== "DataIntegrityProof") return { valid: false, reason: `proof.type must be "DataIntegrityProof"` };
+  if (proof.cryptosuite !== "ecdsa-jcs-2019") return { valid: false, reason: `proof.cryptosuite must be "ecdsa-jcs-2019"` };
+  if (proof.proofPurpose !== PROOF_CONFIG_PURPOSE) return { valid: false, reason: `proof.proofPurpose must be "${PROOF_CONFIG_PURPOSE}"` };
+  if (typeof proof.verificationMethod !== "string" || proof.verificationMethod.length === 0) {
+    return { valid: false, reason: "proof.verificationMethod must be a non-empty string" };
+  }
+  if (typeof proof.created !== "string" || !ISO_INSTANT.test(proof.created)) {
+    return { valid: false, reason: "proof.created must be an ISO-8601 UTC instant" };
+  }
+  if (typeof proof.proofValue !== "string" || proof.proofValue.length === 0) {
+    return { valid: false, reason: "proof.proofValue must be a non-empty string" };
+  }
+  for (const key of Object.keys(proof)) {
+    if (!(PROOF_FIELDS as readonly string[]).includes(key)) return { valid: false, reason: `proof has an unexpected field: ${key}` };
+  }
+  return { valid: true };
+}
+
 /** The inverse of createProof, checked against one specific candidate public key -- the caller (verifySignerProof, PoP checks below) decides which key(s) are worth trying. */
 async function verifyProof(unsecuredDoc: unknown, proof: DataIntegrityProof, publicKeyMultikey: string): Promise<boolean> {
   try {
+    if (!validateProofShape(proof).valid) return false;
     assertJCSSafe(unsecuredDoc);
     const { proofValue, ...proofConfig } = proof;
     const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
