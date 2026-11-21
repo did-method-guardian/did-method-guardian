@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
-import { generateKeypair, replay, corePayload, signPayload, spkiToMultikey } from "@did-guardian/lib";
+import { generateKeypair, replay, unsecuredDocument, createProof, popVerificationMethod } from "@did-guardian/lib";
 import type { Did } from "@did-guardian/lib";
 import { saveKey, loadKey, listLocalKeys } from "../keystore.js";
 import { loadSession } from "../state.js";
@@ -17,7 +17,7 @@ export function registerKeyCommand(program: Command): void {
       const pair = await generateKeypair();
       await saveKey(label, pair, opts);
       console.log(`Saved key "${label}"${opts.keychain ? " to the OS keychain" : ` to ${label}.json in your did-guardian config directory`}.`);
-      console.log(`Public key (Multikey): ${spkiToMultikey(pair.publicKey)}`);
+      console.log(`Public key (Multikey): ${pair.publicKey}`);
     });
 
   key
@@ -26,7 +26,7 @@ export function registerKeyCommand(program: Command): void {
     .option("--keychain", "look up in the OS keychain instead of a local file")
     .action(async (label: string, opts: { keychain?: boolean }) => {
       const stored = await loadKey(label, opts);
-      console.log(spkiToMultikey(stored.publicKey));
+      console.log(stored.publicKey);
     });
 
   key
@@ -73,23 +73,24 @@ export function registerKeyCommand(program: Command): void {
       }
       // REQ-7.2-12: this registrar will never hold newKey's private half,
       // so it can't prove possession of it the way it does for a
-      // server-generated rotation -- that proof has to come from here,
-      // over the identical content the server independently reconstructs
-      // (same operationalKeys/verificationMethods/services/prev shape
-      // signCustodialRotate would build). A stale prev by the time this
-      // reaches the server just fails like any other prev mismatch.
+      // server-generated rotation -- that proof has to come from here, a
+      // self-contained did:key: proof of possession over the identical
+      // content the server independently reconstructs (same
+      // operationalKeys/services/prev shape signCustodialRotate would
+      // build). A stale prev by the time this reaches the server just
+      // fails like any other prev mismatch.
       const log = await fetchLog(wardDid);
       if (log.length === 0) throw new Error(`no operations found for ${wardDid} -- is it registered?`);
       const state = replay(wardDid, log);
       const rotationPartial = {
         type: "custodial_rotate" as const,
         operationalKeys: [newKey.publicKey],
-        verificationMethods: { "key-1": newKey.publicKey },
         services: state.services,
         prev: log[log.length - 1].cid,
       };
-      const keySig = await signPayload(corePayload(rotationPartial as any), newKey.privateKey);
-      const result = await takeCustody(wardDid, session.cookie, newKey.publicKey, keySig, opts.force);
+      const unsecuredDoc = unsecuredDocument(rotationPartial as any);
+      const keyProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
+      const result = await takeCustody(wardDid, session.cookie, newKey.publicKey, keyProof, opts.force);
       if (!result.accepted) throw new Error(result.reason);
       if (!opts.newKey) await saveKey(label, newKey, opts);
       console.log(`${wardDid} now holds its key${opts.newKey ? "" : ` (saved as "${label}")`}. This registrar can no longer sign on its behalf.`);

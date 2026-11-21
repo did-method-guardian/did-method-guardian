@@ -2,44 +2,62 @@
   "note": "REJECT: establishing a guardian from zero needs both the incoming guardian's and the ward's signature (REQ-7.2-5) -- here only the incoming guardian signed.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA",
-    "did:guardian:board:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+    "did:guardian:puppet2:example:com": "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+    "did:guardian:board:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
+    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
   },
+  "registrar_did": "did:guardian:example:com",
   "log": [
     {
-      "cid": "f096065b7f1de580e1a99bff17a2fde7601a4b0764381186e7d3f7d7a6e99b80",
+      "cid": "zQmNu9ngyqKPDdZCp6f9vrMGWir6AESqHktV1GyDP7g1os9",
       "op": {
         "type": "custodial_create",
+        "did": "did:guardian:puppet2:example:com",
         "name": "puppet2",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
         ],
-        "verificationMethods": {},
         "services": {},
         "outgoing": [],
         "incoming": [],
         "prev": null,
         "creator": "did:guardian:example:com",
-        "registrar": {
-          "did": "did:guardian:example:com",
-          "sig": "A2abUkms4ONQaB88InIH4ApcXSmq0g7FjpiyYZEbQf5Fy6YZGu-W0PC2uFqullNt2mNk6LhRKG6ld31TB0rEyw"
-        },
-        "sigs": {},
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "eMSVNo2UmI4FDPiVO7ydkk4Sn4I1v27CXD5WnkJX-lwN0rmEed0atlH7ZBTqnvu8Igext7-Z-OZbvD6VPTYKAA"
-        }
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.912Z",
+            "proofValue": "zn38LwYhe1sMniKwsbVE6BWwGWHvBJpudbFzv2SBpD6yEtWA8upSBy9Df9qwmEeuE2Ub5VWDyVAtNv4Ps1iRTUdB"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.912Z",
+            "proofValue": "z5oYX4LzGC7AZKW2uDVQ8msrViXNvQ7VHhExUyeQNh6u2ReayiuUVmceUnoaCZBNG3AQ2GW6bAQpDuNn3uPBubTEy"
+          }
+        ]
       }
     },
     {
-      "cid": "886069e1130fd8e937c316c7251b7bb7a1bdb5ad53bff2b8784d14b7105fb8bf",
+      "cid": "zQmZzjJNXsYAm1u9PqeKCt9mJkK5Sek1xjitGdLKrREaXY5",
       "op": {
         "type": "guardian_add",
         "incoming": "did:guardian:board:example:com",
-        "prev": "f096065b7f1de580e1a99bff17a2fde7601a4b0764381186e7d3f7d7a6e99b80",
-        "sigs": {
-          "did:guardian:board:example:com": "gjGlTHbSNvzHYkPkKpR-cegUneaB9p91IQq_mwRJdSzhkajywPgyeTOgn2h3TYxPKLvZkI0NoiVwzbkPlSLSWQ"
-        }
+        "prev": "zQmNu9ngyqKPDdZCp6f9vrMGWir6AESqHktV1GyDP7g1os9",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:board:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.912Z",
+            "proofValue": "z2RFr8CJuw1WWqfHejA9JFmmWdwouozPniAMS6t7BCaJ6BCQ8T211wciEouv1TFtfHAKM6qCuuF2RQowK5izJksVn"
+          }
+        ]
       }
     }
   ]

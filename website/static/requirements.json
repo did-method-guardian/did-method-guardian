@@ -41,7 +41,7 @@
       "id": "REQ-3-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-3-1",
       "section": "3. DID Document",
-      "text": "exactly one `verificationMethod` entry per entry in the ward's current `operationalKeys` ([\u00a74](#4-key-material)), each of type `Multikey`.",
+      "text": "exactly one `verificationMethod` entry per entry in the ward's current `operationalKeys` ([§4](#4-key-material)), each of type `Multikey`.",
       "tests": []
     },
     {
@@ -57,21 +57,21 @@
       "id": "REQ-3-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-3-3",
       "section": "3. DID Document",
-      "text": "The guardian tier, `GuardianPolicy`, and the full operation log *MUST NOT* appear in the presented document -- they are method-internal state used to derive it, resolvable separately ([\u00a78](#8-resolution)).",
+      "text": "The guardian tier, `GuardianPolicy`, and the full operation log *MUST NOT* appear in the presented document -- they are method-internal state used to derive it, resolvable separately ([§8](#8-resolution)).",
       "tests": []
     },
     {
       "id": "REQ-4-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-4-1",
       "section": "4. Key material",
-      "text": "`operationalKeys` is the ward's own, lowest-authority, self-rotatable tier. Any single current operational key suffices to authorize an ordinary rotation ([\u00a77.2](#72-update)).",
+      "text": "`operationalKeys` is the ward's own, lowest-authority, self-rotatable tier. Any single current operational key suffices to authorize an ordinary rotation ([§7.2](#72-update)).",
       "tests": []
     },
     {
       "id": "REQ-4-2",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-4-2",
       "section": "4. Key material",
-      "text": "The guardian tier is, at any point in the log, exactly the current guardian set as derived by replay -- a live reference, never a value fixed at the moment guardianship was established. A signature from a guardian DID *MUST* be checked against a key that was valid for that guardian's own identity at the time the signing operation was created -- determined by replaying the guardian's own operation log up to that point, not necessarily its currently-resolved key. Every key a guardian has ever rotated away from remains permanently present in its own log ([\u00a79](#9-deactivation-and-data-permanence)), so this check is always independently verifiable, even after that key is no longer current.",
+      "text": "The guardian tier is, at any point in the log, exactly the current guardian set as derived by replay -- a live reference, never a value fixed at the moment guardianship was established. A signature from a guardian DID *MUST* be checked against a key that was valid for that guardian's own identity at the time the signing operation was created -- determined by replaying the guardian's own operation log up to that point, not necessarily its currently-resolved key. Every key a guardian has ever rotated away from remains permanently present in its own log ([§9](#9-deactivation-and-data-permanence)), so this check is always independently verifiable, even after that key is no longer current.",
       "tests": [
         "packages/lib/tests/operations.test.ts",
         "packages/lib/tests/rules.test.ts"
@@ -88,7 +88,7 @@
       "id": "REQ-4-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-4-4",
       "section": "4. Key material",
-      "text": "A guardian whose own identity is currently deactivated (REQ-6-5) *MUST* be excluded from the current guardian set for every purpose this document defines -- threshold eligibility (\u00a75), and \"is this DID a current guardian\" checks (e.g. REQ-7.2-6). Exclusion is automatic, live (re-evaluated at the time of each new signature, same as REQ-4-2), and takes effect the moment that guardian's own `custodial_tombstone` is accepted; it is not equivalent to, and does not require, an explicit `guardian_remove` naming that guardian on the ward's own log. If this exclusion reduces a ward's effective guardian set to empty, the ward becomes guardian-less in exactly the same sense as after `guardian_relinquish` -- re-entering guardianship afterward follows the ordinary zero-to-one `guardian_add` rule (REQ-7.2-5).",
+      "text": "A guardian whose own identity is currently deactivated (REQ-6-5) *MUST* be excluded from the current guardian set for every purpose this document defines -- threshold eligibility (§5), and \"is this DID a current guardian\" checks (e.g. REQ-7.2-6). Exclusion is automatic, live (re-evaluated at the time of each new signature, same as REQ-4-2), and takes effect the moment that guardian's own `custodial_tombstone` is accepted; it is not equivalent to, and does not require, an explicit `guardian_remove` naming that guardian on the ward's own log. If this exclusion reduces a ward's effective guardian set to empty, the ward becomes guardian-less in exactly the same sense as after `guardian_relinquish` -- re-entering guardianship afterward follows the ordinary zero-to-one `guardian_add` rule (REQ-7.2-5).",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -106,7 +106,7 @@
       "id": "REQ-5-2",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-2",
       "section": "5. GuardianPolicy",
-      "text": "`recovery_threshold` governs a guardian-initiated `custodial_rotate` ([\u00a77.2](#72-update)). Default `any`.",
+      "text": "`recovery_threshold` governs a guardian-initiated `custodial_rotate` ([§7.2](#72-update)). Default `any`.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -115,7 +115,7 @@
       "id": "REQ-5-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-3",
       "section": "5. GuardianPolicy",
-      "text": "`tombstone_threshold` governs `custodial_tombstone` ([\u00a77.3](#73-deactivate)). Default `any`.",
+      "text": "`tombstone_threshold` governs `custodial_tombstone` ([§7.3](#73-deactivate)). Default `any`.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -124,7 +124,7 @@
       "id": "REQ-5-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-4",
       "section": "5. GuardianPolicy",
-      "text": "`removal_threshold` governs both a forced `guardian_remove` and `guardian_relinquish` ([\u00a77.2](#72-update)). Default `majority`.",
+      "text": "`removal_threshold` governs both a forced `guardian_remove` and `guardian_relinquish` ([§7.2](#72-update)). Default `majority`.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -133,7 +133,7 @@
       "id": "REQ-5-5",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-5",
       "section": "5. GuardianPolicy",
-      "text": "`addition_threshold` governs `guardian_add` ([\u00a77.2](#72-update)). Default `majority`.",
+      "text": "`addition_threshold` governs `guardian_add` ([§7.2](#72-update)). Default `majority`.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -167,9 +167,9 @@
       "id": "REQ-5-9",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-9",
       "section": "5. GuardianPolicy",
-      "text": "A verifier *MUST* ignore any `GuardianPolicy` field it does not recognize, rather than rejecting the operation that carries it. This exists so a future version can add new policy fields -- a witness threshold, say ([\u00a710](#10-security-considerations)) -- without breaking a verifier built against this version, or invalidating any log already accepted under it.",
+      "text": "`GuardianPolicy` carries a `version` field (a positive integer, default `1`). A verifier *MUST* refuse to evaluate ANY operation governed by a policy whose `version` exceeds the highest version that verifier understands, rather than evaluating it against only the fields it happens to recognize. (Revised from \"ignore unknown fields\" -- see [REQ-5-9's Changelog note](#changelog) for why: silently ignoring a field it doesn't understand means a verifier can't tell whether some OTHER, more restrictive field it also doesn't recognize was supposed to govern that same decision, which is a silent downgrade, not graceful forward compatibility. A future version adding new policy fields bumps `version`; a verifier built against an earlier version correctly refuses to evaluate anything governed by it, rather than guessing.)",
       "tests": [
-        "packages/lib/tests/document-v2.test.ts"
+        "packages/lib/tests/rules.test.ts"
       ]
     },
     {
@@ -190,21 +190,24 @@
       "id": "REQ-6-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-3",
       "section": "6. The operation log",
-      "text": "Every identity has an *anchor*: the genesis operation's content hash (a CID, [REQ-6-4](#req-6-4)), computed the same way, by anyone, from the genesis operation alone. The anchor is a property of the log, not of the identifier -- it is never assigned independently by a registrar, and it exists regardless of whether anything ever pins or checks it ([\u00a712.3](#123-pinning)). The identifier itself remains the location-bound `domain[:name]` string defined in [\u00a72](#2-identifier-syntax), which a registrar does assign.",
+      "text": "Every identity has an *anchor*: the genesis operation's content hash (a CID, [REQ-6-4](#req-6-4)), computed the same way, by anyone, from the genesis operation alone. The anchor is a property of the log, not of the identifier -- it is never assigned independently by a registrar, and it exists regardless of whether anything ever pins or checks it ([§12.3](#123-pinning)). The identifier itself remains the location-bound `domain[:name]` string defined in [§2](#2-identifier-syntax), which a registrar does assign.",
       "tests": []
     },
     {
       "id": "REQ-6-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-4",
       "section": "6. The operation log",
-      "text": "Serialization, hashing, and signing follow `did:plc`: DAG-CBOR encoding, ECDSA signatures (low-S form, base64url-encoded), `prev` as CIDv1 (base32 multibase, dag-cbor codec, sha-256 multihash).",
-      "tests": []
+      "text": "Serialization, hashing, and signing: operation content is canonicalized per [JCS (RFC 8785)](https://www.rfc-editor.org/rfc/rfc8785); a CID (an operation's own anchor, or `prev`) is a multihash (sha2-256, [multihash](https://github.com/multiformats/multihash) code `0x12`) of that canonical form, base58btc-encoded with a leading `z` ([multibase](https://github.com/multiformats/multibase)). Every public key, operation-internal or in a resolved DID Document alike, is encoded the same way as a [Multikey](https://www.w3.org/TR/cid-1.0/#Multikey) (`z` + base58btc-encoded multicodec-tagged key bytes) -- one encoding for every key this method ever presents, never a second, SPKI-shaped one at any boundary a verifier has to handle. Signatures use ECDSA over P-256 (`secp256r1`); a signer *MUST* produce the canonical low-S form, and a verifier *MUST* reject (not silently renormalize) any signature presented in its high-S, equally-valid-but-malleable counterpart -- so a given (message, key) pair has exactly one valid signature, bit for bit, the same discipline `did:plc` uses. **A CID is computed over the operation's content with every `proof` entry stripped** ([REQ-6-7](#req-6-7)) -- this is what keeps an anchor deterministic and client-computable before submission: a proof's own randomized signature bytes, or a second, independently-added proof over identical content, never change what an operation's own cid is.",
+      "tests": [
+        "packages/lib/tests/crypto.test.ts",
+        "packages/lib/tests/operations.test.ts"
+      ]
     },
     {
       "id": "REQ-6-5",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-5",
       "section": "6. The operation log",
-      "text": "Once an identity's `deactivated` state is true ([\u00a77.3](#73-deactivate)), a registrar *MUST* reject every subsequent operation against it.",
+      "text": "Once an identity's `deactivated` state is true ([§7.3](#73-deactivate)), a registrar *MUST* reject every subsequent operation against it.",
       "tests": []
     },
     {
@@ -220,14 +223,17 @@
       "id": "REQ-6-7",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-7",
       "section": "6. The operation log",
-      "text": "Every operation's `sigs` map is keyed by signer DID; each signature *MUST* be checked against that DID's own independently-resolved keys, never the ward's, and *MUST* cover the full operation content, binding it to this exact operation.",
-      "tests": []
+      "text": "Every operation carries a `proof` array of one or more [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proofs (`cryptosuite: \"ecdsa-jcs-2019\"`), each naming its own signer via `verificationMethod` -- `<did>#key-0` for an ordinary signer (ward, guardian, or registrar; resolution only ever consults the DID portion, never the fragment), or a self-contained `did:key:<multikey>#<multikey>` for an operational key proving possession of itself ([REQ-7.1-8](#req-7.1-8)/[REQ-7.2-12](#req-7.2-12)), needing no resolution at all. Multiple independent proofs over the same operation form a *proof set*, each checked on its own against the document with every proof (not just itself) stripped -- never a chain where one proof signs over another. Each proof *MUST* be checked against its named signer's own independently-resolved key, never the ward's, and *MUST* cover the operation's full unsecured content ([REQ-6-4](#req-6-4)), binding it to this exact operation.",
+      "tests": [
+        "packages/lib/tests/operations.test.ts",
+        "packages/lib/tests/rules.test.ts"
+      ]
     },
     {
       "id": "REQ-6-8",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-8",
       "section": "6. The operation log",
-      "text": "A guardian-signed `custodial_rotate` meeting `recovery_threshold` ([\u00a77.2](#72-update)) *MAY* name a `prev` earlier than the current log head, provided the operation immediately following the named `prev` (the operation being nullified) was accepted by the registrar less than the recovery window ([REQ-6-9](#req-6-9)) ago.",
+      "text": "A guardian-signed `custodial_rotate` meeting `recovery_threshold` ([§7.2](#72-update)) *MAY* name a `prev` earlier than the current log head, provided the operation immediately following the named `prev` (the operation being nullified) was accepted by the registrar less than the recovery window ([REQ-6-9](#req-6-9)) ago.",
       "tests": [
         "packages/lib/tests/document-v2.test.ts",
         "packages/lib/tests/rules.test.ts"
@@ -265,7 +271,7 @@
       "id": "REQ-7.1-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-1",
       "section": "7.1 Create",
-      "text": "`incoming` *MAY* name one or more guardians directly at genesis (v0.3, relaxed from always-`[]`) -- each named DID *MUST* co-sign genesis, in `sigs`. A verifier *MUST* reject a genesis naming an incoming guardian with no corresponding, valid signature. Establishing a guardian later instead, via `guardian_add` ([\u00a77.2](#72-update)), remains available and is unaffected by this -- genesis establishing one directly is an additional option, not a replacement for it.",
+      "text": "`incoming` *MAY* name one or more guardians directly at genesis (v0.3, relaxed from always-`[]`) -- each named DID *MUST* co-sign genesis, as one of the proofs in `proof`. A verifier *MUST* reject a genesis naming an incoming guardian with no corresponding, valid proof. Establishing a guardian later instead, via `guardian_add` ([§7.2](#72-update)), remains available and is unaffected by this -- genesis establishing one directly is an additional option, not a replacement for it.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -290,7 +296,14 @@
       "id": "REQ-7.1-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-3",
       "section": "7.1 Create",
-      "text": "`operationalKeys`/`verificationMethods`/`services` *MUST* be present.",
+      "text": "`did`/`operationalKeys`/`services` *MUST* be present.",
+      "tests": []
+    },
+    {
+      "id": "REQ-7.1-10",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-10",
+      "section": "7.1 Create",
+      "text": "`did` *MUST* equal the full DID this genesis would resolve to under the accepting registrar's own domain (`did:guardian:<domain>[:<name>]`). A registrar *MUST* reject a genesis whose `did` names a different domain, a different name, or is otherwise malformed -- without this, a public genesis accepted at one registrar could be resubmitted verbatim at a different registrar under the same free name, since nothing in the signed content bound it to where it was actually meant to live.",
       "tests": []
     },
     {
@@ -306,7 +319,7 @@
       "id": "REQ-7.1-5",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-5",
       "section": "7.1 Create",
-      "text": "`registrar` *MUST* be present -- an attestation `{did, sig}` from the accepting registrar's key, over the genesis content excluding `registrar`/`sigs`. A verifier *MUST* reject a genesis operation carrying no `registrar` attestation at all, and *MUST* check a present one against the named `did`'s resolved key. (Tightened from `MAY`/checked-only-if-present in this version's [Changelog](#changelog) -- [REQ-12-1](#req-12-1)'s L1 anchoring depends on every genesis actually carrying one.)",
+      "text": "`proof` *MUST* include an attestation from the accepting registrar's own key (`verificationMethod` naming the registrar's own DID), one more independent proof in the same set as every other signer's. A verifier *MUST* reject a genesis operation carrying no registrar attestation at all, and *MUST* check a present one against the named registrar DID's resolved key -- **except** when `did` names that same registrar DID (the bare-domain root identity attesting its own genesis, [Fix 7](#changelog)): there is no other party on that deployment to vouch for the one identity it bootstraps on its own, so its own proof of possession ([REQ-7.1-8](#req-7.1-8)), already required and already checked, stands in for the attestation. (Tightened from `MAY`/checked-only-if-present in an earlier version's [Changelog](#changelog) -- [REQ-12-1](#req-12-1)'s L1 anchoring depends on every genesis actually carrying one.)",
       "tests": [
         "packages/lib/tests/operations.test.ts"
       ]
@@ -322,7 +335,7 @@
       "id": "REQ-7.1-7",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-7",
       "section": "7.1 Create",
-      "text": "`policy` *MAY* be present -- a full or partial `GuardianPolicy` ([\u00a75](#5-guardianpolicy)) the creator proposes for this ward from genesis, carrying no signature requirement of its own (same standing as `creator`, REQ-7.1-4: a fact about how this ward was set up, not a guardian-tier consent claim). Any field left unset *MUST* resolve to the accepting registrar's own configured creation-time default for that field, which itself *MUST* resolve to this document's own stated default ([\u00a75](#5-guardianpolicy)) if the registrar has not configured one. This is the only point at which `GuardianPolicy` may differ from those stated defaults before any guardian exists to approve a `policy_update` ([REQ-7.2-10](#req-7.2-10)).",
+      "text": "`policy` *MAY* be present -- a full or partial `GuardianPolicy` ([§5](#5-guardianpolicy)) the creator proposes for this ward from genesis, carrying no signature requirement of its own (same standing as `creator`, REQ-7.1-4: a fact about how this ward was set up, not a guardian-tier consent claim). Any field left unset *MUST* resolve to the accepting registrar's own configured creation-time default for that field, which itself *MUST* resolve to this document's own stated default ([§5](#5-guardianpolicy)) if the registrar has not configured one. This is the only point at which `GuardianPolicy` may differ from those stated defaults before any guardian exists to approve a `policy_update` ([REQ-7.2-10](#req-7.2-10)).",
       "tests": [
         "packages/lib/tests/document-v2.test.ts"
       ]
@@ -331,7 +344,7 @@
       "id": "REQ-7.1-8",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-8",
       "section": "7.1 Create",
-      "text": "`keySigs` *MUST* be present -- one signature per entry in `operationalKeys`, keyed by the key itself rather than a DID (an operational key is not independently resolvable the way a guardian DID is), each over the genesis content excluding `sig`/`sigs`/`keySigs`/`registrar`, the same content [REQ-7.1-5](#req-7.1-5)'s attestation covers. A verifier *MUST* reject a genesis operation missing a valid signature from any declared key. Control ([\u00a712.1](#121-the-three-authorities)) is otherwise whatever the registrar's naming attestation asserts it to be, with nothing self-certifying behind it; this closes that gap at the one point where the control chain begins.",
+      "text": "`proof` *MUST* include, for every entry in `operationalKeys`, a self-contained proof of possession: a proof whose `verificationMethod` is `did:key:<key>#<key>` for that exact key (no DID resolution needed -- the key being proved is embedded in the verification method itself), checked against that same key directly. A verifier *MUST* reject a genesis operation missing a valid proof of possession for any declared operational key -- specifically, for *that* key, not merely some valid-looking proof elsewhere in the set ([Fix 1](#changelog): an operational key the DID Document presents is never trusted merely because some other party vouches for it). Control ([§12.1](#121-the-three-authorities)) is otherwise whatever the registrar's naming attestation asserts it to be, with nothing self-certifying behind it; this closes that gap at the one point where the control chain begins.",
       "tests": [
         "packages/lib/tests/operations.test.ts"
       ]
@@ -356,7 +369,7 @@
       "id": "REQ-7.2-12",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.2-12",
       "section": "7.2 Update",
-      "text": "`keySigs` *MUST* be present -- one signature per entry in `operationalKeys` (the new keys being installed), keyed by the key itself, each over the rotation content excluding `sig`/`sigs`/`keySigs`, the same proof-of-possession requirement as genesis ([REQ-7.1-8](#req-7.1-8)) applied every time a key is installed, not just at genesis. Required whether the rotation is authorized by (a) or (b) above -- either way a new key is being added to the document, and REQ-7.2-1's signer requirement authorizes the change, not the new key's possession of itself.",
+      "text": "`proof` *MUST* include, for every entry in `operationalKeys` (the new keys being installed), a self-contained proof of possession -- the same `did:key:<key>#<key>` shape and the same checked-against-that-exact-key requirement as genesis ([REQ-7.1-8](#req-7.1-8)), applied every time a key is installed, not just at genesis. Required whether the rotation is authorized by (a) or (b) above -- either way a new key is being added to the document, and REQ-7.2-1's signer requirement authorizes the change, not the new key's possession of itself.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -419,7 +432,7 @@
       "id": "REQ-7.2-7b",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.2-7b",
       "section": "7.2 Update",
-      "text": "A forced `guardian_remove` -- removing a different current guardian -- requires enough of the *other* current guardians (current minus `outgoing`) to meet `removal_threshold`, *evaluated against the full current guardian set's own size*, the same `N` `guardian_relinquish` (REQ-7.2-8) uses, never against the smaller remaining-guardians pool those signers are drawn from. At exactly two current guardians this makes REQ-7.2-7b unreachable: `majority` of `N=2` is `2`, and only one other guardian is ever available to draw from. This is deliberate, not an oversight -- see [\u00a710](#10-security-considerations). A registrar *MUST* additionally reject either path (REQ-7.2-7a or REQ-7.2-7b) if it would bring the guardian count below `min_guardian_count` ([REQ-5-7](#req-5-7)).",
+      "text": "A forced `guardian_remove` -- removing a different current guardian -- requires enough of the *other* current guardians (current minus `outgoing`) to meet `removal_threshold`, *evaluated against the full current guardian set's own size*, the same `N` `guardian_relinquish` (REQ-7.2-8) uses, never against the smaller remaining-guardians pool those signers are drawn from. At exactly two current guardians this makes REQ-7.2-7b unreachable: `majority` of `N=2` is `2`, and only one other guardian is ever available to draw from. This is deliberate, not an oversight -- see [§10](#10-security-considerations). A registrar *MUST* additionally reject either path (REQ-7.2-7a or REQ-7.2-7b) if it would bring the guardian count below `min_guardian_count` ([REQ-5-7](#req-5-7)).",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -455,7 +468,7 @@
       "id": "REQ-7.3-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.3-1",
       "section": "7.3 Deactivate",
-      "text": "Required signers: enough of (the ward's own operational key(s) \u222a the current guardian set) to meet `tombstone_threshold`.",
+      "text": "Required signers: enough of (the ward's own operational key(s) ∪ the current guardian set) to meet `tombstone_threshold`.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
@@ -518,6 +531,5 @@
         "packages/lib/tests/rules.test.ts"
       ]
     }
-  ],
-  "count": 63
+  ]
 }

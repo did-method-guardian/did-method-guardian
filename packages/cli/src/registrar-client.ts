@@ -2,8 +2,8 @@
 // registrar API spec §1/§2) -- not part of @did-guardian/lib (that package
 // deliberately stops at "operate on a log already in hand," see resolve.ts's
 // note), so this CLI owns the live-HTTP half.
-import { wellKnownPath, parseDid, multikeyToSpki } from "@did-guardian/lib";
-import type { Did, LogEntry, LogHeadStatement, Operation } from "@did-guardian/lib";
+import { wellKnownPath, parseDid } from "@did-guardian/lib";
+import type { DataIntegrityProof, Did, LogEntry, LogHeadStatement, Operation } from "@did-guardian/lib";
 
 export interface RegisterResult {
   did: Did;
@@ -30,12 +30,12 @@ export async function resolveDid(did: Did): Promise<unknown> {
   return body;
 }
 
-/** The registrar's public key, in this library's internal SPKI format -- resolved by fetching the bare-domain identity's DID document and converting its Multikey. Needed to check a log-head statement's signature (L2), and to pin the registrar's key alongside a DID's anchor. */
+/** The registrar's public key (Multikey), resolved by fetching the bare-domain identity's DID document. Needed to check a log-head statement's signature (L2), and to pin the registrar's key alongside a DID's anchor. */
 export async function resolveRegistrarKey(domain: string): Promise<{ did: Did; publicKey: string }> {
   const res = await fetch(`https://${domain}/.well-known/guardian/_`);
   const body = (await res.json()) as { id?: Did; verificationMethod?: { publicKeyMultibase: string }[]; error?: string };
   if (!res.ok || !body.id || !body.verificationMethod?.[0]) throw new Error(body.error ?? `could not resolve ${domain}'s registrar identity`);
-  return { did: body.id, publicKey: multikeyToSpki(body.verificationMethod[0].publicKeyMultibase) };
+  return { did: body.id, publicKey: body.verificationMethod[0].publicKeyMultibase };
 }
 
 export async function fetchLogHead(did: Did): Promise<LogHeadStatement> {
@@ -99,23 +99,24 @@ export async function login(registrarDomain: string, name: string, loginSecret: 
 }
 
 /**
- * `keySig`, v0.3 (REQ-7.2-12): proof that the caller holds `publicKey`'s
- * private half, signed locally before this call (see key.ts's take-custody
- * command) -- this registrar never holds that key, so it can't produce
- * that signature the way it does for a server-generated rotation.
+ * `keyProof`, v0.4 (REQ-7.2-12): a Data Integrity proof that the caller
+ * holds `publicKey`'s private half, signed locally before this call (see
+ * key.ts's take-custody command) -- this registrar never holds that key,
+ * so it can't produce that proof the way it does for a server-generated
+ * rotation.
  */
 export async function takeCustody(
   did: Did,
   sessionCookie: string,
   publicKey: string,
-  keySig: string,
+  keyProof: DataIntegrityProof,
   force?: boolean,
 ): Promise<{ accepted: boolean; warnings: string[]; reason?: string }> {
   const { domain, name } = parseDid(did);
   const res = await fetch(`https://${domain}${wellKnownPath(name)}/take-custody`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: `gw_session=${sessionCookie}` },
-    body: JSON.stringify({ public_key: publicKey, key_sig: keySig, force }),
+    body: JSON.stringify({ public_key: publicKey, key_proof: keyProof, force }),
   });
   const body = (await res.json()) as { warnings?: string[]; error?: string };
   if (!res.ok) return { accepted: false, warnings: body.warnings ?? [], reason: body.error ?? `HTTP ${res.status}` };

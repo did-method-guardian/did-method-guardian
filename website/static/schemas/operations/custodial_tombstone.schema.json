@@ -7,8 +7,12 @@
   "properties": {
     "type": { "const": "custodial_tombstone" },
     "prev": { "type": "string" },
-    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Enough of (the ward's own operational key(s) union the current guardian set) to meet tombstone_threshold." }
+    "proof": {
+      "type": "array",
+      "items": { "$ref": "../data-integrity-proof.schema.json" },
+      "description": "Enough of (the ward's own operational key(s) union the current guardian set) to meet tombstone_threshold."
+    }
   },
-  "required": ["type", "prev", "sigs"],
+  "required": ["type", "prev", "proof"],
   "additionalProperties": false
 }

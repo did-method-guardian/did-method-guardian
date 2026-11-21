@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeypair } from "../src/crypto.js";
-import { signLogHeadStatement, verifyLogHeadStatement, statementAgeMs } from "../src/freshness.js";
+import { signLogHeadStatement, verifyLogHeadStatement, statementAgeMs, logHashFor } from "../src/freshness.js";
 import type { KeyResolver } from "../src/operations.js";
 import type { Did } from "../src/types.js";
 
@@ -20,6 +20,7 @@ test("a log-head statement verifies against the registrar's resolved key", async
       anchor: "genesis-cid",
       headCid: "head-cid",
       seq: 3,
+      logHash: await logHashFor([]),
       timestamp: new Date().toISOString(),
       registrar: registrarDid,
     },
@@ -42,6 +43,7 @@ test("a log-head statement signed by a different key fails verification", async 
       anchor: "genesis-cid",
       headCid: "head-cid",
       seq: 3,
+      logHash: await logHashFor([]),
       timestamp: new Date().toISOString(),
       registrar: registrarDid,
     },
@@ -63,6 +65,7 @@ test("tampering with any field after signing (headCid, seq, or timestamp) is det
       anchor: "genesis-cid",
       headCid: "head-cid",
       seq: 3,
+      logHash: await logHashFor([]),
       timestamp: new Date().toISOString(),
       registrar: registrarDid,
     },

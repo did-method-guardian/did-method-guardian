@@ -365,7 +365,7 @@ export interface PendingOperationRow {
   op_type: string;
   partial_op: string; // JSON
   required_signers: string; // JSON array of DIDs
-  collected_sigs: string; // JSON object, signer DID -> sig
+  collected_sigs: string; // JSON object, signer DID -> DataIntegrityProof
   /** JSON object, signer DID -> ISO timestamp of when THIS registrar collected that signer's own signature -- REQ-4-2's point-in-time key resolution needs this at finalize time, since a signer may have rotated their own key in the meantime (see rules.ts's VerificationContext.sigTimestamps). Mirrors collected_sigs' own keys exactly. */
   sig_timestamps: string;
   state: string;

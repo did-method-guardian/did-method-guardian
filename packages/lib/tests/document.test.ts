@@ -1,33 +1,36 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { replay, toDidDocument } from "../src/document.js";
-import type { CustodialCreateOp, CustodialRotateOp, GuardianTransferOp, CustodialTombstoneOp, LogEntry } from "../src/types.js";
+import type { CustodialCreateOp, CustodialRotateOp, GuardianTransferOp, CustodialTombstoneOp, DataIntegrityProof, LogEntry } from "../src/types.js";
 
 function entry(op: LogEntry["op"], cid: string): LogEntry {
   return { cid, op };
 }
 
-// A real base64url-encoded P-256 SPKI public key -- toDidDocument now runs
-// verificationMethods values through spkiToMultikey (real DER parsing +
-// EC point compression), so a placeholder string like the old "did:key:op1"
-// no longer round-trips; any test that calls toDidDocument needs real key
-// material in verificationMethods specifically (operationalKeys is untouched
-// by this, so it can stay a placeholder where a test doesn't exercise it).
-const REAL_SPKI_KEY =
-  "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEQFilQ5sp0oxrr46nvSc1XwcRq3bPQ_s33mPgpbcg9ovlpOWatMB86DR5lyNUcFi-99WEMIC_ma-QzEtwHnmJkA";
+// `replay`/`toDidDocument` never verify a proof's own cryptographic
+// validity (that's operations.ts/rules.ts's job, before a log is ever
+// trusted) -- only read its shape (verificationMethod, to find a
+// registrar attestation) or ignore it entirely, so a placeholder proof is
+// all this file needs. `toDidDocument` derives `verificationMethod`
+// directly from `operationalKeys` by index now (no separate
+// verificationMethods map, no SPKI conversion), so operationalKeys can be
+// any placeholder string too.
+function fakeProof(verificationMethod: string): DataIntegrityProof {
+  return { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod, proofPurpose: "assertionMethod", created: "2026-01-01T00:00:00.000Z", proofValue: "zTest" };
+}
 
 test("replay resolves genesis correctly, guardians kept method-internal", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
-    keySigs: {},
+    did: "did:guardian:fred:example:com",
     name: "fred",
-    operationalKeys: ["did:key:op1"],
-    verificationMethods: { "key-1": REAL_SPKI_KEY },
+    operationalKeys: ["op1-pubkey"],
     services: { registrar: { type: "GuardianRegistrarService", endpoint: "https://example.com" } },
     outgoing: [],
     incoming: ["did:guardian:board:example:com"],
     prev: null,
-    sigs: { "did:guardian:board:example:com": "sig1" },
+    creator: "did:guardian:board:example:com",
+    proof: [fakeProof("did:guardian:board:example:com#key-0")],
   };
 
   const state = replay("did:guardian:fred:example:com", [entry(genesis, "cid0")]);
@@ -43,19 +46,19 @@ test("replay resolves genesis correctly, guardians kept method-internal", () => 
 test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all reference every operational key's own verificationMethod", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
-    keySigs: {},
+    did: "did:guardian:fred:example:com",
     name: "fred",
-    operationalKeys: ["did:key:op1"],
-    verificationMethods: { "key-1": REAL_SPKI_KEY },
+    operationalKeys: ["op1-pubkey"],
     services: {},
     outgoing: [],
     incoming: [],
     prev: null,
-    sigs: {},
+    creator: "did:guardian:fred:example:com",
+    proof: [fakeProof(`did:key:op1-pubkey#op1-pubkey`)],
   };
   const state = replay("did:guardian:fred:example:com", [entry(genesis, "cid0")]);
   const doc = toDidDocument(state);
-  const vmId = "did:guardian:fred:example:com#key-1";
+  const vmId = "did:guardian:fred:example:com#key-0";
   assert.deepEqual(doc.authentication, [vmId]);
   assert.deepEqual(doc.assertionMethod, [vmId]);
   assert.deepEqual(doc.capabilityInvocation, [vmId]);
@@ -64,24 +67,22 @@ test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all ref
 test("replay applies a rotation and a guardian transfer in order", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
-    keySigs: {},
+    did: "did:guardian:fred:example:com",
     name: "fred",
-    operationalKeys: ["did:key:op1"],
-    verificationMethods: { "key-1": "did:key:op1" },
+    operationalKeys: ["op1-pubkey"],
     services: {},
     outgoing: [],
     incoming: ["did:guardian:troy:example:com"],
     prev: null,
-    sigs: {},
+    creator: "did:guardian:troy:example:com",
+    proof: [fakeProof("did:guardian:troy:example:com#key-0")],
   };
   const rotate: CustodialRotateOp = {
     type: "custodial_rotate",
-    keySigs: {},
-    operationalKeys: ["did:key:op2"],
-    verificationMethods: { "key-1": "did:key:op2" },
+    operationalKeys: ["op2-pubkey"],
     services: {},
     prev: "cid0",
-    sig: "sig",
+    proof: [fakeProof(`did:key:op2-pubkey#op2-pubkey`)],
   };
   const transfer: GuardianTransferOp = {
     type: "guardian_transfer",
@@ -97,24 +98,24 @@ test("replay applies a rotation and a guardian transfer in order", () => {
     entry(transfer, "cid2"),
   ]);
 
-  assert.deepEqual(state.operationalKeys, ["did:key:op2"]);
+  assert.deepEqual(state.operationalKeys, ["op2-pubkey"]);
   assert.deepEqual(state.guardians, ["did:guardian:caleb:example:com"]);
 });
 
 test("replay marks a tombstoned ward as deactivated but keeps full history", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
-    keySigs: {},
+    did: "did:guardian:fred:example:com",
     name: "fred",
-    operationalKeys: ["did:key:op1"],
-    verificationMethods: {},
+    operationalKeys: ["op1-pubkey"],
     services: {},
     outgoing: [],
     incoming: [],
     prev: null,
-    sigs: {},
+    creator: "did:guardian:fred:example:com",
+    proof: [fakeProof(`did:key:op1-pubkey#op1-pubkey`)],
   };
-  const tombstone: CustodialTombstoneOp = { type: "custodial_tombstone", prev: "cid0", sigs: {} };
+  const tombstone: CustodialTombstoneOp = { type: "custodial_tombstone", prev: "cid0", proof: [fakeProof("did:guardian:fred:example:com#key-0")] };
 
   const log = [entry(genesis, "cid0"), entry(tombstone, "cid1")];
   const state = replay("did:guardian:fred:example:com", log);

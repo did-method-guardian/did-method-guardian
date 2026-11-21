@@ -1,8 +1,8 @@
 import { guardianAddRule, guardianRemoveRule, policyUpdateRule, rotateRule, withinRecoveryWindow } from "./rules.js";
 import type { VerificationContext } from "./rules.js";
-import { spkiToMultikey } from "./crypto.js";
+import { verificationMethodDid } from "./operations.js";
 import { DEFAULT_GUARDIAN_POLICY } from "./types.js";
-import type { Did, GuardianPolicy, LogEntry, ResolvedState } from "./types.js";
+import type { CustodialCreateOp, DataIntegrityProof, Did, GuardianPolicy, LogEntry, ResolvedState } from "./types.js";
 
 /**
  * Reconstructs the actual chain order from a log in storage/acceptance
@@ -52,12 +52,13 @@ export interface NullificationCheck {
  */
 export async function checkNullification(
   log: LogEntry[],
-  op: { type: string; prev: string | null; sig?: string; sigs?: Record<Did, string> },
+  op: { type: string; prev: string | null; proof?: DataIntegrityProof[] },
   ctx: VerificationContext,
   now: Date = new Date(),
 ): Promise<NullificationCheck> {
   if (op.type !== "custodial_rotate") return { ok: false, reason: "only custodial_rotate may nullify (REQ-6-8)" };
-  if (!op.sigs || op.sig) return { ok: false, reason: "nullification requires a guardian-signed rotation, not the ward's own key (REQ-6-8)" };
+  const hasWardProof = (op.proof ?? []).some((p) => verificationMethodDid(p.verificationMethod) === ctx.wardDid);
+  if (hasWardProof) return { ok: false, reason: "nullification requires a guardian-signed rotation, not the ward's own key (REQ-6-8)" };
   const satisfiesGuardianPath = await rotateRule.isSatisfied(op as any, [], ctx);
   if (!satisfiesGuardianPath) return { ok: false, reason: "recovery_threshold not met" };
 
@@ -71,6 +72,19 @@ export async function checkNullification(
     return { ok: false, reason: "the operation this would nullify was accepted more than 72 hours ago (REQ-6-9)" };
   }
   return { ok: true, nullifiedEntry };
+}
+
+/**
+ * The registrar DID genesis's own proof set claims attested it -- the one
+ * proof entry that is neither a PoP proof (`did:key:`) nor a named
+ * `incoming` guardian's. replay() never verifies signatures (see its own
+ * comment), so this is a claim read off the log, tracked in ResolvedState
+ * purely for L1 anchor/registrar-key pinning -- its actual validity was
+ * already checked once, at submission time, by verifyCustodialCreate.
+ */
+function extractRegistrarDid(genesis: CustodialCreateOp): Did | undefined {
+  const claimed = genesis.proof.find((p) => !p.verificationMethod.startsWith("did:key:") && !genesis.incoming.includes(verificationMethodDid(p.verificationMethod)));
+  return claimed ? verificationMethodDid(claimed.verificationMethod) : undefined;
 }
 
 /**
@@ -92,11 +106,10 @@ export function replay(did: Did, log: LogEntry[]): ResolvedState {
   const state: ResolvedState = {
     did,
     operationalKeys: [...genesis.operationalKeys],
-    verificationMethods: { ...genesis.verificationMethods },
     services: { ...genesis.services },
-    guardians: [...genesis.incoming], // v0.1 compat -- REQ-7.1-1's always-empty enforcement lands with the genesis split (task #109)
+    guardians: [...genesis.incoming], // v0.3: MAY be non-empty when each named guardian co-signed genesis (REQ-7.1-1)
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, ...(genesis.policy ?? {}) } as GuardianPolicy,
-    registrar: genesis.registrar,
+    registrarDid: extractRegistrarDid(genesis),
     deactivated: false,
   };
 
@@ -132,17 +145,26 @@ export function replay(did: Did, log: LogEntry[]): ResolvedState {
   return state;
 }
 
-/** The W3C DID Core document derived from resolved state -- guardians/policy/registrar stay method-internal (spec §3). */
+/**
+ * The W3C DID Core document derived from resolved state -- guardians/
+ * policy/registrar stay method-internal (spec §3). REQ-3-1, Fix 1:
+ * verificationMethod derives directly from `operationalKeys`, index by
+ * index (`#key-0`, `#key-1`, ...) -- there is no separate map that
+ * could ever name a key this identity hasn't itself proven possession
+ * of (REQ-7.1-8/7.2-12); the presented document and the cryptographic
+ * control chain are the same list, by construction, not by a check
+ * that they happen to agree.
+ */
 export function toDidDocument(state: ResolvedState) {
-  const vmIds = Object.keys(state.verificationMethods).map((id) => `${state.did}#${id}`);
+  const vmIds = state.operationalKeys.map((_, i) => `${state.did}#key-${i}`);
   return {
     "@context": ["https://www.w3.org/ns/did/v1"],
     id: state.did,
-    verificationMethod: Object.entries(state.verificationMethods).map(([id, key]) => ({
-      id: `${state.did}#${id}`,
+    verificationMethod: state.operationalKeys.map((key, i) => ({
+      id: `${state.did}#key-${i}`,
       type: "Multikey",
       controller: state.did,
-      publicKeyMultibase: spkiToMultikey(key),
+      publicKeyMultibase: key,
     })),
     authentication: vmIds,
     assertionMethod: vmIds,

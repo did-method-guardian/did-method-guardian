@@ -2,29 +2,34 @@
   "note": "REJECT: genesis carries no registrar attestation at all -- REQ-7.1-5 requires one on every genesis, not only when a registrar happens to include it.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
   },
+  "registrar_did": "did:guardian:example:com",
   "log": [
     {
-      "cid": "533035e579195f78c378b47fcca6e2d75dcd914bb8f930cdbb4f1fddcfcbfb88",
+      "cid": "zQmVjd3YdNoagptXS6PR89a61JFKAbkemt4K9CXvGqZsYdq",
       "op": {
         "type": "custodial_create",
+        "did": "did:guardian:fred:example:com",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
         ],
-        "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
-        },
         "services": {},
         "outgoing": [],
         "incoming": [],
         "prev": null,
         "creator": "did:guardian:example:com",
-        "sigs": {},
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "z46YxWRx67U-8oX-yNqSxBuTXC84IlVjVe6wEvaXxKZlACEZZlDTIe5tGJjJv-zh-4Ri_GdN3JSfLByyILA7iA"
-        }
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.916Z",
+            "proofValue": "z2M8JEDi1YM5asEfSBBp6WEkvNALeTjrSQZFoqcuC18E6QrjjL6iUyK5uwATGs3FzFYJToooqje3Yaktdn2x36iLM"
+          }
+        ]
       }
     }
   ]

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { generateKeypair, signCustodialCreate, cidFor, spkiToMultikey } from "@did-guardian/lib";
+import { generateKeypair, signCustodialCreate, cidFor } from "@did-guardian/lib";
 import { saveKey, loadKey } from "../keystore.js";
 import { submitOperation } from "../registrar-client.js";
 
@@ -29,9 +29,9 @@ export function registerCreateCommand(program: Command): void {
       const genesis = await signCustodialCreate(
         {
           type: "custodial_create",
+          did,
           name,
           operationalKeys: [key.publicKey],
-          verificationMethods: { "key-1": key.publicKey },
           services: {},
           outgoing: [],
           incoming,
@@ -50,7 +50,7 @@ export function registerCreateCommand(program: Command): void {
         // exists once that's attached (see submitOperation's comment in
         // registrar-client.ts).
         console.log(`Anchor (genesis CID): ${result.cid}`);
-        console.log(`Public key (Multikey): ${spkiToMultikey(key.publicKey)}`);
+        console.log(`Public key (Multikey): ${key.publicKey}`);
         return;
       }
 
@@ -60,7 +60,7 @@ export function registerCreateCommand(program: Command): void {
       const anchor = await cidFor(genesis);
       console.log(`DRAFT -- ${did}`);
       console.log(`Draft CID (changes once a registrar attests it): ${anchor}`);
-      console.log(`Public key (Multikey): ${spkiToMultikey(key.publicKey)}`);
+      console.log(`Public key (Multikey): ${key.publicKey}`);
       console.log("");
       console.log("This genesis operation carries no registrar attestation (REQ-7.1-5), so no conformant registrar will accept it as-is:");
       console.log(JSON.stringify({ cid: anchor, op: genesis }, null, 2));

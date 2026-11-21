@@ -1,8 +1,7 @@
 import {
   generateKeypair,
-  signPayload,
-  corePayload,
-  verifyKeySigs,
+  unsecuredDocument,
+  createProof,
   checkGenesisShape,
   verifyCustodialCreate,
   signCustodialCreate,
@@ -24,8 +23,9 @@ import {
   wellKnownPath,
   DEFAULT_GUARDIAN_POLICY,
   signLogHeadStatement,
+  logHashFor,
 } from "@did-guardian/lib";
-import type { CustodialCreateOp, Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
+import type { CustodialCreateOp, DataIntegrityProof, Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import { appendOperation, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, insertWardCustody, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
@@ -95,6 +95,14 @@ export async function acceptGenesis(
   if (await getWardByName(env, name)) return { accepted: false, reason: `name "${name}" is already taken (REQ-7.1-6)` };
 
   const did = didFor(name, env.REGISTRAR_DOMAIN);
+  // Fix 2: without this, a genesis already publicly accepted elsewhere
+  // (its name, keys, keySigs-equivalent proofs, and any guardian
+  // consents, all still verifying -- none of it binds to a domain) could
+  // be replayed verbatim here under the same free name, becoming a
+  // second, distinct identity nobody who signed the original ever
+  // intended -- worse still if it named a guardian directly (REQ-7.1-1),
+  // since that guardian never consented to guarding THIS identity.
+  if (op.did !== did) return { accepted: false, reason: `operation's did "${op.did}" does not match "${did}" (Fix 2) -- this looks like a genesis built for a different registrar, replayed here` };
   if (op.incoming.includes(did)) return { accepted: false, reason: `${did} can't be named as a guardian of itself (REQ-7.1-9)` };
 
   const shape = checkGenesisShape(op);
@@ -103,16 +111,16 @@ export async function acceptGenesis(
   const rootWard = await getOrCreateRootWard(env);
   const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
   const attestation = await signRegistrarAttestation(op, rootWard.did, rootPrivateKey);
-  const genesis = { ...op, registrar: attestation };
+  const genesis = { ...op, proof: [...op.proof, attestation] };
 
-  // Everything cryptographic -- keySigs (REQ-7.1-8), every incoming
-  // guardian's signature, and (now that it's attached) this
+  // Everything cryptographic -- proof of possession (REQ-7.1-8), every
+  // incoming guardian's signature, and (now that it's attached) this
   // registrar's attestation -- checked in one call, through the
   // same function the interop suite and every other verifier use. A
-  // local guardian resolves synchronously; a foreign one is fetched live
-  // fetched live from its registrar (makeExternalResolver, below), same as any
+  // local guardian resolves synchronously; a foreign one is fetched
+  // live from its registrar (makeExternalResolver, below), same as any
   // other cross-registrar signature this registrar ever checks.
-  const verified = await verifyCustodialCreate(genesis, makeExternalResolver(env));
+  const verified = await verifyCustodialCreate(genesis, makeExternalResolver(env), rootWard.did as Did);
   if (!verified.valid) return { accepted: false, reason: verified.reason ?? "genesis verification failed" };
 
   const cid = await cidFor(genesis);
@@ -178,9 +186,9 @@ export async function registerWard(
 
   const genesisPartial = {
     type: "custodial_create" as const,
+    did,
     name,
     operationalKeys: [keypair.publicKey],
-    verificationMethods: { "key-1": keypair.publicKey },
     services: {},
     outgoing: [] as [],
     incoming: [] as Did[],
@@ -319,10 +327,10 @@ export async function rotateWard(env: Env, name: string): Promise<{ did: string;
     {
       type: "custodial_rotate",
       operationalKeys: [newKeypair.publicKey],
-      verificationMethods: { "key-1": newKeypair.publicKey },
       services: state.services,
       prev: latestCid,
     },
+    ward.did as Did,
     oldPrivateKey,
     { [newKeypair.publicKey]: newKeypair.privateKey },
   );
@@ -541,22 +549,22 @@ export async function adoptWard(env: Env, name: string, incomingDid: Did): Promi
  * self-held, is root, or no genesis to rotate from) -- those stay errors
  * regardless, since there's nothing coherent to do about them here.
  *
- * `newKeySig`, v0.3 (REQ-7.2-12): this registrar never holds the private
- * half of `publicKey` -- that's the entire point of this endpoint -- so it
- * can't produce the new key's proof-of-possession signature the way
- * `rotateWard`/`registerWard` do for a server-generated key. The caller
- * must sign the rotation payload with `publicKey`'s private key before
- * calling this, over the identical content this function independently
- * reconstructs below (same `operationalKeys`/`verificationMethods`/
- * `services`/`prev` shape `signCustodialRotate` would build); a stale
- * `prev` or wrong content just fails `verifyByRules`'s `keySigs` check the
- * same way any other invalid signature does, through `submitOperation`.
+ * `newKeyProof`, v0.4 (REQ-7.2-12): this registrar never holds the
+ * private half of `publicKey` -- that's the entire point of this
+ * endpoint -- so it can't produce the new key's proof-of-possession
+ * proof the way `rotateWard`/`registerWard` do for a server-generated
+ * key. The caller must construct this proof locally before calling
+ * here, over the identical content this function independently
+ * reconstructs below (same `operationalKeys`/`services`/`prev` shape
+ * `signCustodialRotate` would build); a stale `prev` or wrong content
+ * just fails `verifyByRules`'s proof-of-possession check the same way
+ * any other invalid signature does, through `submitOperation`.
  */
 export async function takeCustody(
   env: Env,
   name: string,
   publicKey: string,
-  newKeySig: string,
+  newKeyProof: DataIntegrityProof,
   force?: boolean,
 ): Promise<{ did: string; document: unknown; warnings: string[] }> {
   if (name === ROOT_WARD_NAME) {
@@ -591,12 +599,12 @@ export async function takeCustody(
   const partial = {
     type: "custodial_rotate" as const,
     operationalKeys: [publicKey],
-    verificationMethods: { "key-1": publicKey },
     services: state.services,
     prev: latestCid,
   };
-  const payload = corePayload(partial as any);
-  const op = { ...partial, sig: await signPayload(payload, oldPrivateKey), keySigs: { [publicKey]: newKeySig } };
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const authProof = await createProof(unsecuredDoc, `${ward.did}#key-0`, oldPrivateKey);
+  const op = { ...partial, proof: [authProof, newKeyProof] };
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`take-custody failed: ${result.reason}`, 500);
 
@@ -640,16 +648,19 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
     env.ROOT_WARD_PUBLIC_KEY && env.ROOT_WARD_PRIVATE_KEY
       ? { publicKey: env.ROOT_WARD_PUBLIC_KEY, privateKey: env.ROOT_WARD_PRIVATE_KEY }
       : await generateKeypair();
-  // No registrar attestation for the root ward itself -- it IS this
-  // registrar's own identity; nothing else exists yet to vouch for it.
-  // creator names itself (REQ-7.1-4 requires a DID; there is no other
-  // party to name for the one identity a deployment bootstraps on its own).
+  // No registrar attestation for the root ward -- it IS this registrar's
+  // identity; nothing else exists yet to vouch for it. Fix 7: self-
+  // attested instead -- verifyCustodialCreate treats its own proof of
+  // possession as satisfying the attestation requirement whenever
+  // op.did equals the registrar DID it's checking against. creator
+  // names itself (REQ-7.1-4 requires a DID; there is no other party to
+  // name for the one identity a deployment bootstraps on its own).
   const genesis = await signCustodialCreate(
     {
       type: "custodial_create",
+      did,
       name: null,
       operationalKeys: [keypair.publicKey],
-      verificationMethods: { "key-1": keypair.publicKey },
       services: {},
       outgoing: [],
       incoming: [],
@@ -706,8 +717,9 @@ export async function getLogHead(env: Env, name: string | null): Promise<LogHead
   if (!anchor || !headCid) throw new RegistrarError(`"${name}" has no genesis operation yet`, 500);
   const rootWard = await getOrCreateRootWard(env);
   const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
+  const logHash = await logHashFor(log); // Fix 5: commits to every entry's full proof set, not just the latest entryHash -- see LogHeadStatement's own comment
   return signLogHeadStatement(
-    { did: ward.did as Did, anchor, headCid, seq: log.length, timestamp: new Date().toISOString(), registrar: rootWard.did as Did },
+    { did: ward.did as Did, anchor, headCid, seq: log.length, logHash, timestamp: new Date().toISOString(), registrar: rootWard.did as Did },
     rootPrivateKey,
   );
 }

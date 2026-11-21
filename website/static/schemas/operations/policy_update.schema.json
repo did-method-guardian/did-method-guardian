@@ -8,8 +8,12 @@
     "type": { "const": "policy_update" },
     "policy": { "$ref": "../guardian-policy.schema.json" },
     "prev": { "type": "string" },
-    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "REQ-7.2-9: enough current guardians to meet the currently-effective policy_threshold. REQ-7.2-10: rejected while the current guardian set is empty." }
+    "proof": {
+      "type": "array",
+      "items": { "$ref": "../data-integrity-proof.schema.json" },
+      "description": "REQ-7.2-9: enough current guardians to meet the currently-effective policy_threshold. REQ-7.2-10: rejected while the current guardian set is empty. REQ-5-9 (Fix 6): a verifier MUST refuse to evaluate this at all if the CURRENT policy's own version exceeds what it understands."
+    }
   },
-  "required": ["type", "policy", "prev", "sigs"],
+  "required": ["type", "policy", "prev", "proof"],
   "additionalProperties": false
 }

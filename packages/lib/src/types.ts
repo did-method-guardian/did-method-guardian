@@ -10,6 +10,19 @@ export type Threshold = "any" | "majority" | "unanimous" | { at_least: number };
 export type OnOrphanPolicy = "sovereign" | "tombstone" | { transfer_to: Did };
 
 export interface GuardianPolicy {
+  /**
+   * v0.4, Fix 6: a verifier that doesn't recognize this version number
+   * MUST report that it can't fully verify state governed by this
+   * policy, never silently accept it as if every field it understands
+   * were the complete picture. "Ignore unknown fields" (this field's own
+   * earlier, now-superseded version) is safe for additive fields but not
+   * for a *restrictive* one -- a future `witness_threshold` an old
+   * verifier doesn't recognize would otherwise accept an operation the
+   * policy actually forbids, a real downgrade. Starts at 1; bump it only
+   * when a new field can change whether an operation is accepted, never
+   * for a field that's purely informational.
+   */
+  version: number;
   recovery_threshold: Threshold;
   tombstone_threshold: Threshold;
   removal_threshold: Threshold;
@@ -22,7 +35,11 @@ export interface GuardianPolicy {
   on_orphan: OnOrphanPolicy;
 }
 
+/** The highest GuardianPolicy.version this library understands -- see its own doc comment (Fix 6). */
+export const MAX_SUPPORTED_POLICY_VERSION = 1;
+
 export const DEFAULT_GUARDIAN_POLICY: GuardianPolicy = {
+  version: 1,
   recovery_threshold: "any",
   tombstone_threshold: "any",
   removal_threshold: "majority",
@@ -32,24 +49,48 @@ export const DEFAULT_GUARDIAN_POLICY: GuardianPolicy = {
   on_orphan: "sovereign",
 };
 
-export interface RegistrarAttestation {
-  did: Did;
-  sig: string;
+/**
+ * v0.4, Fix 5: a W3C Data Integrity proof (ecdsa-jcs-2019 cryptosuite --
+ * see operations.ts's createProof/verifyProof for the exact signing
+ * input construction, checked directly against the W3C specs rather
+ * than assumed). Replaces the old, separate sig/sigs/keySigs/registrar
+ * fields every operation type carried before this version -- one proof
+ * array, every signer (the declaring party proving key possession, the
+ * ward, a guardian, the accepting registrar) contributing one entry,
+ * all independent, all covering the same content (the operation with
+ * `proof` itself stripped), none nested in signing order. `created` on
+ * the registrar's own attestation entry doubles as the signed
+ * acceptance timestamp this method previously had no signed record of
+ * at all.
+ */
+export interface DataIntegrityProof {
+  type: "DataIntegrityProof";
+  cryptosuite: "ecdsa-jcs-2019";
+  /**
+   * A DID URL identifying both who signed and how to resolve their key:
+   * `did:key:<multikey>#<multikey>` (self-contained, no resolution --
+   * REQ-7.1-8/7.2-12's proof of possession for a declared operational
+   * key) or a `did:guardian:...#key-N` DID URL (the ward's own current
+   * key, a guardian's, or the accepting registrar's -- resolved live,
+   * same as every other signature this method ever checked).
+   */
+  verificationMethod: string;
+  proofPurpose: "assertionMethod";
+  created: string; // ISO 8601
+  proofValue: string; // multibase base58btc (REQ-6-4), raw P-256 r||s, low-S
 }
 
 export interface CustodialCreateOp {
   type: "custodial_create";
+  /** v0.4, Fix 2: the full DID this genesis is for, domain included. A registrar MUST reject a genesis whose `did` doesn't match `didFor(name, its own domain)` -- without this, a publicly-visible, already-accepted genesis (keys, keySigs-equivalent proofs, and any guardian consents, all still verifying) could be replayed verbatim at a second registrar under the same free name, becoming a second, distinct identity nobody who signed the original ever intended. */
+  did: Did;
   name: string | null; // null for the bare-domain (nameless) identity -- see spec §2.1
-  operationalKeys: string[];
-  /** v0.3, REQ-7.1-8: one signature per entry in operationalKeys, keyed by the key itself (not a DID), produced by that key's private half over the same stripped payload sig/sigs/registrar are checked against. Proves the party declaring a key actually holds it -- without this, the control chain's root was whatever the registrar asserted, nothing self-verifiable. */
-  keySigs: Record<string, string>;
-  verificationMethods: Record<string, string>;
+  operationalKeys: string[]; // Multikey (Fix 4) -- one verificationMethod entry per entry, derived directly, index-matched (REQ-3-1); there is no separate map to fall out of sync with it (Fix 1)
   services: Record<string, { type: string; endpoint: string }>;
-  registrar?: RegistrarAttestation;
   outgoing: []; // always empty at genesis -- nothing to remove
-  incoming: Did[]; // v0.3 (REQ-7.1-1 relaxed): MAY be non-empty if each named DID co-signs genesis (see sigs) -- runtime-checked, not type-narrowed
+  incoming: Did[]; // v0.3 (REQ-7.1-1 relaxed): MAY be non-empty if each named DID co-signs genesis (a proof in `proof`, verificationMethod = that DID's own DID URL) -- runtime-checked, not type-narrowed
   prev: null;
-  sigs: Record<Did, string>; // one per `incoming` entry, v0.3: required when incoming is non-empty (co-signed consent), not merely always `{}`
+  proof: DataIntegrityProof[];
   /** v0.2, REQ-7.1-4: optional at the type level (a wire payload can omit it); required at the rules-engine level -- see rules.ts. */
   creator?: Did;
   /** v0.2, REQ-7.1-7. */
@@ -58,15 +99,10 @@ export interface CustodialCreateOp {
 
 export interface CustodialRotateOp {
   type: "custodial_rotate";
-  operationalKeys: string[];
-  /** v0.3, REQ-7.2-12: one signature per entry in operationalKeys (the NEW keys being installed), keyed by the key itself, same idea as genesis's keySigs -- required whether the rotation is self-authorized or guardian-initiated, since either way a new key is being added to the document. */
-  keySigs: Record<string, string>;
-  verificationMethods: Record<string, string>;
+  operationalKeys: string[]; // Multikey -- see CustodialCreateOp's own comment
   services: Record<string, { type: string; endpoint: string }>;
   prev: string;
-  sig?: string; // signed by any current operational key -- REQ-7.2-1(a)
-  /** v0.2, REQ-7.2-1(b): guardian-initiated recovery rotation, keyed by guardian DID. Mutually exclusive with `sig` in practice, both optional at the type level so either shape is constructible. */
-  sigs?: Record<Did, string>;
+  proof: DataIntegrityProof[]; // REQ-7.2-12's proof of possession for each new key, plus either the ward's own current-key proof (REQ-7.2-1a) or enough guardians' (REQ-7.2-1b)
 }
 
 /** v0.2. Adds exactly one new guardian -- REQ-7.2-3/4/5. */
@@ -74,8 +110,8 @@ export interface GuardianAddOp {
   type: "guardian_add";
   incoming: Did;
   prev: string;
-  sigs: Record<Did, string>;
-  /** REQ-12-4, v0.2.1: incoming's genesis CID, so a later L1 check of this specific guardian relationship has something to pin against without a fresh L3 resolution. RECOMMENDED (SHOULD), not required -- a verifier MUST still accept a guardian_add with no anchor, same as any other optional field. Signed over like any other field in this operation (payloadWithoutSig doesn't special-case it); not independently re-verified against incoming's log by the signature check itself -- see signGuardianAdd's comment for why that's the caller's job, not the signer's. */
+  proof: DataIntegrityProof[];
+  /** REQ-12-4, v0.2.1: incoming's genesis CID, so a later L1 check of this specific guardian relationship has something to pin against without a fresh L3 resolution. RECOMMENDED (SHOULD), not required -- a verifier MUST still accept a guardian_add with no anchor, same as any other optional field. */
   anchor?: string;
 }
 
@@ -84,7 +120,7 @@ export interface GuardianRemoveOp {
   type: "guardian_remove";
   outgoing: Did;
   prev: string;
-  sigs: Record<Did, string>;
+  proof: DataIntegrityProof[];
 }
 
 /** v0.2. Replaces GuardianPolicy wholesale -- REQ-7.2-9/10. */
@@ -92,9 +128,10 @@ export interface PolicyUpdateOp {
   type: "policy_update";
   policy: GuardianPolicy;
   prev: string;
-  sigs: Record<Did, string>;
+  proof: DataIntegrityProof[];
 }
 
+/** v0.1, superseded by GuardianAddOp/GuardianRemoveOp for new submissions -- kept only so document.ts's replay() can still resolve already-accepted history under the old shape. Never produced or accepted for a new operation, so this keeps its original sig field untouched by the proof-model migration. */
 export interface GuardianTransferOp {
   type: "guardian_transfer";
   outgoing: Did[];
@@ -106,13 +143,13 @@ export interface GuardianTransferOp {
 export interface GuardianRelinquishOp {
   type: "guardian_relinquish";
   prev: string;
-  sigs: Record<Did, string>;
+  proof: DataIntegrityProof[];
 }
 
 export interface CustodialTombstoneOp {
   type: "custodial_tombstone";
   prev: string;
-  sigs: Record<Did, string>;
+  proof: DataIntegrityProof[];
 }
 
 export type Operation =
@@ -135,11 +172,11 @@ export interface LogEntry {
 /** The method-internal state derived by replaying a log -- a superset of the presented DID Document. */
 export interface ResolvedState {
   did: Did;
-  operationalKeys: string[];
-  verificationMethods: Record<string, string>;
+  operationalKeys: string[]; // Multikey -- the presented document's verificationMethod entries derive from this directly (Fix 1), no separate map
   services: Record<string, { type: string; endpoint: string }>;
   guardians: Did[];
   guardianPolicy: GuardianPolicy;
-  registrar?: RegistrarAttestation;
+  /** The DID that attested genesis (REQ-7.1-5's registrar proof entry), for L1 anchor/registrar-key pinning -- the attestation itself lives in genesis's own `proof` array within the log, not duplicated here. */
+  registrarDid?: Did;
   deactivated: boolean;
 }

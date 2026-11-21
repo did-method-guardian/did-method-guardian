@@ -6,7 +6,6 @@ import {
   signCustodialRotateByGuardians,
   signCustodialTombstone,
   signGuardianAdd,
-  spkiToMultikey,
 } from "@did-guardian/lib";
 import type { Did, GuardianAddOp, CustodialRotateOp, CustodialTombstoneOp } from "@did-guardian/lib";
 import { adopt, fetchLog, submitOperation } from "../registrar-client.js";
@@ -107,14 +106,13 @@ export function registerGuardianCommand(program: Command): void {
         newKey = await generateKeypair();
         await saveKey(label, newKey, opts);
         console.log(`Generated and saved a new operational key as "${label}".`);
-        console.log(`Public key (Multikey): ${spkiToMultikey(newKey.publicKey)}`);
+        console.log(`Public key (Multikey): ${newKey.publicKey}`);
         console.log("");
       }
       const op = await signCustodialRotateByGuardians(
         {
           type: "custodial_rotate",
           operationalKeys: [newKey.publicKey],
-          verificationMethods: { "key-1": newKey.publicKey },
           services: {},
           prev,
         },

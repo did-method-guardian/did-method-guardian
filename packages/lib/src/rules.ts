@@ -15,12 +15,14 @@
 // isn't retired from the Operation union, only from new-submission
 // acceptance).
 
-import { corePayload, verifyKeySigs, verifySignerSig } from "./operations.js";
+import { unsecuredDocument, verificationMethodDid, verifyPop, verifySignerProof } from "./operations.js";
 import type { KeyResolver } from "./operations.js";
 import { meetsThreshold } from "./quorum.js";
+import { MAX_SUPPORTED_POLICY_VERSION } from "./types.js";
 import type {
   CustodialRotateOp,
   CustodialTombstoneOp,
+  DataIntegrityProof,
   Did,
   GuardianAddOp,
   GuardianPolicy,
@@ -74,12 +76,22 @@ export interface VerificationContext {
   sigTimestamps?: Record<Did, string>;
 }
 
-async function validSignersOf(op: { sigs?: Record<Did, string> }, ctx: VerificationContext): Promise<Did[]> {
-  const sigs = op.sigs ?? {};
+/** Every DID a proof in `proofs` claims to be signed by, excluding self-contained `did:key:` PoP proofs -- the candidates `validSignersOf` below checks, not yet known to actually verify. */
+function candidateProofDids(proofs: DataIntegrityProof[]): Did[] {
+  const dids = new Set<Did>();
+  for (const p of proofs) {
+    if (!p.verificationMethod.startsWith("did:key:")) dids.add(verificationMethodDid(p.verificationMethod));
+  }
+  return [...dids];
+}
+
+async function validSignersOf(op: { proof?: DataIntegrityProof[] }, ctx: VerificationContext): Promise<Did[]> {
+  const proofs = op.proof ?? [];
+  const unsecuredDoc = unsecuredDocument(op as any);
   const valid: Did[] = [];
-  for (const did of Object.keys(sigs)) {
+  for (const did of candidateProofDids(proofs)) {
     const ts = ctx.sigTimestamps?.[did];
-    if (await verifySignerSig(op as any, did, sigs[did], ctx.resolveKey, ts ? new Date(ts) : undefined)) valid.push(did);
+    if (await verifySignerProof(unsecuredDoc, proofs, did, ctx.resolveKey, ts ? new Date(ts) : undefined)) valid.push(did);
   }
   return valid;
 }
@@ -106,20 +118,23 @@ export interface ShapeResult {
  * the start.
  */
 export function checkGenesisShape(op: {
+  did: Did;
   incoming: Did[];
-  sigs: Record<Did, string>;
+  proof: DataIntegrityProof[];
   prev: unknown;
   operationalKeys: unknown[];
-  verificationMethods: Record<string, unknown>;
   services: Record<string, unknown>;
   creator?: Did;
 }): ShapeResult {
+  if (!op.did) return { valid: false, reason: "Fix 2: did must be present" };
   for (const did of op.incoming) {
-    if (!op.sigs[did]) return { valid: false, reason: `REQ-7.1-1: incoming guardian ${did} must co-sign genesis` };
+    if (!op.proof.some((p) => verificationMethodDid(p.verificationMethod) === did)) {
+      return { valid: false, reason: `REQ-7.1-1: incoming guardian ${did} must co-sign genesis` };
+    }
   }
   if (op.prev !== null) return { valid: false, reason: "REQ-7.1-2: genesis prev must be null" };
-  if (!op.operationalKeys || !op.verificationMethods || !op.services) {
-    return { valid: false, reason: "REQ-7.1-3: operationalKeys/verificationMethods/services must be present" };
+  if (!op.operationalKeys || !op.services) {
+    return { valid: false, reason: "REQ-7.1-3: operationalKeys/services must be present" };
   }
   if (!op.creator) return { valid: false, reason: "REQ-7.1-4: creator must be present" };
   return { valid: true };
@@ -149,18 +164,15 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
   // fields. REQ-7.2-12: every key being installed proves it's actually
   // held, checked here rather than in isSatisfied -- this is about the
   // operation's validity, not about who authorized installing it.
-  checkShape: (op) => verifyKeySigs(corePayload(op as any), op.operationalKeys, op.keySigs),
+  checkShape: (op) => verifyPop(unsecuredDocument(op as any), op.operationalKeys, op.proof),
   async isSatisfied(op, _validSigners, ctx) {
-    if (op.sig) {
-      const wardTs = ctx.sigTimestamps?.[ctx.wardDid];
-      const wardSigned = await verifySignerSig(op as any, ctx.wardDid, op.sig, ctx.resolveKey, wardTs ? new Date(wardTs) : undefined);
-      if (wardSigned) return true; // REQ-7.2-1(a)
-    }
-    if (op.sigs) {
-      const validGuardianSigs = await validSignersOf(op, ctx);
-      const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
-      if (meetsThreshold(ctx.state.guardianPolicy.recovery_threshold, validGuardianSigs, live)) return true; // REQ-7.2-1(b)
-    }
+    const unsecuredDoc = unsecuredDocument(op as any);
+    const wardTs = ctx.sigTimestamps?.[ctx.wardDid];
+    const wardSigned = await verifySignerProof(unsecuredDoc, op.proof, ctx.wardDid, ctx.resolveKey, wardTs ? new Date(wardTs) : undefined);
+    if (wardSigned) return true; // REQ-7.2-1(a)
+    const validGuardianSigs = await validSignersOf(op, ctx);
+    const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
+    if (meetsThreshold(ctx.state.guardianPolicy.recovery_threshold, validGuardianSigs, live)) return true; // REQ-7.2-1(b)
     return false;
   },
   // Either the ward's own key (REQ-7.2-1a) OR enough of the guardian
@@ -175,7 +187,6 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
   applyToState: (op, state) => ({
     ...state,
     operationalKeys: [...op.operationalKeys],
-    verificationMethods: { ...op.verificationMethods },
     services: { ...op.services },
   }),
 };
@@ -249,6 +260,13 @@ export const policyUpdateRule: OperationRule<PolicyUpdateOp> = {
   reqIds: ["REQ-7.2-9", "REQ-7.2-10", "REQ-5-6"],
   governingPolicyField: "policy_threshold",
   async checkShape(op, ctx) {
+    // Fix 6: refuse to accept an update that would itself make the policy
+    // unverifiable going forward -- a restrictive field a future version
+    // adds (a witness threshold, say) must never take effect under cover
+    // of an old verifier that doesn't know to look for it.
+    if (op.policy.version > MAX_SUPPORTED_POLICY_VERSION) {
+      return { valid: false, reason: `Fix 6: GuardianPolicy version ${op.policy.version} is newer than this verifier understands (max ${MAX_SUPPORTED_POLICY_VERSION})` };
+    }
     const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
     if (live.length === 0) return { valid: false, reason: "REQ-7.2-10: policy_update rejected while the current guardian set is empty" };
     return { valid: true };
@@ -302,6 +320,15 @@ export type RuleGovernedOpType = keyof typeof OPERATION_RULES;
  * in operations.ts only for replaying already-accepted history).
  */
 export async function verifyByRules(op: { type: string }, ctx: VerificationContext): Promise<{ valid: boolean; reason?: string }> {
+  // Fix 6: every rule below decides acceptance by reading some threshold
+  // off ctx.state.guardianPolicy -- if this verifier doesn't recognize
+  // the CURRENT policy's own version, it can't trust any of those reads
+  // (an unrecognized, possibly-restrictive field could already be in
+  // effect), so it must refuse everything outright rather than risk a
+  // downgrade by evaluating only the fields it happens to understand.
+  if (ctx.state.guardianPolicy.version > MAX_SUPPORTED_POLICY_VERSION) {
+    return { valid: false, reason: `Fix 6: GuardianPolicy version ${ctx.state.guardianPolicy.version} is newer than this verifier understands (max ${MAX_SUPPORTED_POLICY_VERSION}) -- refusing rather than silently ignoring a field it doesn't recognize` };
+  }
   const rule = (OPERATION_RULES as Record<string, OperationRule<any>>)[op.type];
   if (!rule) return { valid: false, reason: `operation type "${op.type}" has no rules-table entry` };
   const shape = await rule.checkShape(op, ctx);

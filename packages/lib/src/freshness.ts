@@ -6,18 +6,34 @@
 // a LogHeadStatement is never appended to any identity's log and isn't
 // an Operation -- it's a side statement about the log, re-derivable (and
 // re-signable) fresh on every request, never stored.
-import { signPayload, verifyPayload } from "./crypto.js";
-import type { Did } from "./types.js";
+import { signPayload, verifyPayload, contentRef } from "./crypto.js";
+import type { Did, LogEntry } from "./types.js";
 import type { KeyResolver } from "./operations.js";
 
 export interface LogHeadStatement {
   did: Did;
   anchor: string; // genesis cid (REQ-6-3) -- lets a verifier confirm this statement is about the identity it thinks it is, not just trust the did field blindly
-  headCid: string; // the log's current head cid at the moment this was signed
+  headCid: string; // the log's current head cid at the moment this was signed -- excludes every proof (Fix 3), same as any other entryHash, so it stays independent of which valid signature happened to be produced
   seq: number; // the log's length at that moment -- lets a verifier confirm a LATER statement from the same registrar is actually later (seq only grows), catching a registrar replaying a stale statement
+  /**
+   * Fix 5: a multihash over the full log -- every entry's op content,
+   * proofs included, unlike `headCid`/`anchor` which deliberately
+   * exclude them. A registrar's own proof entries carry `created`, the
+   * signed acceptance timestamp; without this field there would be
+   * nothing stopping that same registrar from later re-signing the
+   * identical entries under a different `created` (or any other
+   * proof-only change) with no way for a verifier to tell. Computed by
+   * `logHashFor`, below.
+   */
+  logHash: string;
   timestamp: string; // ISO 8601, when this was signed
   registrar: Did; // whose key signed this -- the accepting registrar's identity (REQ-7.1-5's same signer)
   sig: string;
+}
+
+/** The `logHash` a LogHeadStatement reports -- every entry's full, as-stored content (op and its proofs intact), in log order. */
+export async function logHashFor(log: LogEntry[]): Promise<string> {
+  return contentRef(log.map((e) => ({ cid: e.cid, op: e.op, acceptedAt: e.acceptedAt })));
 }
 
 export async function signLogHeadStatement(

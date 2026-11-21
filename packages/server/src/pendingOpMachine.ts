@@ -10,16 +10,16 @@
 // that work.
 
 import { assign, createMachine } from "xstate";
-import type { Did } from "@did-guardian/lib";
+import type { DataIntegrityProof, Did } from "@did-guardian/lib";
 
 export interface PendingOpContext {
-  collectedSigs: Record<Did, string>;
+  collectedSigs: Record<Did, DataIntegrityProof>;
   /** Decided once, before the actor is created -- whether the proposer's own first signature already satisfies the operation's own rule. */
   satisfiedAtPropose: boolean;
 }
 
 export type PendingOpEvent =
-  | { type: "CONTRIBUTE"; did: Did; sig: string; satisfiedNow: boolean }
+  | { type: "CONTRIBUTE"; did: Did; proof: DataIntegrityProof; satisfiedNow: boolean }
   /** Veto -- any current guardian, whether or not they'd already signed, unconditionally kills the proposal. Allowed from `collecting` or `satisfied`: anything short of actually reaching the log is still reversible. */
   | { type: "DECLINE" }
   /** Opt-out -- "don't wait on me." Never blocks; only valid from `collecting`, since once satisfied nobody's waiting on anyone. Removes the withdrawing party's own signature from consideration if they'd already contributed one. */
@@ -55,13 +55,13 @@ export const pendingOperationMachine = createMachine({
             target: "satisfied",
             guard: ({ event }) => event.satisfiedNow,
             actions: assign({
-              collectedSigs: ({ context, event }) => ({ ...context.collectedSigs, [event.did]: event.sig }),
+              collectedSigs: ({ context, event }) => ({ ...context.collectedSigs, [event.did]: event.proof }),
             }),
           },
           {
             target: "collecting",
             actions: assign({
-              collectedSigs: ({ context, event }) => ({ ...context.collectedSigs, [event.did]: event.sig }),
+              collectedSigs: ({ context, event }) => ({ ...context.collectedSigs, [event.did]: event.proof }),
             }),
           },
         ],

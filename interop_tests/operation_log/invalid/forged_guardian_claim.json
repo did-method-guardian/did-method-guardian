@@ -1,20 +1,21 @@
 {
-  "note": "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
+  "note": "REJECT: 'board-a' is named as initial guardian but the proof was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+    "did:guardian:board-a:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
+    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
   },
+  "registrar_did": "did:guardian:example:com",
   "log": [
     {
-      "cid": "507e7242578b59d52b87d737b14e5ed5f6dacd2f976ae019f19824e87d58ffbe",
+      "cid": "zQmNNqZsgo6F914x1jyBXy7XWZWVaL1pMn7V5nDcp33VMNJ",
       "op": {
         "type": "custodial_create",
+        "did": "did:guardian:puppet:example:com",
         "name": "puppet",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
         ],
-        "verificationMethods": {},
         "services": {},
         "outgoing": [],
         "incoming": [
@@ -22,16 +23,32 @@
         ],
         "prev": null,
         "creator": "did:guardian:example:com",
-        "registrar": {
-          "did": "did:guardian:example:com",
-          "sig": "WqL4CGicjiyoBm6MdmPGd89FuRaFd4sGG1fB0iAEOgEGZotaXYxsGCAjS3Xv98KTbr8URz-JtYdN09qdNorHtQ"
-        },
-        "sigs": {
-          "did:guardian:board-a:example:com": "ftxZyZiJPRhWwQpZjO0Zfs3W368d4EhD4Na9IYlBSwHJCxrDZLtr-48_EZgC1IXd4HLfo7JophIrh0iPRkTrgg"
-        },
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "QWC-VwZHU2vhstyefXD2Dhf4N0q7etMjlNLTaW5j5viZJwhnq8wFPLs9WK_f_DVB9i-AWLCiTM5hiMoTcEoukQ"
-        }
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.913Z",
+            "proofValue": "z3upZfVVRYfWD1FoMQ8qHdzMRAP6y3WwVhhAafTo47QCUHDHekwvmR1wVXSW86LUf66gV8kQhfiw9aJmAJQiQDJKw"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:board-a:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.913Z",
+            "proofValue": "zUYfKWbM1UHAriZWZAKz4fpEbNyFhyxDwhGCUgwVVC2rMRAGuU4APkWCs3SrucVKefyWjegjFxFWjy1jtUGj1rkx"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.913Z",
+            "proofValue": "z42rbRgprcXtaVaGewcJy7akWvZjYh1yqYZk1nb5nx6gVB5o2N1LGM2DrzjX55wadgu65ebFvPW84VyBs1Ajvvotc"
+          }
+        ]
       }
     }
   ]

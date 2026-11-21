@@ -9,11 +9,13 @@
 import {
   replay,
   verifyPayload,
-  verifySignerSig,
+  verifySignerProof,
+  unsecuredDocument,
   liveGuardians,
   OPERATION_RULES,
   parseDid,
   wellKnownPath,
+  type DataIntegrityProof,
   type Did,
   type Operation,
   type RuleGovernedOpType,
@@ -178,11 +180,20 @@ export async function proposeOperation(env: Env, name: string | null, op: Operat
   const shape = await rule.checkShape(op as any, ctx);
   if (!shape.valid) throw new RegistrarError(shape.reason ?? "invalid operation shape", 400);
 
-  const sigs = (op as { sigs?: Record<Did, string> }).sigs ?? {};
-  if (Object.keys(sigs).length === 0) throw new RegistrarError("a proposal must already carry at least the proposer's own signature", 400);
+  const proofs = (op as { proof?: DataIntegrityProof[] }).proof ?? [];
+  if (proofs.length === 0) throw new RegistrarError("a proposal must already carry at least the proposer's own signature", 400);
+  const unsecuredDoc = unsecuredDocument(op as any);
+  const candidateDids = [...new Set(proofs.filter((p) => !p.verificationMethod.startsWith("did:key:")).map((p) => p.verificationMethod.split("#")[0] as Did))];
+  const sigs: Record<Did, DataIntegrityProof> = {};
   let proposerDid: Did | null = null;
-  for (const did of Object.keys(sigs)) {
-    if (await verifySignerSig(op, did, sigs[did], ctx.resolveKey)) proposerDid = did as Did;
+  for (const did of candidateDids) {
+    for (const proof of proofs) {
+      if (proof.verificationMethod.split("#")[0] !== did) continue;
+      if (await verifySignerProof(unsecuredDoc, [proof], did, ctx.resolveKey)) {
+        sigs[did] = proof;
+        proposerDid = did;
+      }
+    }
   }
   if (!proposerDid) throw new RegistrarError("none of the attached signatures are valid", 400);
 
@@ -229,7 +240,7 @@ export interface ContributeResult {
 }
 
 /** A later required signer adds their own signature to an already-proposed operation. */
-export async function contributeToOperation(env: Env, id: string, signerDid: Did, sig: string): Promise<ContributeResult> {
+export async function contributeToOperation(env: Env, id: string, signerDid: Did, proof: DataIntegrityProof): Promise<ContributeResult> {
   const row = await getPendingOperation(env, id);
   if (!row) throw new RegistrarError(`no pending operation "${id}"`, 404);
   if (row.state !== "collecting" && row.state !== "satisfied") {
@@ -246,21 +257,22 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
   const ctx = await buildContextForWard(env, row.ward_did as Did);
   const wardName = await nameForWardDid(env, row.ward_did as Did);
   const requiredSigners = JSON.parse(row.required_signers) as Did[];
+  const unsecuredDoc = unsecuredDocument(op as any);
 
   if (row.state === "satisfied") {
     // Already met -- nothing a new signature could add. Most likely a retry after a prior FINALIZE_FAILED; just re-attempt rather than silently dropping this signer's contribution (the machine itself has no CONTRIBUTE handler in `satisfied`, so sending one would be a no-op).
-    const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, string>;
+    const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, DataIntegrityProof>;
     const sigTimestamps = JSON.parse(row.sig_timestamps) as Record<Did, string>;
     const final = await finalize(env, wardName, id, op, collectedSigs, requiredSigners, sigTimestamps);
     return { state: final.state, document: final.document };
   }
 
-  if (!(await verifySignerSig(op, signerDid, sig, ctx.resolveKey))) {
+  if (!(await verifySignerProof(unsecuredDoc, [proof], signerDid, ctx.resolveKey))) {
     throw new RegistrarError("invalid signature", 400);
   }
 
-  const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, string>;
-  const candidateOp = { ...op, sigs: { ...collectedSigs, [signerDid]: sig } } as Operation;
+  const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, DataIntegrityProof>;
+  const candidateOp = { ...op, proof: [...Object.values(collectedSigs), proof] } as Operation;
   const satisfiedNow = await rule.isSatisfied(candidateOp as any, [], ctx);
 
   const resolved = pendingOperationMachine.resolveState({
@@ -268,7 +280,7 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
     context: { collectedSigs, satisfiedAtPropose: false },
   });
   const actor = createActor(pendingOperationMachine, { snapshot: resolved, input: { collectedSigs, satisfiedAtPropose: false } }).start();
-  actor.send({ type: "CONTRIBUTE", did: signerDid, sig, satisfiedNow });
+  actor.send({ type: "CONTRIBUTE", did: signerDid, proof, satisfiedNow });
 
   const newState = actor.getSnapshot().value as string;
   const newCollectedSigs = actor.getSnapshot().context.collectedSigs;
@@ -319,7 +331,7 @@ export async function declineOperation(env: Env, id: string, auth: ActorAuth): P
     }
   }
 
-  const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, string>;
+  const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, DataIntegrityProof>;
   const resolved = pendingOperationMachine.resolveState({ value: row.state, context: { collectedSigs, satisfiedAtPropose: false } });
   const actor = createActor(pendingOperationMachine, { snapshot: resolved, input: { collectedSigs, satisfiedAtPropose: false } }).start();
   actor.send({ type: "DECLINE" });
@@ -344,7 +356,7 @@ export async function withdrawFromOperation(env: Env, id: string, auth: ActorAut
   const ctx = await buildContextForWard(env, row.ward_did as Did);
   const actorDid = await resolveActor(env, id, "withdraw", auth, ctx);
 
-  const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, string>;
+  const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, DataIntegrityProof>;
   const resolved = pendingOperationMachine.resolveState({ value: row.state, context: { collectedSigs, satisfiedAtPropose: false } });
   const actor = createActor(pendingOperationMachine, { snapshot: resolved, input: { collectedSigs, satisfiedAtPropose: false } }).start();
   actor.send({ type: "WITHDRAW", did: actorDid });
@@ -371,12 +383,12 @@ export interface PendingOperationStatus {
   created_at: string;
   expires_at: string;
   /**
-   * The op minus `sig`/`sigs` -- exactly the bytes `signPayload` would sign,
-   * same shape `votingPage.ts`'s own `signAsSelf` already destructures out
-   * of a pending op inline. Present so a *different* registrar (relaying a
-   * signature for a foreign guardian it custodies -- see relaySign.ts) can
-   * reproduce the same canonicalized payload independently, rather than
-   * trusting anything handed to it out of band.
+   * The op with `proof` stripped -- exactly the `unsecuredDocument` any
+   * new proof added to this operation signs, same thing `votingPage.ts`'s
+   * own `signAsSelf` already strips inline. Present so a *different*
+   * registrar (relaying a signature for a foreign guardian it custodies
+   * -- see relaySign.ts) can reproduce the same canonicalized content
+   * independently, rather than trusting anything handed to it out of band.
    */
   unsigned_payload: unknown;
 }
@@ -385,14 +397,14 @@ export interface PendingOperationStatus {
 export async function getPendingOperationStatus(env: Env, wardDid: Did, id: string): Promise<PendingOperationStatus> {
   const row = await getPendingOperation(env, id);
   if (!row || row.ward_did !== wardDid) throw new RegistrarError(`no pending operation "${id}" for this ward`, 404);
-  const op = JSON.parse(row.partial_op) as { sig?: unknown; sigs?: unknown };
-  const { sig: _sig, sigs: _sigs, ...unsignedPayload } = op;
+  const op = JSON.parse(row.partial_op);
+  const unsignedPayload = unsecuredDocument(op);
   return {
     id: row.id,
     op_type: row.op_type,
     state: row.state,
     required_signers: JSON.parse(row.required_signers) as Did[],
-    signed: Object.keys(JSON.parse(row.collected_sigs) as Record<Did, string>),
+    signed: Object.keys(JSON.parse(row.collected_sigs) as Record<Did, DataIntegrityProof>),
     created_at: row.created_at,
     expires_at: row.expires_at,
     unsigned_payload: unsignedPayload,
@@ -417,11 +429,11 @@ async function finalize(
   name: string | null,
   id: string,
   op: Operation,
-  collectedSigs: Record<Did, string>,
+  collectedSigs: Record<Did, DataIntegrityProof>,
   requiredSigners: Did[],
   sigTimestamps: Record<Did, string>,
 ): Promise<{ state: string; document?: unknown }> {
-  const fullOp = { ...op, sigs: collectedSigs } as Operation;
+  const fullOp = { ...op, proof: Object.values(collectedSigs) } as Operation;
   const result = await submitOperation(env, name, fullOp, sigTimestamps);
   if (result.accepted) {
     await updatePendingOperationState(env, id, "finalized", JSON.stringify(collectedSigs), JSON.stringify(sigTimestamps));

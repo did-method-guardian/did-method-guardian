@@ -4,12 +4,15 @@
 // nodejs_compat (and even then, EC sign/verify support isn't guaranteed to
 // match real Node). See did-method-guardian#<issue>.
 
-// A lightweight stand-in for the spec's DAG-CBOR + CIDv1 scheme (see the open
-// question in spec §8 on interop detail). Canonical JSON (sorted keys) is
-// hashed with sha-256 to produce a content reference; real interop would need
-// true DAG-CBOR + multicodec/multihash, tracked as follow-up work, not
-// something this reference implementation's logic depends on.
-
+/**
+ * RFC 8785 (JSON Canonicalization Scheme): sorted object keys (by UTF-16
+ * code unit -- exactly what JS's `<`/`>` string comparison already does,
+ * so no special-cased comparator is needed), `JSON.stringify` otherwise.
+ * `assertJCSSafe` (below) rules out the input shapes where JCS's own
+ * number-serialization rules would otherwise matter (this method never
+ * needs a float in signed content, so the simplest fix is to forbid one
+ * outright rather than implement ECMA-262 `Number::toString` faithfully).
+ */
 export function canonicalize(value: unknown): string {
   return JSON.stringify(sortKeysDeep(value));
 }
@@ -24,6 +27,41 @@ function sortKeysDeep(value: unknown): unknown {
     );
   }
   return value;
+}
+
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/**
+ * Rejects the input shapes that would otherwise make RFC 8785's own
+ * number-serialization rules (ECMA-262 `Number::toString`) and lone
+ * surrogates in strings matter for interop: no non-integer number, no
+ * `-0` (serializes as "-0" in JS but "0" under some other JCS
+ * implementations), no number outside JS's own safe-integer range (a
+ * round-trip through a non-JS implementation could lose precision), and
+ * no unpaired UTF-16 surrogate (undefined behavior once re-encoded as
+ * UTF-8). None of this method's own operation content ever legitimately
+ * needs any of these, so forbidding them outright is simpler than
+ * matching every other implementation's number formatting exactly.
+ */
+export function assertJCSSafe(value: unknown): void {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("JCS: number must be finite");
+    if (!Number.isInteger(value)) throw new Error("JCS: floating-point numbers are not allowed");
+    if (Object.is(value, -0)) throw new Error("JCS: -0 is not allowed");
+    if (!Number.isSafeInteger(value)) throw new Error("JCS: integer exceeds the safe range");
+    return;
+  }
+  if (typeof value === "string") {
+    if (LONE_SURROGATE_RE.test(value)) throw new Error("JCS: lone surrogate in string");
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) assertJCSSafe(v);
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const v of Object.values(value as Record<string, unknown>)) assertJCSSafe(v);
+  }
 }
 
 function bytesToBase64url(bytes: ArrayBuffer | Uint8Array): string {
@@ -45,19 +83,50 @@ async function sha256(input: string): Promise<ArrayBuffer> {
   return crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
 }
 
+/**
+ * REQ-6-4: a sha2-256 multihash (multiformats, code 0x12, length 0x20),
+ * base58btc-encoded with the multibase 'z' prefix -- the same encoding
+ * `did:webvh` uses for `entryHash`. `value` must already have every
+ * proof stripped (operations.ts's `unsecuredDocument`) -- a signature
+ * is never deterministic (ECDSA's random nonce, plus the s/(n-s)
+ * malleability every signature carries before low-S normalization), so
+ * hashing one in would make the result depend on which valid signature
+ * happened to be produced, not just on content.
+ */
 export async function contentRef(value: unknown): Promise<string> {
-  const digest = await sha256(canonicalize(value));
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  assertJCSSafe(value);
+  const digest = new Uint8Array(await sha256(canonicalize(value)));
+  return multihashEncode(digest);
 }
 
 export interface Keypair {
-  publicKey: string; // base64url-encoded SPKI
-  privateKey: string; // base64url-encoded PKCS8
+  publicKey: string; // Multikey ('z'-prefixed base58btc) -- Fix 4: the wire format everywhere a public key appears, inside an operation included. SPKI is now purely an internal WebCrypto-import detail, converted to/from at the crypto.ts boundary only.
+  privateKey: string; // base64url-encoded PKCS8 -- private keys never appear in any operation's own content, so there's no wire-format pressure on this half; unchanged.
 }
 
 const BASE58BTC_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/** Multibase ('z'-prefixed base58btc) encoding of a raw byte string -- used for both Multikey values and Data Integrity `proofValue`s, the two places this method's wire format uses multibase. */
+export function toMultibaseBase58btc(bytes: Uint8Array): string {
+  return "z" + base58btcEncode(bytes);
+}
+
+export function fromMultibaseBase58btc(s: string): Uint8Array {
+  if (!s.startsWith("z")) throw new Error("expected a 'z'-prefixed (base58btc) multibase string");
+  return base58btcDecode(s.slice(1));
+}
+
+const SHA2_256_MULTIHASH_CODE = 0x12; // single-byte varint
+const SHA256_DIGEST_LENGTH = 0x20; // single-byte varint
+
+/** sha2-256 multihash (multiformats): code || length || digest, multibase-encoded. See contentRef's own comment for why this, not a bare hash, is this method's anchor/entryHash format. */
+function multihashEncode(digest: Uint8Array): string {
+  const payload = new Uint8Array(2 + digest.length);
+  payload[0] = SHA2_256_MULTIHASH_CODE;
+  payload[1] = SHA256_DIGEST_LENGTH;
+  payload.set(digest, 2);
+  return toMultibaseBase58btc(payload);
+}
 
 function base58btcEncode(bytes: Uint8Array): string {
   let n = 0n;
@@ -129,15 +198,17 @@ function decodeVarint(bytes: Uint8Array): [value: number, rest: Uint8Array] {
 const P256_PUB_MULTICODEC = 0x1200;
 
 /**
- * Converts this library's internal base64url-SPKI public key format into a
- * proper W3C Multikey multibase string: the raw EC point, compressed (33
- * bytes), prefixed with the p256-pub multicodec varint, base58btc-encoded,
- * and 'z'-prefixed. Used only when rendering a DID document
- * (document.ts's toDidDocument) -- internal signing/verification keeps
- * using the SPKI/PKCS8 base64url format unchanged, so this has no bearing
- * on any already-signed operation log content and needs no migration.
+ * Converts the raw SPKI bytes Web Crypto exports into a W3C Multikey
+ * multibase string: the EC point, compressed (33 bytes), prefixed with
+ * the p256-pub multicodec varint, base58btc-encoded, 'z'-prefixed. Fix
+ * 4: Multikey is this library's own public key format now, everywhere
+ * one appears -- inside operations, in a resolved DID document, and in
+ * this library's own `Keypair.publicKey` -- so this (and its inverse,
+ * `multikeyToSpki`) is the one place SPKI/Multikey conversion happens,
+ * used by `generateKeypair`/`importPublicKey` at the WebCrypto boundary
+ * rather than by any caller.
  *
- * The fixed 26-byte SPKI header for P-256's own AlgorithmIdentifier
+ * The fixed 26-byte SPKI header for P-256's AlgorithmIdentifier
  * (ecPublicKey + prime256v1 OIDs) is constant length, confirmed directly
  * against Web Crypto's own exportKey("spki", ...) output (91 bytes total),
  * not assumed -- so the trailing 65 bytes are always the raw uncompressed
@@ -156,7 +227,7 @@ export function spkiToMultikey(publicKeyB64url: string): string {
   const payload = new Uint8Array(prefix.length + compressed.length);
   payload.set(prefix, 0);
   payload.set(compressed, prefix.length);
-  return "z" + base58btcEncode(payload);
+  return toMultibaseBase58btc(payload);
 }
 
 // NIST P-256 (secp256r1) curve parameters -- fixed constants of the curve,
@@ -224,17 +295,17 @@ const SPKI_P256_HEADER = new Uint8Array(
 );
 
 /**
- * The inverse of spkiToMultikey -- recovers this library's internal
- * base64url-SPKI format from a W3C Multikey string, the only form a
- * resolved DID document actually exposes (REQ-3-1: every verificationMethod
- * is type Multikey). Needed by any caller that wants to verify a signature
- * (a registrar attestation, a log-head statement) against a key it only
- * has by resolving a DID document, rather than one it already holds in
- * this library's internal format from signing/generating a key directly.
+ * The inverse of spkiToMultikey -- recovers the raw SPKI bytes Web
+ * Crypto's `importKey("spki", ...)` needs from a Multikey string, the
+ * format every public key now arrives in (an operation's own
+ * `operationalKeys`, a resolved DID document's `verificationMethod`, a
+ * Data Integrity proof's `verificationMethod`). Internal to the
+ * WebCrypto import boundary (`importPublicKey`, below) -- no caller
+ * outside this file needs to reach for it directly anymore, though it
+ * stays exported for a caller that already has raw SPKI from elsewhere.
  */
 export function multikeyToSpki(multikey: string): string {
-  if (!multikey.startsWith("z")) throw new Error("expected a 'z'-prefixed Multikey string");
-  const decoded = base58btcDecode(multikey.slice(1));
+  const decoded = fromMultibaseBase58btc(multikey);
   const [codec, rest] = decodeVarint(decoded);
   if (codec !== P256_PUB_MULTICODEC) throw new Error(`expected the p256-pub multicodec (0x1200), got 0x${codec.toString(16)}`);
   if (rest.length !== 33) throw new Error(`expected a 33-byte compressed P-256 point, got ${rest.length} bytes`);
@@ -252,39 +323,101 @@ export function multikeyToSpki(multikey: string): string {
 const ECDSA_PARAMS = { name: "ECDSA", namedCurve: "P-256" } as const;
 const SIGN_PARAMS = { name: "ECDSA", hash: "SHA-256" } as const;
 
+// P-256's own order (n) -- needed only for low-S normalization below, since
+// WebCrypto's ECDSA sign() already returns raw IEEE P1363 r||s (not DER),
+// matching the Web Crypto spec exactly, with no decompression or encoding
+// step needed to use it directly as a Data Integrity proofValue's payload.
+const P256_N = BigInt("0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+
+/**
+ * ECDSA's s and (n - s) are both valid signatures for the same message
+ * under the same key -- anyone, not just the signer, can derive the
+ * second from the first. Signing always normalizes to the smaller of
+ * the two (s <= n/2, "low-S"), and verification rejects a high-S
+ * signature outright rather than accepting both forms, so a given
+ * (message, key) pair has exactly one valid signature bit-for-bit, not
+ * two. did:plc does the same; WebCrypto itself has no low-S mode.
+ */
+function normalizeLowS(sig: Uint8Array): Uint8Array {
+  const s = bytesToBigInt(sig.slice(32, 64));
+  const halfN = P256_N / 2n;
+  if (s <= halfN) return sig;
+  const out = new Uint8Array(64);
+  out.set(sig.slice(0, 32), 0);
+  out.set(bigIntToBytes(P256_N - s, 32), 32);
+  return out;
+}
+
+function isLowS(sig: Uint8Array): boolean {
+  return bytesToBigInt(sig.slice(32, 64)) <= P256_N / 2n;
+}
+
 /** P-256 keypair -- stands in for the spec's did:key rotation keys. */
 export async function generateKeypair(): Promise<Keypair> {
   const pair = await crypto.subtle.generateKey(ECDSA_PARAMS, true, ["sign", "verify"]);
-  const [publicKey, privateKey] = await Promise.all([
+  const [publicKeySpki, privateKey] = await Promise.all([
     crypto.subtle.exportKey("spki", pair.publicKey),
     crypto.subtle.exportKey("pkcs8", pair.privateKey),
   ]);
-  return { publicKey: bytesToBase64url(publicKey), privateKey: bytesToBase64url(privateKey) };
+  return { publicKey: spkiToMultikey(bytesToBase64url(publicKeySpki)), privateKey: bytesToBase64url(privateKey) };
 }
 
 async function importPrivateKey(b64url: string): Promise<CryptoKey> {
   return crypto.subtle.importKey("pkcs8", base64urlToBytes(b64url) as BufferSource, ECDSA_PARAMS, false, ["sign"]);
 }
 
-async function importPublicKey(b64url: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey("spki", base64urlToBytes(b64url) as BufferSource, ECDSA_PARAMS, false, ["verify"]);
+async function importPublicKey(multikey: string): Promise<CryptoKey> {
+  const spki = multikeyToSpki(multikey);
+  return crypto.subtle.importKey("spki", base64urlToBytes(spki) as BufferSource, ECDSA_PARAMS, false, ["verify"]);
 }
 
 export async function signPayload(payload: unknown, privateKeyB64url: string): Promise<string> {
+  assertJCSSafe(payload);
   const key = await importPrivateKey(privateKeyB64url);
-  const sig = await crypto.subtle.sign(SIGN_PARAMS, key, new TextEncoder().encode(canonicalize(payload)));
-  return bytesToBase64url(sig);
+  const sig = new Uint8Array(await crypto.subtle.sign(SIGN_PARAMS, key, new TextEncoder().encode(canonicalize(payload))));
+  return bytesToBase64url(normalizeLowS(sig));
 }
 
-export async function verifyPayload(payload: unknown, sigB64url: string, publicKeyB64url: string): Promise<boolean> {
+export async function verifyPayload(payload: unknown, sigB64url: string, publicKeyMultikey: string): Promise<boolean> {
   try {
-    const key = await importPublicKey(publicKeyB64url);
-    return await crypto.subtle.verify(
-      SIGN_PARAMS,
-      key,
-      base64urlToBytes(sigB64url) as BufferSource,
-      new TextEncoder().encode(canonicalize(payload)),
-    );
+    assertJCSSafe(payload);
+    const sigBytes = base64urlToBytes(sigB64url);
+    if (sigBytes.length !== 64 || !isLowS(sigBytes)) return false; // malformed or non-canonical (malleable) -- reject outright, never accept both forms
+    const key = await importPublicKey(publicKeyMultikey);
+    return await crypto.subtle.verify(SIGN_PARAMS, key, sigBytes as BufferSource, new TextEncoder().encode(canonicalize(payload)));
+  } catch {
+    return false;
+  }
+}
+
+export async function sha256Bytes(input: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", input as BufferSource));
+}
+
+/**
+ * Lower-level than `signPayload`/`verifyPayload`: signs/verifies raw
+ * bytes directly (ECDSA always hashes its own input internally, so
+ * passing already-hashed bytes here still produces an ordinary
+ * signature over them, one further hash deep) rather than a JSON value
+ * -- what operations.ts's Data Integrity proof construction needs,
+ * since ecdsa-jcs-2019's own signing input is a fixed concatenation of
+ * two hashes, not a JSON document to canonicalize. `proofValue`'s own
+ * encoding is base58btc multibase (REQ-6-4/W3C vc-di-ecdsa), not this
+ * library's ordinary base64url -- distinct from `signPayload`'s own
+ * encoding, used for the Data Integrity proof set specifically.
+ */
+export async function signRawBytes(bytes: Uint8Array, privateKeyB64url: string): Promise<string> {
+  const key = await importPrivateKey(privateKeyB64url);
+  const sig = new Uint8Array(await crypto.subtle.sign(SIGN_PARAMS, key, bytes as BufferSource));
+  return toMultibaseBase58btc(normalizeLowS(sig));
+}
+
+export async function verifyRawBytes(bytes: Uint8Array, sigMultibase: string, publicKeyMultikey: string): Promise<boolean> {
+  try {
+    const sigBytes = fromMultibaseBase58btc(sigMultibase);
+    if (sigBytes.length !== 64 || !isLowS(sigBytes)) return false;
+    const key = await importPublicKey(publicKeyMultikey);
+    return await crypto.subtle.verify(SIGN_PARAMS, key, sigBytes as BufferSource, bytes as BufferSource);
   } catch {
     return false;
   }

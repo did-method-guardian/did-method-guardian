@@ -13,8 +13,8 @@ npm install @did-guardian/lib
 ## What's in this package
 
 - `replay(did, log)` / `toDidDocument(state)` -- reconstruct current state from an operation log, and render it as an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document.
-- `generateKeypair()` / `signPayload()` / `verifyPayload()` -- P-256 ECDSA key operations (`src/crypto.ts`).
-- `spkiToMultikey()` -- converts this library's internal key format into a proper [Multikey](https://www.w3.org/TR/vc-data-integrity/#multikey) multibase string, exactly what `toDidDocument` uses to render `publicKeyMultibase`.
+- `generateKeypair()` / `signPayload()` / `verifyPayload()` -- P-256 ECDSA key operations (`src/crypto.ts`). Every public key this library produces or accepts, at every boundary, is already a [Multikey](https://www.w3.org/TR/cid-1.0/#Multikey) multibase string -- the legacy SPKI format is purely an internal WebCrypto import/export detail.
+- `createProof()` / `verifyPop()` / `verifySignerProof()` -- [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proofs (`ecdsa-jcs-2019`), the signed envelope every operation type uses (`src/operations.ts`).
 - Threshold and guardian-policy verification rules (`src/rules.ts`) matching the formal spec's §5 and §7.
 - `schemas/` -- JSON Schemas for `GuardianPolicy` and every operation type, matching this package's own `src/types.ts`.
 

@@ -1,4 +1,5 @@
 import type { Env } from "./env.js";
+import type { DataIntegrityProof } from "@did-guardian/lib";
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, getLogHead, rotateWard, takeCustody, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
@@ -204,10 +205,10 @@ export default {
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
           }
-          const body = (await request.json().catch(() => ({}))) as { public_key?: string; key_sig?: string; force?: boolean };
+          const body = (await request.json().catch(() => ({}))) as { public_key?: string; key_proof?: DataIntegrityProof; force?: boolean };
           if (!body.public_key) return error("public_key is required", 400);
-          if (!body.key_sig) return error("key_sig is required -- proof that the caller holds public_key's private half, signed over the rotation payload (see the registrar API doc)", 400);
-          const result = await takeCustody(env, targetName, body.public_key, body.key_sig, body.force);
+          if (!body.key_proof) return error("key_proof is required -- a Data Integrity proof that the caller holds public_key's private half, over the rotation payload (see the registrar API doc)", 400);
+          const result = await takeCustody(env, targetName, body.public_key, body.key_proof, body.force);
           return json({ ok: true, did: result.did, document: result.document, warnings: result.warnings });
         }
         if (suffix === "/relinquish" && request.method === "POST") {
@@ -350,9 +351,9 @@ export default {
           return json(status);
         }
         if (pendingSuffix === "/sign" && request.method === "POST") {
-          const body = (await request.json()) as { signer_did?: string; sig?: string };
-          if (!body.signer_did || !body.sig) return error("signer_did and sig are required", 400);
-          const result = await contributeToOperation(env, id, body.signer_did, body.sig);
+          const body = (await request.json()) as { signer_did?: string; proof?: DataIntegrityProof };
+          if (!body.signer_did || !body.proof) return error("signer_did and proof are required", 400);
+          const result = await contributeToOperation(env, id, body.signer_did, body.proof);
           return json(result);
         }
         if (pendingSuffix === "/sign-as-self" && request.method === "POST") {

@@ -7,8 +7,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
-import { generateKeypair, signPayload } from "../src/crypto.js";
-import { signCustodialRotate } from "../src/operations.js";
+import { generateKeypair } from "../src/crypto.js";
+import { signCustodialRotate, createProof, unsecuredDocument } from "../src/operations.js";
 import type { KeyResolver } from "../src/operations.js";
 import { meetsThreshold, requiredCount } from "../src/quorum.js";
 import {
@@ -20,7 +20,7 @@ import {
   type VerificationContext,
 } from "../src/rules.js";
 import { DEFAULT_GUARDIAN_POLICY } from "../src/types.js";
-import type { Did, GuardianPolicy, ResolvedState } from "../src/types.js";
+import type { DataIntegrityProof, Did, GuardianPolicy, ResolvedState } from "../src/types.js";
 
 // --- test fixtures -----------------------------------------------------
 
@@ -28,7 +28,6 @@ function makeState(overrides: Partial<ResolvedState> = {}): ResolvedState {
   return {
     did: "did:guardian:example.com:alice",
     operationalKeys: [],
-    verificationMethods: {},
     services: {},
     guardians: [],
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY },
@@ -45,21 +44,23 @@ function allLive(): (did: Did) => boolean {
   return () => true;
 }
 
-async function signMap(payload: unknown, signerKeys: Record<Did, string>, signers: Did[]): Promise<Record<Did, string>> {
-  const sigs: Record<Did, string> = {};
-  for (const did of signers) sigs[did] = await signPayload(payload, signerKeys[did]);
-  return sigs;
+/** Every DID in `signers` produces its own DataIntegrityProof over `payload`'s unsecured content, using the same `${did}#key-0` convention every non-PoP signer proof in this codebase uses. The ordinary-case equivalent of operations.ts's signProofSet, for tests that build an op shape rules.ts doesn't have a dedicated sign* helper for. */
+async function signProofs(payload: unknown, signerKeys: Record<Did, string>, signers: Did[]): Promise<DataIntegrityProof[]> {
+  const unsecuredDoc = unsecuredDocument(payload as any);
+  const proofs: DataIntegrityProof[] = [];
+  for (const did of signers) proofs.push(await createProof(unsecuredDoc, `${did}#key-0`, signerKeys[did]));
+  return proofs;
 }
 
 // --- REQ-7.1: genesis shape ---------------------------------------------
 
 test("REQ-7.1-1: genesis with a non-empty incoming guardian who never co-signed is rejected", () => {
   const result = checkGenesisShape({
+    did: "did:guardian:acme.com:alice",
     incoming: ["did:guardian:example.com:board"],
-    sigs: {},
+    proof: [],
     prev: null,
     operationalKeys: ["pk"],
-    verificationMethods: { "key-1": "pk" },
     services: {},
     creator: "did:guardian:acme.com",
   });
@@ -67,26 +68,22 @@ test("REQ-7.1-1: genesis with a non-empty incoming guardian who never co-signed 
   assert.match(result.reason!, /REQ-7\.1-1/);
 });
 
-test("REQ-7.1-1 (v0.3, relaxed): genesis with a non-empty incoming guardian who co-signed passes shape -- a guardian may now be established directly at genesis", () => {
-  const result = checkGenesisShape({
-    incoming: ["did:guardian:example.com:board"],
-    sigs: { "did:guardian:example.com:board": "sig" },
-    prev: null,
-    operationalKeys: ["pk"],
-    verificationMethods: { "key-1": "pk" },
-    services: {},
-    creator: "did:guardian:acme.com",
-  });
+test("REQ-7.1-1 (v0.3, relaxed): genesis with a non-empty incoming guardian who co-signed passes shape -- a guardian may now be established directly at genesis", async () => {
+  const boardDid: Did = "did:guardian:example.com:board";
+  const board = await generateKeypair();
+  const partial = { did: "did:guardian:acme.com:alice" as Did, incoming: [boardDid], prev: null, operationalKeys: ["pk"], services: {}, creator: "did:guardian:acme.com" as Did };
+  const proof = await signProofs(partial, { [boardDid]: board.privateKey }, [boardDid]);
+  const result = checkGenesisShape({ ...partial, proof });
   assert.equal(result.valid, true, result.reason);
 });
 
 test("REQ-7.1-2: genesis with non-null prev is rejected", () => {
   const result = checkGenesisShape({
+    did: "did:guardian:acme.com:alice",
     incoming: [],
-    sigs: {},
+    proof: [],
     prev: "some-cid",
     operationalKeys: ["pk"],
-    verificationMethods: { "key-1": "pk" },
     services: {},
     creator: "did:guardian:acme.com",
   });
@@ -96,24 +93,38 @@ test("REQ-7.1-2: genesis with non-null prev is rejected", () => {
 
 test("REQ-7.1-4: genesis with no creator is rejected", () => {
   const result = checkGenesisShape({
+    did: "did:guardian:acme.com:alice",
     incoming: [],
-    sigs: {},
+    proof: [],
     prev: null,
     operationalKeys: ["pk"],
-    verificationMethods: { "key-1": "pk" },
     services: {},
   });
   assert.equal(result.valid, false);
   assert.match(result.reason!, /REQ-7\.1-4/);
 });
 
-test("REQ-7.1-1/2/3/4: a conformant genesis (empty incoming, null prev, full key material, a creator) is accepted", () => {
+test("Fix 2: genesis with no did at all is rejected", () => {
   const result = checkGenesisShape({
+    did: "" as Did,
     incoming: [],
-    sigs: {},
+    proof: [],
     prev: null,
     operationalKeys: ["pk"],
-    verificationMethods: { "key-1": "pk" },
+    services: {},
+    creator: "did:guardian:acme.com",
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.reason!, /Fix 2/);
+});
+
+test("REQ-7.1-1/2/3/4: a conformant genesis (empty incoming, null prev, full key material, a creator) is accepted", () => {
+  const result = checkGenesisShape({
+    did: "did:guardian:acme.com:alice",
+    incoming: [],
+    proof: [],
+    prev: null,
+    operationalKeys: ["pk"],
     services: {},
     creator: "did:guardian:acme.com",
   });
@@ -144,33 +155,34 @@ test("REQ-7.2-12: checkShape rejects a rotation whose new key carries no proof o
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [wardDid]: ward.publicKey }), isGuardianLive: allLive() };
 
   const op = await signCustodialRotate(
-    { type: "custodial_rotate", operationalKeys: [newKey.publicKey], verificationMethods: {}, services: {}, prev: "cid0" },
+    { type: "custodial_rotate", operationalKeys: [newKey.publicKey], services: {}, prev: "cid0" },
+    wardDid,
     ward.privateKey,
     { [newKey.publicKey]: newKey.privateKey },
   );
   const validShape = await OPERATION_RULES.custodial_rotate.checkShape(op, ctx);
   assert.equal(validShape.valid, true, validShape.reason);
 
-  const missingProof = { ...op, keySigs: {} };
+  const missingProof = { ...op, proof: op.proof.filter((p) => !p.verificationMethod.startsWith("did:key:")) }; // strips the new key's own PoP proof, keeps the ward's authorizing signature
   const rejectedShape = await OPERATION_RULES.custodial_rotate.checkShape(missingProof, ctx);
   assert.equal(rejectedShape.valid, false, "a new key with no proof of possession must be rejected regardless of who authorized installing it");
 });
 
 test("REQ-7.2-1(a): a ward's own single operational key alone satisfies rotation, regardless of recovery_threshold", async () => {
   const ward = await generateKeypair();
-  const wardDid = "did:guardian:example.com:alice";
+  const wardDid: Did = "did:guardian:example.com:alice";
   const state = makeState({ did: wardDid, guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "unanimous" } });
-  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
-  const sig = await signPayload(partial, ward.privateKey);
-  const op = { ...partial, sig, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], services: {}, prev: "cid0" };
+  const proof = await signProofs(partial, { [wardDid]: ward.privateKey }, [wardDid]); // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const op = { ...partial, proof };
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [wardDid]: ward.publicKey }), isGuardianLive: allLive() };
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctx), true);
 });
 
 test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate without the ward's own key", async () => {
   const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
-  const g2Did = "did:guardian:example.com:g2";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const g2Did: Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({
@@ -178,9 +190,9 @@ test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate w
     guardians: [g1Did, g2Did],
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "majority" },
   });
-  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]); // majority of N=2 is 2 -- one alone should NOT suffice
-  const op = { ...partial, sigs, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], services: {}, prev: "cid0" };
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]); // majority of N=2 is 2 -- one alone should NOT suffice
+  const op = { ...partial, proof };
   const ctx: VerificationContext = {
     wardDid,
     state,
@@ -189,8 +201,8 @@ test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate w
   };
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctx), false, "one of two guardians should not meet majority");
 
-  const sigsBoth = await signMap(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
-  const opBoth = { ...partial, sigs: sigsBoth, keySigs: {} };
+  const proofBoth = await signProofs(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
+  const opBoth = { ...partial, proof: proofBoth };
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(opBoth, [], ctx), true);
 });
 
@@ -202,16 +214,16 @@ test("REQ-4-2 regression: a guardian signature collected before that guardian's 
   // bug this fixes) would see the new key and reject g1's own, perfectly
   // legitimate T1 signature.
   const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
+  const g1Did: Did = "did:guardian:example.com:g1";
   const g1OldKey = await generateKeypair();
   const g1NewKey = await generateKeypair();
   const rotatedAt = new Date("2026-06-01T00:00:00Z");
   const signedAt = "2026-05-01T00:00:00.000Z"; // before rotatedAt
 
   const state = makeState({ did: wardDid, guardians: [g1Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } });
-  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
-  const sigs = await signMap(partial, { [g1Did]: g1OldKey.privateKey }, [g1Did]);
-  const op = { ...partial, sigs, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], services: {}, prev: "cid0" };
+  const proof = await signProofs(partial, { [g1Did]: g1OldKey.privateKey }, [g1Did]); // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const op = { ...partial, proof };
 
   const asOfAwareResolver: KeyResolver = (did, asOf) => {
     if (did !== g1Did) return undefined;
@@ -227,8 +239,8 @@ test("REQ-4-2 regression: a guardian signature collected before that guardian's 
 
 test("REQ-4-4: a deactivated guardian's signature no longer counts toward recovery_threshold", async () => {
   const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
-  const g2Did = "did:guardian:example.com:g2";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const g2Did: Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({
@@ -236,9 +248,9 @@ test("REQ-4-4: a deactivated guardian's signature no longer counts toward recove
     guardians: [g1Did, g2Did],
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" },
   });
-  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]);
-  const op = { ...partial, sigs, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], services: {}, prev: "cid0" };
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]); // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
+  const op = { ...partial, proof };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey });
 
   const ctxLive: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
@@ -274,30 +286,30 @@ test("REQ-6-9: a rotation accepted 72h or more ago is outside the recovery windo
 // --- REQ-7.2-3/4/5, REQ-5-5: guardian_add -------------------------------
 
 test("REQ-7.2-5: zero-to-one guardian_add requires both the incoming guardian's own key and the ward's own operational key", async () => {
-  const wardDid = "did:guardian:example.com:alice";
+  const wardDid: Did = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
-  const incomingDid = "did:guardian:example.com:board";
+  const incomingDid: Did = "did:guardian:example.com:board";
   const incoming = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const partial = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0" };
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey, [incomingDid]: incoming.publicKey });
 
-  const sigsIncomingOnly = await signMap(partial, { [incomingDid]: incoming.privateKey }, [incomingDid]);
+  const proofIncomingOnly = await signProofs(partial, { [incomingDid]: incoming.privateKey }, [incomingDid]);
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
   assert.equal(
-    await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs: sigsIncomingOnly }, [], ctx),
+    await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, proof: proofIncomingOnly }, [], ctx),
     false,
     "incoming alone, without the ward's own key, must not establish guardianship over an autonomous ward",
   );
 
-  const sigsBoth = await signMap(partial, { [incomingDid]: incoming.privateKey, [wardDid]: ward.privateKey }, [incomingDid, wardDid]);
-  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs: sigsBoth }, [], ctx), true);
+  const proofBoth = await signProofs(partial, { [incomingDid]: incoming.privateKey, [wardDid]: ward.privateKey }, [incomingDid, wardDid]);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, proof: proofBoth }, [], ctx), true);
 });
 
 test("REQ-12-4: guardian_add verifies the same whether or not it carries an anchor -- SHOULD, not MUST", async () => {
-  const wardDid = "did:guardian:example.com:alice";
+  const wardDid: Did = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
-  const incomingDid = "did:guardian:example.com:board";
+  const incomingDid: Did = "did:guardian:example.com:board";
   const incoming = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey, [incomingDid]: incoming.publicKey });
@@ -306,25 +318,25 @@ test("REQ-12-4: guardian_add verifies the same whether or not it carries an anch
   const signers = [incomingDid, wardDid];
 
   const withoutAnchor = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0" };
-  const sigsWithout = await signMap(withoutAnchor, signerKeys, signers);
-  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...withoutAnchor, sigs: sigsWithout }, [], ctx), true);
+  const proofWithout = await signProofs(withoutAnchor, signerKeys, signers);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...withoutAnchor, proof: proofWithout }, [], ctx), true);
 
   const withAnchor = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0", anchor: "cid-of-board-genesis" };
-  const sigsWith = await signMap(withAnchor, signerKeys, signers);
-  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...withAnchor, sigs: sigsWith }, [], ctx), true);
+  const proofWith = await signProofs(withAnchor, signerKeys, signers);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...withAnchor, proof: proofWith }, [], ctx), true);
 
-  // The anchor is covered by the signature like any other field -- a
-  // signature produced over the anchor-less payload must NOT verify
-  // against a payload where an attacker has since attached a different
-  // anchor, since that's a different signed statement.
-  const tampered = { ...withoutAnchor, anchor: "attacker-supplied-anchor", sigs: sigsWithout };
+  // The anchor is covered by the proof like any other field -- a proof
+  // produced over the anchor-less payload must NOT verify against a
+  // payload where an attacker has since attached a different anchor,
+  // since that's a different signed statement.
+  const tampered = { ...withoutAnchor, anchor: "attacker-supplied-anchor", proof: proofWithout };
   assert.equal(await OPERATION_RULES.guardian_add.isSatisfied(tampered, [], ctx), false);
 });
 
 test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's own key plus enough of the current guardians to meet addition_threshold", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
-  const incomingDid = "did:guardian:example.com:newguy";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const incomingDid: Did = "did:guardian:example.com:newguy";
   const g1 = await generateKeypair();
   const incoming = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, addition_threshold: "majority" } });
@@ -332,15 +344,15 @@ test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [incomingDid]: incoming.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
 
-  const sigsIncomingOnly = await signMap(partial, { [incomingDid]: incoming.privateKey }, [incomingDid]);
+  const proofIncomingOnly = await signProofs(partial, { [incomingDid]: incoming.privateKey }, [incomingDid]);
   assert.equal(
-    await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs: sigsIncomingOnly }, [], ctx),
+    await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, proof: proofIncomingOnly }, [], ctx),
     false,
     "the v0.1 bug this closes: incoming's own consent alone used to be enough, with no existing-guardian approval at all",
   );
 
-  const sigsBoth = await signMap(partial, { [incomingDid]: incoming.privateKey, [g1Did]: g1.privateKey }, [incomingDid, g1Did]);
-  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs: sigsBoth }, [], ctx), true);
+  const proofBoth = await signProofs(partial, { [incomingDid]: incoming.privateKey, [g1Did]: g1.privateKey }, [incomingDid, g1Did]);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, proof: proofBoth }, [], ctx), true);
 
   // Regression: requiredSigners (used for notification/voting-UI purposes,
   // not the actual gate above) must list the REAL existing committee for
@@ -348,94 +360,94 @@ test("REQ-7.2-4: adding a guardian to a non-empty set needs the incoming party's
   // it used to always return [incoming, wardDid] regardless, so the
   // existing guardian whose approval this actually needs was never
   // notified and never offered a sign option.
-  const required = await OPERATION_RULES.guardian_add.requiredSigners({ ...partial, sigs: {} }, ctx);
+  const required = await OPERATION_RULES.guardian_add.requiredSigners({ ...partial, proof: [] }, ctx);
   assert.ok(required.includes(g1Did), "the real existing guardian must be listed as a required signer");
   assert.ok(!required.includes(wardDid), "the ward itself is never a signer for the non-empty guardian_add case");
 });
 
 test("REQ-7.2-5: guardian_add's requiredSigners lists the ward itself only for the zero-to-one case", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const incomingDid = "did:guardian:example.com:newguy";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const incomingDid: Did = "did:guardian:example.com:newguy";
   const state = makeState({ did: wardDid, guardians: [] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
-  const required = await OPERATION_RULES.guardian_add.requiredSigners({ type: "guardian_add", incoming: incomingDid, prev: "cid0", sigs: {} }, ctx);
+  const required = await OPERATION_RULES.guardian_add.requiredSigners({ type: "guardian_add", incoming: incomingDid, prev: "cid0", proof: [] }, ctx);
   assert.deepEqual([...required].sort(), [incomingDid, wardDid].sort());
 });
 
 test("REQ-7.2-7(b) regression: guardian_remove's requiredSigners lists the OTHER current guardians, not just outgoing -- the forced path's real signers", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const [g1Did, g2Did] = (["g1", "g2"] as const).map((n) => `did:guardian:${n}:example.com` as Did);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
-  const required = await OPERATION_RULES.guardian_remove.requiredSigners({ type: "guardian_remove", outgoing: g1Did, prev: "cid0", sigs: {} }, ctx);
+  const required = await OPERATION_RULES.guardian_remove.requiredSigners({ type: "guardian_remove", outgoing: g1Did, prev: "cid0", proof: [] }, ctx);
   assert.ok(required.includes(g2Did), "the other current guardian, whose approval the forced path needs, must be listed");
 });
 
 test("REQ-7.2-1 regression: custodial_rotate's requiredSigners lists the live guardian committee too, not just the ward", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
   const required = await OPERATION_RULES.custodial_rotate.requiredSigners(
-    { type: "custodial_rotate", keySigs: {}, operationalKeys: [], verificationMethods: {}, services: {}, prev: "cid0" },
+    { type: "custodial_rotate", operationalKeys: [], services: {}, prev: "cid0", proof: [] },
     ctx,
   );
   assert.ok(required.includes(g1Did), "the guardian committee, whose approval a recovery rotation can use, must be listed");
 });
 
 test("REQ-7.3-1 regression: custodial_tombstone's requiredSigners lists the live guardian committee too, not just the ward", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
-  const required = await OPERATION_RULES.custodial_tombstone.requiredSigners({ type: "custodial_tombstone", prev: "cid0", sigs: {} }, ctx);
+  const required = await OPERATION_RULES.custodial_tombstone.requiredSigners({ type: "custodial_tombstone", prev: "cid0", proof: [] }, ctx);
   assert.ok(required.includes(g1Did), "a guardian able to sign a tombstone under a stricter-than-default threshold must be listed");
 });
 
 test("REQ-7.2-3: guardian_add naming an already-current guardian is rejected", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
   const g1 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const partial = { type: "guardian_add" as const, incoming: g1Did, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]);
-  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs }, [], ctx), false);
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]);
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, proof }, [], ctx), false);
 });
 
 test("REQ-7.2-11: a ward cannot name itself as its own guardian, even zero-to-one with its own key alone", async () => {
-  const wardDid = "did:guardian:example.com:alice";
+  const wardDid: Did = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const partial = { type: "guardian_add" as const, incoming: wardDid, prev: "cid0" };
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [wardDid]: ward.privateKey }, [wardDid]);
-  assert.equal((await OPERATION_RULES.guardian_add.checkShape({ ...partial, sigs }, ctx)).valid, false, "checkShape rejects it outright");
-  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, sigs }, [], ctx), false, "isSatisfied rejects it too, defense in depth for any caller that skips checkShape");
+  const proof = await signProofs(partial, { [wardDid]: ward.privateKey }, [wardDid]);
+  assert.equal((await OPERATION_RULES.guardian_add.checkShape({ ...partial, proof }, ctx)).valid, false, "checkShape rejects it outright");
+  assert.equal(await OPERATION_RULES.guardian_add.isSatisfied({ ...partial, proof }, [], ctx), false, "isSatisfied rejects it too, defense in depth for any caller that skips checkShape");
 });
 
 // --- REQ-7.2-6/7, REQ-5-4, REQ-5-7: guardian_remove ----------------------
 
 test("REQ-7.2-7(a): a guardian can always voluntarily remove itself", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
-  const g2Did = "did:guardian:example.com:g2";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const g2Did: Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did] });
   const partial = { type: "guardian_remove" as const, outgoing: g1Did, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]);
-  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, sigs }, [], ctx), true);
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]);
+  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, proof }, [], ctx), true);
 });
 
 test("REQ-7.2-7(b) regression: at exactly two guardians, forced removal is unreachable -- majority of the FULL set (N=2 -> M=2) can never be met by the one remaining guardian alone", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
-  const g2Did = "did:guardian:example.com:g2";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const g2Did: Did = "did:guardian:example.com:g2";
   const g1 = await generateKeypair();
   const g2 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, removal_threshold: "majority" } });
@@ -443,41 +455,41 @@ test("REQ-7.2-7(b) regression: at exactly two guardians, forced removal is unrea
   const partial = { type: "guardian_remove" as const, outgoing: g1Did, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g2Did]: g2.privateKey }, [g2Did]); // only the OTHER guardian signs, not g1
+  const proof = await signProofs(partial, { [g2Did]: g2.privateKey }, [g2Did]); // only the OTHER guardian signs, not g1
   assert.equal(
-    await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, sigs }, [], ctx),
+    await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, proof }, [], ctx),
     false,
     "one of two guardians must never be able to unilaterally eject the other",
   );
 });
 
 test("REQ-7.2-7(b): at three guardians, two of the other three meeting majority can forcibly remove the third", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const [g1Did, g2Did, g3Did] = ["g1", "g2", "g3"].map((n) => `did:guardian:${n}:example.com`);
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const [g1Did, g2Did, g3Did] = (["g1", "g2", "g3"] as const).map((n) => `did:guardian:${n}:example.com` as Did);
   const [g1, g2, g3] = await Promise.all([generateKeypair(), generateKeypair(), generateKeypair()]);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did, g3Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, removal_threshold: "majority" } });
   const partial = { type: "guardian_remove" as const, outgoing: g3Did, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey, [g3Did]: g3.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
-  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, sigs }, [], ctx), true);
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
+  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, proof }, [], ctx), true);
 });
 
 test("REQ-7.2-6: removing the only current guardian is rejected -- guardian_relinquish is the correct operation for full dissolution", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const g1Did = "did:guardian:example.com:g1";
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
   const g1 = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const partial = { type: "guardian_remove" as const, outgoing: g1Did, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]);
-  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, sigs }, [], ctx), false);
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]);
+  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, proof }, [], ctx), false);
 });
 
 test("REQ-5-7: guardian_remove is rejected if it would bring the guardian count below min_guardian_count, even if otherwise satisfied", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const [g1Did, g2Did, g3Did] = ["g1", "g2", "g3"].map((n) => `did:guardian:${n}:example.com`);
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const [g1Did, g2Did, g3Did] = (["g1", "g2", "g3"] as const).map((n) => `did:guardian:${n}:example.com` as Did);
   const [g1, g2, g3] = await Promise.all([generateKeypair(), generateKeypair(), generateKeypair()]);
   const state = makeState({
     did: wardDid,
@@ -487,64 +499,89 @@ test("REQ-5-7: guardian_remove is rejected if it would bring the guardian count 
   const partial = { type: "guardian_remove" as const, outgoing: g1Did, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey, [g3Did]: g3.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]); // voluntary, would ordinarily succeed under "any"
-  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, sigs }, [], ctx), false);
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]); // voluntary, would ordinarily succeed under "any"
+  assert.equal(await OPERATION_RULES.guardian_remove.isSatisfied({ ...partial, proof }, [], ctx), false);
 });
 
 // --- REQ-7.2-8, REQ-5-4: guardian_relinquish ------------------------------
 
 test("REQ-7.2-8: guardian_relinquish needs enough current guardians to meet removal_threshold, evaluated against the full set", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const [g1Did, g2Did] = (["g1", "g2"] as const).map((n) => `did:guardian:${n}:example.com` as Did);
   const [g1, g2] = await Promise.all([generateKeypair(), generateKeypair()]);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, removal_threshold: "unanimous" } });
   const partial = { type: "guardian_relinquish" as const, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
 
-  const sigsOne = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]);
-  assert.equal(await OPERATION_RULES.guardian_relinquish.isSatisfied({ ...partial, sigs: sigsOne }, [], ctx), false);
+  const proofOne = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]);
+  assert.equal(await OPERATION_RULES.guardian_relinquish.isSatisfied({ ...partial, proof: proofOne }, [], ctx), false);
 
-  const sigsBoth = await signMap(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
-  assert.equal(await OPERATION_RULES.guardian_relinquish.isSatisfied({ ...partial, sigs: sigsBoth }, [], ctx), true);
+  const proofBoth = await signProofs(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
+  assert.equal(await OPERATION_RULES.guardian_relinquish.isSatisfied({ ...partial, proof: proofBoth }, [], ctx), true);
 });
 
 // --- REQ-7.2-9/10, REQ-5-6: policy_update ---------------------------------
 
 test("REQ-7.2-10: policy_update is rejected while the current guardian set is empty", async () => {
-  const wardDid = "did:guardian:example.com:alice";
+  const wardDid: Did = "did:guardian:example.com:alice";
   const state = makeState({ did: wardDid, guardians: [] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
-  const op = { type: "policy_update" as const, policy: { ...DEFAULT_GUARDIAN_POLICY }, prev: "cid0", sigs: {} };
+  const op = { type: "policy_update" as const, policy: { ...DEFAULT_GUARDIAN_POLICY }, prev: "cid0", proof: [] };
   const result = await OPERATION_RULES.policy_update.checkShape(op, ctx);
   assert.equal(result.valid, false);
   assert.match(result.reason!, /REQ-7\.2-10/);
 });
 
 test("REQ-5-6: policy_update is evaluated against the CURRENT policy_threshold, never the proposed new one", async () => {
-  const wardDid = "did:guardian:example.com:alice";
-  const [g1Did, g2Did] = ["g1", "g2"].map((n) => `did:guardian:${n}:example.com`);
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const [g1Did, g2Did] = (["g1", "g2"] as const).map((n) => `did:guardian:${n}:example.com` as Did);
   const [g1, g2] = await Promise.all([generateKeypair(), generateKeypair()]);
   const state = makeState({ did: wardDid, guardians: [g1Did, g2Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, policy_threshold: "any" } });
   const proposed: GuardianPolicy = { ...DEFAULT_GUARDIAN_POLICY, policy_threshold: "unanimous" };
   const partial = { type: "policy_update" as const, policy: proposed, prev: "cid0" };
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]); // one of two -- satisfies "any" (current), would fail "unanimous" (proposed)
-  assert.equal(await OPERATION_RULES.policy_update.isSatisfied({ ...partial, sigs }, [], ctx), true);
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]); // one of two -- satisfies "any" (current), would fail "unanimous" (proposed)
+  assert.equal(await OPERATION_RULES.policy_update.isSatisfied({ ...partial, proof }, [], ctx), true);
+});
+
+test("Fix 6: policy_update's own checkShape refuses to install a policy version newer than this verifier understands", async () => {
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const state = makeState({ did: wardDid, guardians: [g1Did] });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
+  const futurePolicy: GuardianPolicy = { ...DEFAULT_GUARDIAN_POLICY, version: 999999 };
+  const op = { type: "policy_update" as const, policy: futurePolicy, prev: "cid0", proof: [] };
+  const result = await OPERATION_RULES.policy_update.checkShape(op, ctx);
+  assert.equal(result.valid, false);
+});
+
+test("Fix 6: verifyByRules refuses to evaluate ANY operation once the current policy's own version exceeds what this verifier understands", async () => {
+  const { verifyByRules } = await import("../src/rules.js");
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const g1 = await generateKeypair();
+  const state = makeState({ did: wardDid, guardians: [g1Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, version: 999999, removal_threshold: "any" } });
+  const partial = { type: "guardian_remove" as const, outgoing: g1Did, prev: "cid0" };
+  const proof = await signProofs(partial, { [g1Did]: g1.privateKey }, [g1Did]); // this alone would ordinarily satisfy removal_threshold: "any"
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [g1Did]: g1.publicKey }), isGuardianLive: allLive() };
+  const op = { ...partial, proof };
+  const result = await verifyByRules(op, ctx);
+  assert.equal(result.valid, false, "an otherwise-satisfied operation must still be refused when the governing policy's own version isn't understood");
 });
 
 // --- REQ-7.3-1, REQ-5-3: custodial_tombstone ------------------------------
 
 test("REQ-7.3-1: the ward's own key alone satisfies tombstone under the default any-threshold", async () => {
-  const wardDid = "did:guardian:example.com:alice";
+  const wardDid: Did = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
   const state = makeState({ did: wardDid, guardians: [] });
   const partial = { type: "custodial_tombstone" as const, prev: "cid0" };
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
-  const sigs = await signMap(partial, { [wardDid]: ward.privateKey }, [wardDid]);
-  assert.equal(await OPERATION_RULES.custodial_tombstone.isSatisfied({ ...partial, sigs }, [], ctx), true);
+  const proof = await signProofs(partial, { [wardDid]: ward.privateKey }, [wardDid]);
+  assert.equal(await OPERATION_RULES.custodial_tombstone.isSatisfied({ ...partial, proof }, [], ctx), true);
 });
 
 // --- liveGuardians / REQ-4-4 helper --------------------------------------

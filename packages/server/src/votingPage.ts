@@ -26,7 +26,7 @@ import { getPendingOperationStatus, contributeToOperation, type PendingOperation
 import { getPendingOperation, getWardByDid } from "./db.js";
 import { checkRateLimit, clientIp } from "./rateLimit.js";
 import { decryptWardPrivateKey, RegistrarError } from "./registrar.js";
-import { signPayload } from "@did-guardian/lib";
+import { createProof, unsecuredDocument } from "@did-guardian/lib";
 
 const SESSION_COOKIE = "gw_session";
 
@@ -117,13 +117,13 @@ export async function signAsSelf(request: Request, env: Env, id: string): Promis
   const ward = await getWardByDid(env, wardDid);
   if (!ward) return html(pageShell("Error", `<h1>Error</h1><p class="error">Your own identity isn't custodied by this registrar.</p>`), 500);
 
-  const op = JSON.parse(row.partial_op) as { sig?: unknown; sigs?: unknown };
-  const { sig: _sig, sigs: _sigs, ...payload } = op;
+  const op = JSON.parse(row.partial_op);
+  const unsecuredDoc = unsecuredDocument(op);
   const privateKey = await decryptWardPrivateKey(env, ward);
-  const mySig = await signPayload(payload, privateKey);
+  const myProof = await createProof(unsecuredDoc, `${wardDid}#key-0`, privateKey);
 
   try {
-    await contributeToOperation(env, id, wardDid, mySig);
+    await contributeToOperation(env, id, wardDid, myProof);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;

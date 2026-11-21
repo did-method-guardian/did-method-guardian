@@ -24,7 +24,7 @@ import { html, escapeHtml, pageShell } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
 import { getWardByDid, resolveRelayInboxEntry } from "./db.js";
 import { decryptWardPrivateKey, RegistrarError } from "./registrar.js";
-import { signPayload, parseDid, wellKnownPath, type Did } from "@did-guardian/lib";
+import { signPayload, createProof, parseDid, wellKnownPath, type Did } from "@did-guardian/lib";
 
 interface RemotePendingStatus {
   id: string;
@@ -175,13 +175,13 @@ export async function handleRelaySignSubmit(request: Request, env: Env): Promise
     return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid)));
   }
 
-  const mySig = await signPayload(status.unsigned_payload, privateKey);
+  const myProof = await createProof(status.unsigned_payload, `${signerDid}#key-0`, privateKey);
   let signResp: Response;
   try {
     signResp = await fetch(`https://${domain}${wellKnownPath(name)}/pending/${opId}/sign`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ signer_did: signerDid, sig: mySig }),
+      body: JSON.stringify({ signer_did: signerDid, proof: myProof }),
     });
   } catch {
     return html(pageShell("Sign elsewhere", reviewBody(wardDid, opId, status, signerDid, { error: `Produced a signature, but couldn't reach ${domain} to submit it. Try again.` })), 502);

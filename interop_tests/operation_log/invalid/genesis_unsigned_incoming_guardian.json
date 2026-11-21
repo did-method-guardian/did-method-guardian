@@ -1,20 +1,21 @@
 {
-  "note": "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no signature at all -- establishing a guardian this way still requires that guardian's consent.",
+  "note": "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no proof at all -- establishing a guardian this way still requires that guardian's consent.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+    "did:guardian:board-a:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
+    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
   },
+  "registrar_did": "did:guardian:example:com",
   "log": [
     {
-      "cid": "2abf5a5e3a916c26daff4e88a560c7dd62cdafba92f845ffa3b78a87ba7a9031",
+      "cid": "zQmRdrc3EcBdMqTxBi9D4iBhqNQ8Jaj3Re1iLr2iCwneGKH",
       "op": {
         "type": "custodial_create",
+        "did": "did:guardian:unsigned:example:com",
         "name": "unsigned",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
         ],
-        "verificationMethods": {},
         "services": {},
         "outgoing": [],
         "incoming": [
@@ -22,14 +23,24 @@
         ],
         "prev": null,
         "creator": "did:guardian:example:com",
-        "registrar": {
-          "did": "did:guardian:example:com",
-          "sig": "FWQEtRC3zdDmzxE8t2BcjTL2_GLkTYSfiERNJQB29X3s0aRCDWSu89Pw1pdx9AU8xYg8Y7l3BrhvU03COGrpSg"
-        },
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "wz6QKY0MsiWV3bmhA65OZ8reXBgPMe1VIrNA2AX2CAlu6AXgqyv6LDq_5v9_LpTodhou0w4Z5PjXwM-jKPcknA"
-        },
-        "sigs": {}
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.914Z",
+            "proofValue": "z5y3DxCptBw9P3SDoo16v2WBNjXNhmsaRCgf4oHMCrXcmB2qbBuSXZTrdRKRqJpfJdHi6e4c4kYTixD2Kca1xP12k"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.913Z",
+            "proofValue": "z2A32UGw6HwgCKLeWAbXTfWr9165YzVH859X7mroZ3BNQggX2xJyaumjeV9vdSafTk8L4fd89NL9MtvSkgBHW1iUU"
+          }
+        ]
       }
     }
   ]

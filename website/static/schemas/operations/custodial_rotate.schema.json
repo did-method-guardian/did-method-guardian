@@ -2,22 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://guardianspec.org/schemas/operations/custodial_rotate.schema.json",
   "title": "custodial_rotate",
-  "description": "Formal spec §7.2. Replaces operationalKeys/verificationMethods/services wholesale.",
+  "description": "Formal spec §7.2. Replaces operationalKeys/services wholesale.",
   "type": "object",
   "properties": {
     "type": { "const": "custodial_rotate" },
     "operationalKeys": { "type": "array", "items": { "type": "string" } },
-    "keySigs": {
-      "type": "object",
-      "additionalProperties": { "type": "string" },
-      "description": "REQ-7.2-12: one signature per entry in operationalKeys (the new keys being installed), keyed by the key itself. Required whether the rotation is self-authorized or guardian-initiated."
-    },
-    "verificationMethods": { "type": "object", "additionalProperties": { "type": "string" } },
     "services": { "type": "object" },
     "prev": { "type": "string" },
-    "sig": { "type": "string", "description": "REQ-7.2-1(a): signed by any single current operational key." },
-    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "REQ-7.2-1(b): guardian-initiated recovery rotation, keyed by guardian DID. Mutually exclusive with sig in practice." }
+    "proof": {
+      "type": "array",
+      "items": { "$ref": "../data-integrity-proof.schema.json" },
+      "description": "REQ-6-7: one proof per entry in operationalKeys (the new keys being installed), proving possession of itself (REQ-7.2-12) -- required whether authorized by (a) the ward's own current operational key (REQ-7.2-1a) or (b) enough current guardians to meet recovery_threshold (REQ-7.2-1b), each contributing one more proof in the same set."
+    }
   },
-  "required": ["type", "operationalKeys", "keySigs", "verificationMethods", "services", "prev"],
+  "required": ["type", "operationalKeys", "services", "prev", "proof"],
   "additionalProperties": false
 }

@@ -19,6 +19,7 @@ interface Fixture {
   note: string;
   expect: "accept" | "reject";
   known_keys: Record<Did, string>;
+  registrar_did: Did;
   log: LogEntry[];
 }
 
@@ -39,7 +40,7 @@ async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boole
   for (const entry of fixture.log) {
     const op = entry.op;
     if (op.type === "custodial_create") {
-      const result = await verifyCustodialCreate(op, resolve);
+      const result = await verifyCustodialCreate(op, resolve, fixture.registrar_did);
       if (!result.valid) return result;
       currentGuardians = op.incoming;
       currentOperationalKeys = op.operationalKeys;

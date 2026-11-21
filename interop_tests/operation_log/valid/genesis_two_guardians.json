@@ -2,22 +2,21 @@
   "note": "Genesis establishing a two-member guardian set, both consenting.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
-    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4P--0RqqYgL9Sjtvpc-5eLd6d37WXgZGIBKMMDM7qSzsqtkZX4kob9uiYMFn3PfICMDgi8YGcq-NAooz_AEtCA",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+    "did:guardian:board-a:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
+    "did:guardian:board-b:example:com": "zDnaeeM8FJTvPhnxKfARSzTFpRxX1iAysYBg5khHhn1dHdiyu",
+    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
   },
+  "registrar_did": "did:guardian:example:com",
   "log": [
     {
-      "cid": "42be9a1e82fa376b82c5774c88f6bac40265762a0884d3f77b4be180dd867745",
+      "cid": "zQmPyyN9soUeXAUZWCRUWwAcFT68Tf4xKXbzo4V3cMHoKxz",
       "op": {
         "type": "custodial_create",
+        "did": "did:guardian:fred:example:com",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
         ],
-        "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
-        },
         "services": {},
         "outgoing": [],
         "incoming": [
@@ -26,17 +25,40 @@
         ],
         "prev": null,
         "creator": "did:guardian:example:com",
-        "registrar": {
-          "did": "did:guardian:example:com",
-          "sig": "4W96a-HOoTnRYHnR5SBcyMwTGIblx-qYhUufvR-qdjA5rWJiFe-LjInoqDjJWP8Ucp7LqptPU5fP_1f_7zNHDQ"
-        },
-        "sigs": {
-          "did:guardian:board-a:example:com": "69hdul7BZ93PsO-jo2G2Mn4dWDXFUT7rX4lLjzxJSiJoi6-eDV-Zgmg66Upjzmzv2BJsNo1Wp3UkyvcOi7jhqg",
-          "did:guardian:board-b:example:com": "w1nUXOPyH6tUvi-SURSMDnn-FaIfNLEZbXORm5IozgXdnpQgkLEfMmU3WR6E4UEsOenVgem4cmeS8Zd1cGe2eg"
-        },
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "Zau4TtWIIYrt6aDg3Q8UDKo58m1dma55jpjmJ2LGBb2wKdOgFJ1lpOO19rwVMINnIwPmoLrfchHAbebgeZ0wIg"
-        }
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.903Z",
+            "proofValue": "z3vuJdt6hVdBKNtZekiWAVCro5JNNJBr2VDS8hjP6U6rfUew8outRtuyrLxkoZEcXdGRKLhbpYSA4Anc7PLH3Cm4G"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:board-a:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.905Z",
+            "proofValue": "z3qaKsohn7qeVdXxHEmqEQpNjsMr6bjYx1UvU1Jby4NBDDt8EeWqgudEJnEWTrEKnJdHCcqQYBtmUqG1vR33DS8hx"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:board-b:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.905Z",
+            "proofValue": "z5n1irYTdvEh88YSeNkNsB1uE7B4TgKP4SJP3WwdmSxKyvMCbpXxSPGx5jLKSpUA3gSJAC9ASKwychmQ7c5UhDi3c"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.905Z",
+            "proofValue": "zA4pabs3JqaTKidBJziCdX8W9icj6qBHTGiXoUwC2eWsiRLgyxdAN77ufh1w9kV8mLqDXDtVh2rVsceNyMXodFwE"
+          }
+        ]
       }
     }
   ]

@@ -2,23 +2,22 @@
   "note": "Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXBg0bAjxTOm06aNSdTdJSZSGV-rvGKFZoXwl__sNENxVlORbzXvJxbm1MvcSEOKbdaQY18c4Z96WJlYrg3sNvw",
-    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4P--0RqqYgL9Sjtvpc-5eLd6d37WXgZGIBKMMDM7qSzsqtkZX4kob9uiYMFn3PfICMDgi8YGcq-NAooz_AEtCA",
-    "did:guardian:board-c:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8y9pX_SMgkIL5B_Qo1YFWCi6-sAgm2E3cLLAZmulyyWlk_D5AGVmsgWOis7kSCZ7_xaJvjLzGSYpFWWQ7Xur0w",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEe9vB204Sa-jm_XliWfed4s45QHncdl-btHT0VZGuKzGdrmcWyb_5nn5omnwH849NblH5hd9mru79wYLhhFdECg"
+    "did:guardian:board-a:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
+    "did:guardian:board-b:example:com": "zDnaeeM8FJTvPhnxKfARSzTFpRxX1iAysYBg5khHhn1dHdiyu",
+    "did:guardian:board-c:example:com": "zDnaeXrakxRC96XfXGpjHW9jtiMEqbeuEyQzvJYXHtDq3eomy",
+    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
   },
+  "registrar_did": "did:guardian:example:com",
   "log": [
     {
-      "cid": "6ff28916eb30978658499cdadf78c25a407ded2bd9c9c6c12c528ffe72652b00",
+      "cid": "zQmPyyN9soUeXAUZWCRUWwAcFT68Tf4xKXbzo4V3cMHoKxz",
       "op": {
         "type": "custodial_create",
+        "did": "did:guardian:fred:example:com",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
+          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
         ],
-        "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA"
-        },
         "services": {},
         "outgoing": [],
         "incoming": [
@@ -27,39 +26,73 @@
         ],
         "prev": null,
         "creator": "did:guardian:example:com",
-        "registrar": {
-          "did": "did:guardian:example:com",
-          "sig": "4Jgh1ouJN0KBUPavFl01f1-O3Oc3OGUGeO-NHb8xofNpiBll0bPCc0Rp-EfDOGVMIWS_VVjMARp-0MuOzgRehw"
-        },
-        "sigs": {
-          "did:guardian:board-a:example:com": "ajhc6NJrv0Po-8i0L_gWNp4f7KvCwXZO-kgF_iPJwgXqJBQ0BgLI4Qwd6gKni4K9ODR-zve3lYOUizt6WzZf3A",
-          "did:guardian:board-b:example:com": "D7O60eHcLv86AU3_5cWHcXm26AcKshYrsFAnSHgW09kWzyZbUyCLupaeljHXZkK5cgeK0HUKpAwXAd22kkUSzA"
-        },
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEvbzelXgnSH44DCi819GVUbeH8jpF1MeyTS_4EvohbAWUMuz7lz3JnJYWfAAqd9bnNgCUM10zkKauR_nTrXg2yA": "wneQLE7LBCgdXYhAR1xnS9Pqf3YM1XbiyyhQyfS2YBvMZgQ-353T40M5JoZ_-tTQqwproBocdcUopOF9aotzFA"
-        }
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.907Z",
+            "proofValue": "z5rgp1HC2qp5ggrKdKmqxFQUWNg3XtJAVGZVTvjLxHeNsDpjbixzY9fRE6wsdnUHc88TUAU2p9r8Xxokt7Uf71M68"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:board-a:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.907Z",
+            "proofValue": "z4kMDo6CwC29KGmNbM5q8YNRQiwXsDb5ip7CHc5CMsNhfW5cBbzpaFZShnzcREGp527nMhZ3onhXUwyYSKrKZWR3V"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:board-b:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.907Z",
+            "proofValue": "z5cSar1ydPrw2Wgc7WBFT6MyNUiwxq5jc1xruDu3WiKT9opBw1r6C3EWBwYjYajmuSVifps1NUKNWcTQmKUj71mbT"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.908Z",
+            "proofValue": "zBCMHq9diuiytoKDeztQQnqvcatEfbXX5sArf1pt98hVYYWf9bH9kZVDLrwi1aEgk6xkYMaVz5rY2crAKNMsXtL8"
+          }
+        ]
       }
     },
     {
-      "cid": "882171a7a33dd0b6d5d2ce90fcf5b1efddc8d012b897f53ad4c1813f1f2546f6",
+      "cid": "zQmcuSug6pQgtdWrchzpiqm7RYPdo7u9YRMUgjryVMtwVNf",
       "op": {
         "type": "custodial_rotate",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEX_pKygjNoR_vJENKeEi4nf-5FWOwfjY6MiI6ZuYJ4tLTn5JVI9fehp8FqGi1XbldMjCyqyX8Triblu2od5SnWw"
+          "zDnaesL4aoibSWgS5VgZDZYJifZ2ba8XYGPoCrfvEv8q3iJgW"
         ],
-        "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEX_pKygjNoR_vJENKeEi4nf-5FWOwfjY6MiI6ZuYJ4tLTn5JVI9fehp8FqGi1XbldMjCyqyX8Triblu2od5SnWw"
-        },
         "services": {},
-        "prev": "6ff28916eb30978658499cdadf78c25a407ded2bd9c9c6c12c528ffe72652b00",
-        "sig": "ePJ3372sKQOqr-BF_GtDaxwcVqA3s6HznaYKiYcpv3KRykue5sS5NPWNRonMYYJXPQsVxvBFL_4d0_GbZS1grw",
-        "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEX_pKygjNoR_vJENKeEi4nf-5FWOwfjY6MiI6ZuYJ4tLTn5JVI9fehp8FqGi1XbldMjCyqyX8Triblu2od5SnWw": "UWcAaJZSEWpGMXNNtA9838Fe0OS3RTy9ZglTryGOENTtLgDBvTgKAt-vivFQ-nX4-ntHtX8RN06Y7h8at-OBLQ"
-        }
+        "prev": "zQmPyyN9soUeXAUZWCRUWwAcFT68Tf4xKXbzo4V3cMHoKxz",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaesL4aoibSWgS5VgZDZYJifZ2ba8XYGPoCrfvEv8q3iJgW#zDnaesL4aoibSWgS5VgZDZYJifZ2ba8XYGPoCrfvEv8q3iJgW",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.908Z",
+            "proofValue": "zhFZn7g6CMQKhKRieQTVseG7bY7EFfBLu4jmfHTLhSKMQ2TAbueqCN2uNgGXJLnTruvP8BXNFMmhCMXRyfNf159V"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:fred:example:com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-21T09:39:39.908Z",
+            "proofValue": "z5GWosEQ9eCimNMqo3JQxTGwMntuA2idLYRJTXtTNPwXnCMuJvH2wSfnruD5YM57Tu4dJTaMYWoeFsxzKZpiZZuKF"
+          }
+        ]
       }
     },
     {
-      "cid": "6c23a539fea9a19532be22c6d71a555b18c5bd6f2ad76faf97dfe8ea0d2b941f",
+      "cid": "zQmU9rGHp6vyjGvmULHVLUE8gyhCHEHmCbqRs4nteDGV4GW",
       "op": {
         "type": "guardian_transfer",
         "outgoing": [
@@ -69,10 +102,10 @@
           "did:guardian:board-b:example:com",
           "did:guardian:board-c:example:com"
         ],
-        "prev": "882171a7a33dd0b6d5d2ce90fcf5b1efddc8d012b897f53ad4c1813f1f2546f6",
+        "prev": "zQmcuSug6pQgtdWrchzpiqm7RYPdo7u9YRMUgjryVMtwVNf",
         "sigs": {
-          "did:guardian:board-a:example:com": "4Yt1g92WAhOFnG-QuG9LyJ_lF_7NwUGD8X_mdtWxeikdxeFkDzKzTBlhpcb5Lg_APP1i4UnQb9PwMJs8zkU5ng",
-          "did:guardian:board-c:example:com": "yo9oWqCvxO7mCqrnmaWpce7oM3HLgFGLL_VnKTxdMKf5IvjyZ8HTurorjqnJoq5iOaesug3CNgh0eC5_yYu12Q"
+          "did:guardian:board-a:example:com": "mpKw_Pwc7r4O8X9fX74myiLo0Tiw6yjNDVJ6aHnTB59waTDZAwW-IXHmIW2wzH4BFZFFc-f2DfP8td8Ynulb5w",
+          "did:guardian:board-c:example:com": "UO8HWogS2gBBX31vjLMqlN6tYYGlCA0TGC-_wdFZ0IZ2RHjhEiYdwJV6F3dt4r_FA059bGFsJmYVFU3NlQDzAA"
         }
       }
     }
