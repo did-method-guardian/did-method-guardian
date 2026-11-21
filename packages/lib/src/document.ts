@@ -1,6 +1,7 @@
 import { guardianAddRule, guardianRemoveRule, policyUpdateRule, rotateRule, verifyByRules, withinRecoveryWindow } from "./rules.js";
 import type { VerificationContext } from "./rules.js";
 import { receiptCreatedAt, verificationMethodDid } from "./operations.js";
+import { parseDid } from "./resolve.js";
 import { DEFAULT_GUARDIAN_POLICY } from "./types.js";
 import type { CustodialCreateOp, DataIntegrityProof, Did, GuardianPolicy, LogEntry, ResolvedState } from "./types.js";
 
@@ -116,16 +117,31 @@ export async function checkNullification(
 }
 
 /**
- * The registrar DID genesis's own proof set claims attested it -- the one
- * proof entry that is neither a PoP proof (`did:key:`) nor a named
- * `incoming` guardian's. replay() never verifies signatures (see its own
- * comment), so this is a claim read off the log, tracked in ResolvedState
- * purely for L1 anchor/registrar-key pinning -- its actual validity was
- * already checked once, at submission time, by verifyCustodialCreate.
+ * WS-1.7/4.4 (audit): the registrar DID for `genesis` -- derived
+ * STRUCTURALLY from `genesis.did`'s own domain (`did:guardian:<domain>`),
+ * never scanned for out of the proof set by "whichever proof isn't a PoP
+ * or an incoming guardian's." That scan previously let a stray, unrelated
+ * extra proof (e.g. an attacker-injected `did:guardian:evil.example#key-0`)
+ * be picked up as the registrar's own attestation and poison L1 anchor/
+ * registrar-key pinning -- verifyCustodialCreate (WS-1.7's own other
+ * half) now separately rejects any genesis carrying such an unexplained
+ * proof at submission time, but replay() computing this the same
+ * structural way regardless means it's correct even for a log this
+ * particular check hasn't (yet) been run against. Fails soft (undefined)
+ * on a `did` that doesn't parse under REQ-2-2's current grammar -- a v0.1
+ * log entry (guardian_transfer-era, kept replayable for already-accepted
+ * history, see this file's own header comment) never had `did` checked
+ * against this grammar in the first place, and the registrar DID is only
+ * ever used for L1 pinning, not for anything replay() itself needs to
+ * compute correctly.
  */
 function extractRegistrarDid(genesis: CustodialCreateOp): Did | undefined {
-  const claimed = genesis.proof.find((p) => !p.verificationMethod.startsWith("did:key:") && !genesis.incoming.includes(verificationMethodDid(p.verificationMethod)));
-  return claimed ? verificationMethodDid(claimed.verificationMethod) : undefined;
+  try {
+    const { domain } = parseDid(genesis.did);
+    return `did:guardian:${domain}` as Did;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

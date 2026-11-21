@@ -2,86 +2,86 @@
   "note": "Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
-    "did:guardian:board-b:example:com": "zDnaeeM8FJTvPhnxKfARSzTFpRxX1iAysYBg5khHhn1dHdiyu",
-    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
+    "did:guardian:example.com:board-a": "zDnaee7EnivgAJFpNmXXDFo37kjkV5UEu2fo4UirwvFDro7eG",
+    "did:guardian:example.com:board-b": "zDnaewu8hE4h3hdwVWvsn7y6ffnnpqeKPHX51K2Fcf5HXNaEn",
+    "did:guardian:example.com": "zDnaeUUZMo7AE34FsqNY57UMNdJDn7hdhbpyKUpghi6qxQ8n4"
   },
-  "registrar_did": "did:guardian:example:com",
+  "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmPyyN9soUeXAUZWCRUWwAcFT68Tf4xKXbzo4V3cMHoKxz",
+      "cid": "zQmcx86Dgt3DGamq128cbpnaqX6yCJSJ2kvwHhTUqTRbq4E",
       "op": {
         "type": "custodial_create",
-        "did": "did:guardian:fred:example:com",
+        "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
+          "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr"
         ],
         "services": {},
         "outgoing": [],
         "incoming": [
-          "did:guardian:board-a:example:com",
-          "did:guardian:board-b:example:com"
+          "did:guardian:example.com:board-a",
+          "did:guardian:example.com:board-b"
         ],
         "prev": null,
-        "creator": "did:guardian:example:com",
+        "creator": "did:guardian:example.com",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "verificationMethod": "did:key:zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr#zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.909Z",
-            "proofValue": "z2RUGU1JDwy2ngHv5hjij9AUXRUu77kN6rSt8DV3Wsn2xD8cScknEETq3XWJubvaQaMVV83rLRBSQvGeVZVkrFyLm"
+            "created": "2026-11-21T23:03:21.990Z",
+            "proofValue": "z3uNptvZJ7atPoZK79L62tkTrSdK17r98dCb3WUChv5wTVZgiH9Le8jRSCf6BJjsoQWF8ctt4DZhoAATjGuPFXi7f"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:board-a:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:board-a#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.909Z",
-            "proofValue": "z5aEXBxij5dHzwyFWy5A2eTddq9zP8emqGYhac1qKDeCX5pY8yak8Y4fkvkdHFTMTLv4gQaeuSpPkg5RMxj5RxMhQ"
+            "created": "2026-11-21T23:03:21.990Z",
+            "proofValue": "z48ayJxnWsForUqYgrYWycC2ZesmhvayJ4Hz8VJmrwNpfWRFj9fc5VFcRUNqTKDADcSvQLmF3V9FWfQZDepuiaxQw"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:board-b:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:board-b#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.909Z",
-            "proofValue": "z574aJ2dKT2p8dDSfr128GaFAwxDXJSScCxgTFTTYryR8ASMbd6SDdKtRzQNJq4qjW5qfq1fYx6gVbKsVd7CGxUDJ"
+            "created": "2026-11-21T23:03:21.990Z",
+            "proofValue": "z3EDnupDArnZQUHmSPbvHWWZsQrnXvsNmZuYoJ3CmL4YWasBPhnLQ2SKn3LcKyYHEN7M5NcF8jHA6eEgnSWFaeuwE"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.910Z",
-            "proofValue": "z2dXWUuyECnhi7s9RNhXAkkCmES8w2ocNW8VLBgFDAwTKogYQnAKuV8jUUmpC3LAJusCQBNE7hVAaA8AXPomJVuCa"
+            "created": "2026-11-21T23:03:21.990Z",
+            "proofValue": "z2cr9xaaA6qX3ibJZUv2KSstiSsC2M7m73HtG8st9hzpWogqQvaynjA13wRMkVmZqW5T4MGqgerBHCcvsgHJS21zc"
           }
         ]
       }
     },
     {
-      "cid": "zQmUgCxzUXhAyDS3gcycKEDZrJdcWhpPg1k4dnRQandn15S",
+      "cid": "zQmbssTknWi1djEsf7f8aUdZLK8Eh85ksUW5zNiPgTciQ4W",
       "op": {
         "type": "guardian_relinquish",
-        "prev": "zQmPyyN9soUeXAUZWCRUWwAcFT68Tf4xKXbzo4V3cMHoKxz",
+        "prev": "zQmcx86Dgt3DGamq128cbpnaqX6yCJSJ2kvwHhTUqTRbq4E",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:board-a:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:board-a#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.910Z",
-            "proofValue": "z2qmPAESq8YxcgeBcYxsJB6Efvxd8Fqu5RFipwsoGQ4RwKZ9Mo3PsGKxRfhPAzcYywEWXBxV5WkD3dryBdjMFJ1S1"
+            "created": "2026-11-21T23:03:21.990Z",
+            "proofValue": "z2SfKyvzESDbc4rLSF1HQxFywFRRZYivv5ZRkxof7RjA87uwZ4eGMQbjrnq3RU4VYDvJjrf9Jspin5SDECkdCZFw9"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:board-b:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:board-b#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.910Z",
-            "proofValue": "z3n7PL6SyjqFya9a6cxSqFG6iUDMh1QmpmUifQhVYiGpt4LY4XGVAWBTAoBpPMVwyVf2w4Q4LtZbB9LZKiQaem5fc"
+            "created": "2026-11-21T23:03:21.990Z",
+            "proofValue": "z55Q53H8gBDEZhqZYEa7BPQMZSjvYz7kGsK1VMkRjgaUs5EsrM7Wf6TKXpXNbeWAjDUVKe7cNq2yEE28bCUbByQrK"
           }
         ]
       }

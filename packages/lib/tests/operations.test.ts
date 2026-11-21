@@ -11,6 +11,7 @@ import {
   signRegistrarAttestation,
   verifySignerProof,
   unsecuredDocument,
+  createProof,
   cidFor,
 } from "../src/operations.js";
 import type { KeyResolver } from "../src/operations.js";
@@ -20,7 +21,7 @@ function makeResolver(keys: Record<string, string>): KeyResolver {
   return (did) => (keys[did] ? [keys[did]] : undefined);
 }
 
-const REGISTRAR_DID: Did = "did:guardian:registrar.example.com";
+const REGISTRAR_DID: Did = "did:guardian:example.com";
 
 test("REQ-7.1-5: a registrar attestation signs over genesis's own content without covering its own not-yet-computed signature value", async () => {
   const ward = await generateKeypair();
@@ -88,7 +89,7 @@ test("genesis with one consenting guardian verifies", async () => {
   const ward = await generateKeypair();
   const guardian = await generateKeypair();
   const registrar = await generateKeypair();
-  const resolve = makeResolver({ "did:guardian:board:example:com": guardian.publicKey, [REGISTRAR_DID]: registrar.publicKey });
+  const resolve = makeResolver({ "did:guardian:example.com:board": guardian.publicKey, [REGISTRAR_DID]: registrar.publicKey });
 
   const op = await attestedGenesis(
     {
@@ -98,10 +99,10 @@ test("genesis with one consenting guardian verifies", async () => {
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board:example:com"],
+      incoming: ["did:guardian:example.com:board"],
       prev: null,
     },
-    { "did:guardian:board:example:com": guardian.privateKey },
+    { "did:guardian:example.com:board": guardian.privateKey },
     registrar,
     { [ward.publicKey]: ward.privateKey },
   );
@@ -115,7 +116,7 @@ test("forged guardian claim fails -- the named party never signed", async () => 
   const realGuardian = await generateKeypair();
   const impostorKey = await generateKeypair(); // the attacker's own key, not the named guardian's
   const registrar = await generateKeypair();
-  const resolve = makeResolver({ "did:guardian:board:example:com": realGuardian.publicKey, [REGISTRAR_DID]: registrar.publicKey });
+  const resolve = makeResolver({ "did:guardian:example.com:board": realGuardian.publicKey, [REGISTRAR_DID]: registrar.publicKey });
 
   // Attacker builds a genesis op naming a real, unwilling party as guardian,
   // but signs with their own key instead of the named guardian's. A real
@@ -129,10 +130,10 @@ test("forged guardian claim fails -- the named party never signed", async () => 
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board:example:com"],
+      incoming: ["did:guardian:example.com:board"],
       prev: null,
     },
-    { "did:guardian:board:example:com": impostorKey.privateKey }, // forged
+    { "did:guardian:example.com:board": impostorKey.privateKey }, // forged
     registrar,
     { [ward.publicKey]: ward.privateKey },
   );
@@ -166,12 +167,59 @@ test("REQ-7.1-5: genesis with no registrar attestation at all is rejected", asyn
   assert.equal(result.valid, false, "genesis with no registrar attestation must be rejected");
 });
 
+test("audit WS-4.4: a registrarDid that isn't the domain root of genesis.did is rejected, even with a real, valid signature from that DID", async () => {
+  const ward = await generateKeypair();
+  const evilDid: Did = "did:guardian:evil.example";
+  const evilRegistrar = await generateKeypair();
+  const resolve = makeResolver({ [evilDid]: evilRegistrar.publicKey });
+
+  const partial: Omit<CustodialCreateOp, "proof" | "creator"> = {
+    type: "custodial_create",
+    did: "did:guardian:example.com:alice", // the genesis is for example.com
+    name: "alice",
+    operationalKeys: [ward.publicKey],
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+  };
+  const withCreator = { ...partial, creator: evilDid };
+  const genesis = await signCustodialCreate(withCreator, {}, { [ward.publicKey]: ward.privateKey });
+  const evilAttestation = await signRegistrarAttestation(withCreator, evilDid, evilRegistrar.privateKey); // a REAL, validly-signed attestation...
+  const op = { ...genesis, proof: [...genesis.proof, evilAttestation] };
+
+  const result = await verifyCustodialCreate(op, resolve, evilDid); // ...but evil.example is not example.com's own domain root
+  assert.equal(result.valid, false, "a genesis for example.com attested by a different domain's registrar must never pass, regardless of whether that attestation is genuinely validly signed");
+});
+
+test("audit WS-1.7: an unexplained extra proof in the genesis proof set is rejected, even when every required proof is also present and valid", async () => {
+  const ward = await generateKeypair();
+  const registrar = await generateKeypair();
+  const evilDid: Did = "did:guardian:evil.example";
+  const evil = await generateKeypair();
+  const genesisDid: Did = "did:guardian:example.com:alice";
+  const resolve = makeResolver({ [REGISTRAR_DID]: registrar.publicKey });
+
+  const op = await attestedGenesis(
+    { type: "custodial_create", did: genesisDid, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    registrar,
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const unsecuredDoc = unsecuredDocument(op as any);
+  const strayProof = await createProof(unsecuredDoc, `${evilDid}#key-0`, evil.privateKey); // a real signature, but from nobody this genesis names anywhere
+  const poisoned = { ...op, proof: [...op.proof, strayProof] };
+
+  const result = await verifyCustodialCreate(poisoned, resolve, REGISTRAR_DID);
+  assert.equal(result.valid, false, "a stray proof not tied to any operational key, incoming guardian, or the registrar must be rejected outright, not silently ignored");
+});
+
 const WARD_DID: Did = "did:guardian:fred:example:com";
 
 test("guardian_transfer establishes a guardian from zero (empty outgoing, non-empty incoming) -- requires BOTH the incoming guardian's consent AND the ward's own", async () => {
   const ward = await generateKeypair();
   const board = await generateKeypair();
-  const boardDid = "did:guardian:board:example:com";
+  const boardDid = "did:guardian:example.com:board";
   const resolve = makeResolver({ [boardDid]: board.publicKey, [WARD_DID]: ward.publicKey });
 
   const op = await signGuardianTransfer(
@@ -187,7 +235,7 @@ test("guardian_transfer establishes a guardian from zero (empty outgoing, non-em
 
 test("establishing a guardian from zero without the ward's own consent is rejected -- otherwise anyone could impose guardianship unilaterally", async () => {
   const board = await generateKeypair();
-  const boardDid = "did:guardian:board:example:com";
+  const boardDid = "did:guardian:example.com:board";
   const resolve = makeResolver({ [boardDid]: board.publicKey }); // no key registered for WARD_DID at all -- stands in for "the ward never signed"
 
   // Built by hand, not via signGuardianTransfer -- that helper refuses to

@@ -2,32 +2,32 @@
   "note": "REJECT: genesis carries no registrar attestation at all -- REQ-7.1-5 requires one on every genesis, not only when a registrar happens to include it.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
+    "did:guardian:example.com": "zDnaeUUZMo7AE34FsqNY57UMNdJDn7hdhbpyKUpghi6qxQ8n4"
   },
-  "registrar_did": "did:guardian:example:com",
+  "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmVjd3YdNoagptXS6PR89a61JFKAbkemt4K9CXvGqZsYdq",
+      "cid": "zQmQQXgKFjvJMEDqt6CHA4BunjBRq5K5UCMnRPHNKU7JqFq",
       "op": {
         "type": "custodial_create",
-        "did": "did:guardian:fred:example:com",
+        "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
+          "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr"
         ],
         "services": {},
         "outgoing": [],
         "incoming": [],
         "prev": null,
-        "creator": "did:guardian:example:com",
+        "creator": "did:guardian:example.com",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "verificationMethod": "did:key:zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr#zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.916Z",
-            "proofValue": "z2M8JEDi1YM5asEfSBBp6WEkvNALeTjrSQZFoqcuC18E6QrjjL6iUyK5uwATGs3FzFYJToooqje3Yaktdn2x36iLM"
+            "created": "2026-11-21T23:03:21.996Z",
+            "proofValue": "z5aJWLq67bBLwYZiACJdiF32EQZGGsidiCLVPWXy9QppCV4UPELTpSw9Dbzr7HnaGxyQvggmL4RaCjYCB2PsKwYQk"
           }
         ]
       }

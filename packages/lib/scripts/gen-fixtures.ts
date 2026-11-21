@@ -56,7 +56,7 @@ function write(
   console.log(`wrote ${subdir}/${name}.json`);
 }
 
-const wardDid: Did = "did:guardian:fred:example:com";
+const wardDid: Did = "did:guardian:example.com:fred";
 const ward = await generateKeypair();
 const boardA = await generateKeypair();
 const boardB = await generateKeypair();
@@ -66,7 +66,7 @@ const impostor = await generateKeypair();
 // requires every genesis to carry this attestation; `registrarKnownKeys`
 // gets merged into every fixture's own `known_keys` so the test harness can
 // resolve it, same as any other signer.
-const registrarDid: Did = "did:guardian:example:com";
+const registrarDid: Did = "did:guardian:example.com";
 const registrar = await generateKeypair();
 const registrarKnownKeys = { [registrarDid]: registrar.publicKey };
 
@@ -98,10 +98,10 @@ async function signGenesis(
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
+      incoming: ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
+    { "did:guardian:example.com:board-a": boardA.privateKey, "did:guardian:example.com:board-b": boardB.privateKey },
     { [ward.publicKey]: ward.privateKey },
   );
   write(
@@ -109,7 +109,7 @@ async function signGenesis(
     "genesis_two_guardians",
     [{ cid: await cidFor(genesis), op: genesis }],
     "Genesis establishing a two-member guardian set, both consenting.",
-    { "did:guardian:board-a:example:com": boardA.publicKey, "did:guardian:board-b:example:com": boardB.publicKey, ...registrarKnownKeys },
+    { "did:guardian:example.com:board-a": boardA.publicKey, "did:guardian:example.com:board-b": boardB.publicKey, ...registrarKnownKeys },
     "accept",
   );
 }
@@ -125,10 +125,10 @@ async function signGenesis(
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
+      incoming: ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
+    { "did:guardian:example.com:board-a": boardA.privateKey, "did:guardian:example.com:board-b": boardB.privateKey },
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
@@ -143,10 +143,10 @@ async function signGenesis(
   const rotateCid = await cidFor(rotate);
 
   const transfer = await signGuardianTransfer(
-    { type: "guardian_transfer", outgoing: ["did:guardian:board-a:example:com"], incoming: ["did:guardian:board-b:example:com", "did:guardian:board-c:example:com"], prev: rotateCid },
+    { type: "guardian_transfer", outgoing: ["did:guardian:example.com:board-a"], incoming: ["did:guardian:example.com:board-b", "did:guardian:example.com:board-c"], prev: rotateCid },
     wardDid,
-    ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
-    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-c:example:com": boardC.privateKey },
+    ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b"],
+    { "did:guardian:example.com:board-a": boardA.privateKey, "did:guardian:example.com:board-c": boardC.privateKey },
   );
 
   write(
@@ -159,9 +159,9 @@ async function signGenesis(
     ],
     "Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.",
     {
-      "did:guardian:board-a:example:com": boardA.publicKey,
-      "did:guardian:board-b:example:com": boardB.publicKey,
-      "did:guardian:board-c:example:com": boardC.publicKey,
+      "did:guardian:example.com:board-a": boardA.publicKey,
+      "did:guardian:example.com:board-b": boardB.publicKey,
+      "did:guardian:example.com:board-c": boardC.publicKey,
       ...registrarKnownKeys,
     },
     "accept",
@@ -178,24 +178,24 @@ async function signGenesis(
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
+      incoming: ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
+    { "did:guardian:example.com:board-a": boardA.privateKey, "did:guardian:example.com:board-b": boardB.privateKey },
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   const relinquish = await signGuardianRelinquish(
     { type: "guardian_relinquish", prev: genesisCid },
-    { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
-    ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com"],
+    { "did:guardian:example.com:board-a": boardA.privateKey, "did:guardian:example.com:board-b": boardB.privateKey },
+    ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b"],
   );
   write(
     "valid",
     "guardian_relinquish_unanimous",
     [{ cid: genesisCid, op: genesis }, { cid: await cidFor(relinquish), op: relinquish }],
     "Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.",
-    { "did:guardian:board-a:example:com": boardA.publicKey, "did:guardian:board-b:example:com": boardB.publicKey, ...registrarKnownKeys },
+    { "did:guardian:example.com:board-a": boardA.publicKey, "did:guardian:example.com:board-b": boardB.publicKey, ...registrarKnownKeys },
     "accept",
   );
 }
@@ -227,7 +227,7 @@ async function signGenesis(
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
-  const boardDid: Did = "did:guardian:board:example:com";
+  const boardDid: Did = "did:guardian:example.com:board";
   const addOp = await signGuardianAdd(
     { type: "guardian_add", incoming: boardDid, prev: genesisCid },
     { [boardDid]: boardA.privateKey, [wardDid]: ward.privateKey }, // REQ-7.2-5: zero-to-one needs both the incoming guardian's key and the ward's
@@ -245,7 +245,7 @@ async function signGenesis(
 
 // --- valid (Fix 7): the bare-domain root identity attests its own genesis -- no other registrar attestation exists or is needed ---
 {
-  const rootDid: Did = "did:guardian:example:com"; // the SAME identity as `registrarDid` elsewhere in this file -- here it's attesting ITSELF, not some other ward
+  const rootDid: Did = "did:guardian:example.com"; // the SAME identity as `registrarDid` elsewhere in this file -- here it's attesting ITSELF, not some other ward
   const genesisPartial = { type: "custodial_create" as const, did: rootDid, name: "", operationalKeys: [registrar.publicKey], services: {}, outgoing: [] as [], incoming: [] as Did[], prev: null, creator: rootDid };
   const signed = await signCustodialCreate(genesisPartial, {}, { [registrar.publicKey]: registrar.privateKey });
   write(
@@ -262,12 +262,12 @@ async function signGenesis(
 // --- invalid: standalone guardian_add missing the ward's required signature (REQ-7.2-5) ---
 {
   const genesis = await signGenesis(
-    { type: "custodial_create", did: "did:guardian:puppet2:example:com", name: "puppet2", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    { type: "custodial_create", did: "did:guardian:example.com:puppet2", name: "puppet2", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
     {},
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
-  const boardDid: Did = "did:guardian:board:example:com";
+  const boardDid: Did = "did:guardian:example.com:board";
   const unsigned = { type: "guardian_add" as const, incoming: boardDid, prev: genesisCid };
   const boardProof = await createProof(unsecuredDocument(unsigned as any), `${boardDid}#key-0`, boardA.privateKey);
   const addOp = { ...unsigned, proof: [boardProof] }; // the ward never signs
@@ -276,7 +276,7 @@ async function signGenesis(
     "guardian_add_missing_ward_signature",
     [{ cid: genesisCid, op: genesis }, { cid: await cidFor(addOp), op: addOp }],
     "REJECT: establishing a guardian from zero needs both the incoming guardian's and the ward's signature (REQ-7.2-5) -- here only the incoming guardian signed.",
-    { "did:guardian:puppet2:example:com": ward.publicKey, [boardDid]: boardA.publicKey, ...registrarKnownKeys },
+    { "did:guardian:example.com:puppet2": ward.publicKey, [boardDid]: boardA.publicKey, ...registrarKnownKeys },
     "reject",
   );
 }
@@ -286,15 +286,15 @@ async function signGenesis(
   const genesis = await signGenesis(
     {
       type: "custodial_create",
-      did: "did:guardian:puppet:example:com",
+      did: "did:guardian:example.com:puppet",
       name: "puppet",
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board-a:example:com"],
+      incoming: ["did:guardian:example.com:board-a"],
       prev: null,
     },
-    { "did:guardian:board-a:example:com": impostor.privateKey }, // forged: not board-a's real key
+    { "did:guardian:example.com:board-a": impostor.privateKey }, // forged: not board-a's real key
     { [ward.publicKey]: ward.privateKey },
   );
   write(
@@ -302,7 +302,7 @@ async function signGenesis(
     "forged_guardian_claim",
     [{ cid: await cidFor(genesis), op: genesis }],
     "REJECT: 'board-a' is named as initial guardian but the proof was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
-    { "did:guardian:board-a:example:com": boardA.publicKey, ...registrarKnownKeys }, // the REAL board-a key -- the fixture's proof won't match it
+    { "did:guardian:example.com:board-a": boardA.publicKey, ...registrarKnownKeys }, // the REAL board-a key -- the fixture's proof won't match it
     "reject",
   );
 }
@@ -313,7 +313,7 @@ async function signGenesis(
 // for honest callers but means this adversarial case has to be
 // constructed by hand, the same way the other forgery fixtures above do.
 {
-  const did: Did = "did:guardian:unsigned:example:com";
+  const did: Did = "did:guardian:example.com:unsigned";
   const withCreator = {
     type: "custodial_create" as const,
     did,
@@ -321,7 +321,7 @@ async function signGenesis(
     operationalKeys: [ward.publicKey],
     services: {},
     outgoing: [] as [],
-    incoming: ["did:guardian:board-a:example:com"] as Did[],
+    incoming: ["did:guardian:example.com:board-a"] as Did[],
     prev: null,
     creator: registrarDid,
   };
@@ -334,7 +334,7 @@ async function signGenesis(
     "genesis_unsigned_incoming_guardian",
     [{ cid: await cidFor(genesis), op: genesis }],
     "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no proof at all -- establishing a guardian this way still requires that guardian's consent.",
-    { "did:guardian:board-a:example:com": boardA.publicKey, ...registrarKnownKeys },
+    { "did:guardian:example.com:board-a": boardA.publicKey, ...registrarKnownKeys },
     "reject",
   );
 }
@@ -349,25 +349,25 @@ async function signGenesis(
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:troy:example:com", "did:guardian:jane:example:com"],
+      incoming: ["did:guardian:example.com:troy", "did:guardian:example.com:jane"],
       prev: null,
     },
-    { "did:guardian:troy:example:com": boardA.privateKey, "did:guardian:jane:example:com": boardB.privateKey },
+    { "did:guardian:example.com:troy": boardA.privateKey, "did:guardian:example.com:jane": boardB.privateKey },
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   const transfer = await signGuardianTransfer(
-    { type: "guardian_transfer", outgoing: ["did:guardian:jane:example:com"], incoming: ["did:guardian:troy:example:com"], prev: genesisCid },
+    { type: "guardian_transfer", outgoing: ["did:guardian:example.com:jane"], incoming: ["did:guardian:example.com:troy"], prev: genesisCid },
     wardDid,
-    ["did:guardian:troy:example:com", "did:guardian:jane:example:com"],
-    { "did:guardian:jane:example:com": boardA.privateKey }, // troy forges jane's own removal signature
+    ["did:guardian:example.com:troy", "did:guardian:example.com:jane"],
+    { "did:guardian:example.com:jane": boardA.privateKey }, // troy forges jane's own removal signature
   );
   write(
     "invalid",
     "unilateral_coguardian_removal",
     [{ cid: genesisCid, op: genesis }, { cid: await cidFor(transfer), op: transfer }],
     "REJECT: troy attempts to remove jane from a two-guardian set, but the proof claimed as jane's was produced with troy's own key, not jane's.",
-    { "did:guardian:troy:example:com": boardA.publicKey, "did:guardian:jane:example:com": boardB.publicKey, ...registrarKnownKeys },
+    { "did:guardian:example.com:troy": boardA.publicKey, "did:guardian:example.com:jane": boardB.publicKey, ...registrarKnownKeys },
     "reject",
   );
 }
@@ -383,13 +383,13 @@ async function signGenesis(
       operationalKeys: [ward.publicKey],
       services: {},
       outgoing: [],
-      incoming: ["did:guardian:board-a:example:com", "did:guardian:board-b:example:com", "did:guardian:board-c:example:com"],
+      incoming: ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b", "did:guardian:example.com:board-c"],
       prev: null,
     },
     {
-      "did:guardian:board-a:example:com": boardA.privateKey,
-      "did:guardian:board-b:example:com": boardB.privateKey,
-      "did:guardian:board-c:example:com": boardC.privateKey,
+      "did:guardian:example.com:board-a": boardA.privateKey,
+      "did:guardian:example.com:board-b": boardB.privateKey,
+      "did:guardian:example.com:board-c": boardC.privateKey,
     },
     { [ward.publicKey]: ward.privateKey },
   );
@@ -398,8 +398,8 @@ async function signGenesis(
   // majority (2 of 3) -- this must NOT be accepted.
   const relinquish = await signGuardianRelinquish(
     { type: "guardian_relinquish", prev: genesisCid },
-    { "did:guardian:board-a:example:com": boardA.privateKey },
-    ["did:guardian:board-a:example:com"],
+    { "did:guardian:example.com:board-a": boardA.privateKey },
+    ["did:guardian:example.com:board-a"],
   );
   write(
     "invalid",
@@ -407,9 +407,9 @@ async function signGenesis(
     [{ cid: genesisCid, op: genesis }, { cid: await cidFor(relinquish), op: relinquish }],
     "REJECT: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.",
     {
-      "did:guardian:board-a:example:com": boardA.publicKey,
-      "did:guardian:board-b:example:com": boardB.publicKey,
-      "did:guardian:board-c:example:com": boardC.publicKey,
+      "did:guardian:example.com:board-a": boardA.publicKey,
+      "did:guardian:example.com:board-b": boardB.publicKey,
+      "did:guardian:example.com:board-c": boardC.publicKey,
       ...registrarKnownKeys,
     },
     "reject",
@@ -455,7 +455,7 @@ async function signGenesis(
 {
   const impostorOperationalKey = impostor.publicKey; // the key an attacker actually controls
   const victimKeyClaimedInDocument = ward.publicKey; // the key an attacker wants the document to show instead
-  const partial = { type: "custodial_create" as const, did: "did:guardian:keyswap:example:com", name: "keyswap", operationalKeys: [victimKeyClaimedInDocument], services: {}, outgoing: [] as [], incoming: [] as Did[], prev: null, creator: registrarDid };
+  const partial = { type: "custodial_create" as const, did: "did:guardian:example.com:keyswap", name: "keyswap", operationalKeys: [victimKeyClaimedInDocument], services: {}, outgoing: [] as [], incoming: [] as Did[], prev: null, creator: registrarDid };
   const unsecuredDoc = unsecuredDocument(partial as any);
   // The attacker can only produce a PoP proof for the key they actually
   // hold (impostorOperationalKey), never for victimKeyClaimedInDocument --
@@ -479,27 +479,27 @@ async function signGenesis(
 // --- invalid (Fix 6): a policy version newer than this verifier understands must block EVERY operation it governs, not just the specific field it doesn't recognize ---
 {
   const genesis = await signGenesis(
-    { type: "custodial_create", did: wardDid, name: "fred", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: ["did:guardian:board-a:example:com"], prev: null },
-    { "did:guardian:board-a:example:com": boardA.privateKey },
+    { type: "custodial_create", did: wardDid, name: "fred", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: ["did:guardian:example.com:board-a"], prev: null },
+    { "did:guardian:example.com:board-a": boardA.privateKey },
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   const futurePolicy = { ...DEFAULT_GUARDIAN_POLICY, version: DEFAULT_GUARDIAN_POLICY.version + 1 };
-  const policyUpdate = await signPolicyUpdate({ type: "policy_update", policy: futurePolicy, prev: genesisCid }, { "did:guardian:board-a:example:com": boardA.privateKey }, ["did:guardian:board-a:example:com"]);
+  const policyUpdate = await signPolicyUpdate({ type: "policy_update", policy: futurePolicy, prev: genesisCid }, { "did:guardian:example.com:board-a": boardA.privateKey }, ["did:guardian:example.com:board-a"]);
   const policyCid = await cidFor(policyUpdate);
-  const boardDid: Did = "did:guardian:board-b:example:com";
+  const boardDid: Did = "did:guardian:example.com:board-b";
   // This guardian_add is otherwise completely well-formed (both the ward
   // and the sole existing guardian consent, easily meeting addition_threshold)
   // -- it must still be rejected, because the policy now in effect carries
   // a version this verifier doesn't understand, and some other field in it
   // (hypothetically) could be more restrictive than what's actually checked.
-  const addOp = await signGuardianAdd({ type: "guardian_add", incoming: boardDid, prev: policyCid }, { [boardDid]: boardB.privateKey, "did:guardian:board-a:example:com": boardA.privateKey }, [boardDid, "did:guardian:board-a:example:com"]);
+  const addOp = await signGuardianAdd({ type: "guardian_add", incoming: boardDid, prev: policyCid }, { [boardDid]: boardB.privateKey, "did:guardian:example.com:board-a": boardA.privateKey }, [boardDid, "did:guardian:example.com:board-a"]);
   write(
     "invalid",
     "policy_version_gate_blocks_governed_op",
     [{ cid: genesisCid, op: genesis }, { cid: policyCid, op: policyUpdate }, { cid: await cidFor(addOp), op: addOp }],
     "Fix 6: policy_update bumps GuardianPolicy.version beyond what this verifier supports; the guardian_add that follows is otherwise fully and validly signed but must still be rejected, since this verifier can't trust ANY threshold read off a policy version it doesn't recognize.",
-    { "did:guardian:board-a:example:com": boardA.publicKey, [boardDid]: boardB.publicKey, ...registrarKnownKeys },
+    { "did:guardian:example.com:board-a": boardA.publicKey, [boardDid]: boardB.publicKey, ...registrarKnownKeys },
     "reject",
   );
 }

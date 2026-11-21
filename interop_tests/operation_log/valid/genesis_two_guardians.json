@@ -2,61 +2,61 @@
   "note": "Genesis establishing a two-member guardian set, both consenting.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "zDnaevyUB678xf7MTtfAtdiwRnTGqRjBmuGR9wWtVrxb99akR",
-    "did:guardian:board-b:example:com": "zDnaeeM8FJTvPhnxKfARSzTFpRxX1iAysYBg5khHhn1dHdiyu",
-    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
+    "did:guardian:example.com:board-a": "zDnaee7EnivgAJFpNmXXDFo37kjkV5UEu2fo4UirwvFDro7eG",
+    "did:guardian:example.com:board-b": "zDnaewu8hE4h3hdwVWvsn7y6ffnnpqeKPHX51K2Fcf5HXNaEn",
+    "did:guardian:example.com": "zDnaeUUZMo7AE34FsqNY57UMNdJDn7hdhbpyKUpghi6qxQ8n4"
   },
-  "registrar_did": "did:guardian:example:com",
+  "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmPyyN9soUeXAUZWCRUWwAcFT68Tf4xKXbzo4V3cMHoKxz",
+      "cid": "zQmcx86Dgt3DGamq128cbpnaqX6yCJSJ2kvwHhTUqTRbq4E",
       "op": {
         "type": "custodial_create",
-        "did": "did:guardian:fred:example:com",
+        "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
+          "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr"
         ],
         "services": {},
         "outgoing": [],
         "incoming": [
-          "did:guardian:board-a:example:com",
-          "did:guardian:board-b:example:com"
+          "did:guardian:example.com:board-a",
+          "did:guardian:example.com:board-b"
         ],
         "prev": null,
-        "creator": "did:guardian:example:com",
+        "creator": "did:guardian:example.com",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "verificationMethod": "did:key:zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr#zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.903Z",
-            "proofValue": "z3vuJdt6hVdBKNtZekiWAVCro5JNNJBr2VDS8hjP6U6rfUew8outRtuyrLxkoZEcXdGRKLhbpYSA4Anc7PLH3Cm4G"
+            "created": "2026-11-21T23:03:21.984Z",
+            "proofValue": "z41DQqbppBd8oXTpZaAfRaNxq5uebzz3q5k7RH7NvPcXhBsfUpF4apuZSYSFSzyguRBwFK4VgKd6vxe1e7qkpRTdg"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:board-a:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:board-a#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.905Z",
-            "proofValue": "z3qaKsohn7qeVdXxHEmqEQpNjsMr6bjYx1UvU1Jby4NBDDt8EeWqgudEJnEWTrEKnJdHCcqQYBtmUqG1vR33DS8hx"
+            "created": "2026-11-21T23:03:21.986Z",
+            "proofValue": "z4tVUiZ5zKBkVPEaGzYGxW4GfW2KQcDE73AQRYzhsKaCaR45CJrCTnaPbk5fshmzXJpm8dkj1cxBE8WPob1kc2GoG"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:board-b:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:board-b#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.905Z",
-            "proofValue": "z5n1irYTdvEh88YSeNkNsB1uE7B4TgKP4SJP3WwdmSxKyvMCbpXxSPGx5jLKSpUA3gSJAC9ASKwychmQ7c5UhDi3c"
+            "created": "2026-11-21T23:03:21.986Z",
+            "proofValue": "z49pJ8rkBogXV8qyXD9boPF7Wr5UEfMui3YzJTxRttr1Z65kQeddki4tGL45uJopBycLyctnyn5TFcLdSNmSTGDsv"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.905Z",
-            "proofValue": "zA4pabs3JqaTKidBJziCdX8W9icj6qBHTGiXoUwC2eWsiRLgyxdAN77ufh1w9kV8mLqDXDtVh2rVsceNyMXodFwE"
+            "created": "2026-11-21T23:03:21.986Z",
+            "proofValue": "z5hZyxCqJCHF18YwGkFMyD4Thv13SNh6P49vwLLjFnpvbikRTNy93FpdTfwKRydkBFDscnXXSf4DYF6MZ6EqPKnKV"
           }
         ]
       }

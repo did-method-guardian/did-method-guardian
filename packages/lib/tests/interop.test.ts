@@ -76,21 +76,28 @@ async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boole
   return { valid: true };
 }
 
+/** Audit WS-3.3: the ward is derived from the fixture's own genesis.did, never hardcoded -- several fixtures deliberately use a genesis name other than the common case (puppet/puppet2/keyswap/unsigned, each exercising a specific forgery), and a hardcoded ward here silently looked up the wrong identity's state for those. */
+function wardDidOf(fixture: Fixture): Did {
+  const genesis = fixture.log[0]?.op as { did?: Did } | undefined;
+  if (!genesis?.did) throw new Error("fixture's first log entry is not a genesis with a did field");
+  return genesis.did;
+}
+
 for (const { name, fixture } of loadFixtures("valid")) {
   test(`valid fixture accepted: ${name}`, async () => {
-    const result = await verifyLog(fixture, "did:guardian:fred:example:com");
+    const result = await verifyLog(fixture, wardDidOf(fixture));
     assert.equal(result.valid, true, `${fixture.note} -- ${result.reason ?? ""}`);
   });
 
   test(`valid fixture replays to a consistent document: ${name}`, () => {
-    const state = replay("did:guardian:fred:example:com", fixture.log);
+    const state = replay(wardDidOf(fixture), fixture.log);
     assert.ok(state, "replay must produce a resolved state without throwing");
   });
 }
 
 for (const { name, fixture } of loadFixtures("invalid")) {
   test(`invalid fixture rejected: ${name}`, async () => {
-    const result = await verifyLog(fixture, "did:guardian:fred:example:com");
+    const result = await verifyLog(fixture, wardDidOf(fixture));
     assert.equal(result.valid, false, `expected rejection (${fixture.note}) but verification passed`);
   });
 }

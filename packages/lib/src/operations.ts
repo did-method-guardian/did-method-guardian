@@ -1,5 +1,6 @@
 import { canonicalize, assertJCSSafe, sha256Bytes, signRawBytes, verifyRawBytes, contentRef, signPayload, verifyPayload } from "./crypto.js";
 import { meetsThreshold, requiredTransferSigners } from "./quorum.js";
+import { parseDid } from "./resolve.js";
 import type {
   CustodialCreateOp,
   CustodialRotateOp,
@@ -250,8 +251,30 @@ export function receiptCreatedAt(op: { type: string; proof?: DataIntegrityProof[
   return undefined;
 }
 
+/** WS-1.7/4.4 (audit): the only valid "accepting registrar" for a genesis is the bare-domain identity of `did`'s OWN domain -- never an arbitrary DID a caller happens to pass. Computed structurally from `did` itself, never scanned for out of a proof set (see WS-1.7's own fix below). */
+function expectedRegistrarDid(did: Did): Did {
+  const { domain } = parseDid(did);
+  return `did:guardian:${domain}` as Did;
+}
+
 export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyResolver, registrarDid: Did): Promise<{ valid: boolean; reason?: string }> {
   if (op.prev !== null) return { valid: false, reason: "genesis must have prev: null" };
+  // WS-4.4: the passed-in `registrarDid` itself must actually be the
+  // domain root of `op.did` -- defense in depth against a caller (this
+  // registrar's own code is already correct, but the library can't
+  // assume every caller is) passing an unrelated DID that happens to
+  // resolve and sign correctly. "A genesis for acme.com:alice attested
+  // by did:guardian:evil.com#key-0" must never pass, regardless of what
+  // a caller claims the accepting registrar is.
+  let expected: Did;
+  try {
+    expected = expectedRegistrarDid(op.did);
+  } catch {
+    return { valid: false, reason: `genesis.did "${op.did}" does not parse as a valid did:guardian identifier (REQ-2-2)` };
+  }
+  if (registrarDid !== expected) {
+    return { valid: false, reason: `registrarDid "${registrarDid}" is not the domain root of genesis.did "${op.did}" -- expected "${expected}" (REQ-7.1-5/WS-4.4)` };
+  }
   const unsecuredDoc = unsecuredDocument(op as any);
   const pop = await verifyPop(unsecuredDoc, op.operationalKeys, op.proof); // REQ-7.1-8
   if (!pop.valid) return pop;
@@ -264,9 +287,28 @@ export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyR
   // is no other party to vouch for the one identity a deployment
   // bootstraps on its own, so its proof of possession (already checked
   // above) IS the attestation, rather than a separate, impossible one.
-  if (op.did === registrarDid) return { valid: true };
-  if (!(await verifySignerProof(unsecuredDoc, op.proof, registrarDid, resolve))) {
+  const selfAttested = op.did === registrarDid;
+  if (!selfAttested && !(await verifySignerProof(unsecuredDoc, op.proof, registrarDid, resolve))) {
     return { valid: false, reason: "registrar attestation is required (REQ-7.1-5)" };
+  }
+  // WS-1.7: every proof in the set must be ACCOUNTED FOR -- a PoP proof
+  // for a declared operational key, an incoming guardian's own signature,
+  // or the registrar's attestation (or, for self-attestation, the root's
+  // own PoP again). An unexplained extra proof (e.g. a stray
+  // `did:guardian:evil.example#key-0`) was previously accepted outright
+  // and could later be picked up by document.ts's own registrarDid
+  // extraction as if it were the real attestation, poisoning L1 pinning.
+  const incomingSet = new Set(op.incoming);
+  for (const proof of op.proof) {
+    if (proof.verificationMethod.startsWith("did:key:")) {
+      if (!op.operationalKeys.some((k) => proof.verificationMethod === popVerificationMethod(k))) {
+        return { valid: false, reason: `unexplained proof of possession in genesis proof set: ${proof.verificationMethod}` };
+      }
+      continue;
+    }
+    const signerDid = verificationMethodDid(proof.verificationMethod);
+    if (signerDid === registrarDid || incomingSet.has(signerDid)) continue;
+    return { valid: false, reason: `unexplained proof in genesis proof set, from neither an incoming guardian nor the registrar: ${proof.verificationMethod}` };
   }
   return { valid: true };
 }

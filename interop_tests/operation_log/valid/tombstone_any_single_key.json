@@ -2,58 +2,58 @@
   "note": "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:fred:example:com": "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
-    "did:guardian:example:com": "zDnaedDkiZPh1vdfZ1KzjoDart4iNpWwzyfW6H8jTohhTHrr6"
+    "did:guardian:example.com:fred": "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
+    "did:guardian:example.com": "zDnaeUUZMo7AE34FsqNY57UMNdJDn7hdhbpyKUpghi6qxQ8n4"
   },
-  "registrar_did": "did:guardian:example:com",
+  "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmVjd3YdNoagptXS6PR89a61JFKAbkemt4K9CXvGqZsYdq",
+      "cid": "zQmQQXgKFjvJMEDqt6CHA4BunjBRq5K5UCMnRPHNKU7JqFq",
       "op": {
         "type": "custodial_create",
-        "did": "did:guardian:fred:example:com",
+        "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj"
+          "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr"
         ],
         "services": {},
         "outgoing": [],
         "incoming": [],
         "prev": null,
-        "creator": "did:guardian:example:com",
+        "creator": "did:guardian:example.com",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj#zDnaeYT8HVNLyRC6BuGbn56rmJXoc6mARWRWNyLrtQbfCa7bj",
+            "verificationMethod": "did:key:zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr#zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.910Z",
-            "proofValue": "z22Efc9HMpqKUsvTEaWv5X9JAPT5vuKvcx3oHvQGSbPFTR31TN2HMx5eZd4B8z5eohW5chLc3YgFe23b3ALnjGMVk"
+            "created": "2026-11-21T23:03:21.991Z",
+            "proofValue": "zgruSDM4k2u9mttyVZEB3J1MW3XqmyEWnMuQDESjyxYLJGChaE7oZwpiFdaQAsdMXp8cbuwUZve9dfhxCV3aHHUu"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.910Z",
-            "proofValue": "z3Mq9s4o1dEEXNPhNbLDG7ZtozDskuMR3xUj4fW38Dyd2uZ3iYKmQZYdMmZUhJX9R6rQbQquhKwLvWcMwc8dXDqE3"
+            "created": "2026-11-21T23:03:21.991Z",
+            "proofValue": "z5QKEcWpYdDqkj2a4faMJnYT3eUfzno3RP6YqYsifFMRbri1JnyTwxnHj5cZJHvgEikxfMgSNR7uXUkKrb1Ez5FFa"
           }
         ]
       }
     },
     {
-      "cid": "zQmapVVGhhZKwemDCLAEWRsMqLQYyCx73JikQP9mYz27Bvt",
+      "cid": "zQmdt8GCzpsEWinWSHS9dzJkqsy32eBK4CdUX6nsgPEYSCv",
       "op": {
         "type": "custodial_tombstone",
-        "prev": "zQmVjd3YdNoagptXS6PR89a61JFKAbkemt4K9CXvGqZsYdq",
+        "prev": "zQmQQXgKFjvJMEDqt6CHA4BunjBRq5K5UCMnRPHNKU7JqFq",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:guardian:fred:example:com#key-0",
+            "verificationMethod": "did:guardian:example.com:fred#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T09:39:39.910Z",
-            "proofValue": "zpS8dvaDh9ygLhJXgmE96YNLQqQQEqLk8zA3riuBW79GP5j3LgYmtwEMe1VveqJLbwoJVR9pBw3sY6zUF5LkSYQh"
+            "created": "2026-11-21T23:03:21.991Z",
+            "proofValue": "z51hfQYmLCDHJmw6hziFcxWBHiJdCo9qK3DT2uW8BV87APnHtAsj4nQfPr5JPEa7yQ6bQducyRYgPsLzUQYQSYLhv"
           }
         ]
       }
