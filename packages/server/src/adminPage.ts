@@ -124,7 +124,14 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
 
   let result: { did: string; document: unknown; login_secret?: string; pending_guardian_add?: { id: string } };
   try {
-    result = await registerWard(env, name, guardianDid, password);
+    // WS-1.11 (audit): callerDid = this admin's own session DID, never
+    // the named guardian itself -- registerWard only takes the
+    // synchronous, auto-signed path when guardianDid === callerDid (the
+    // admin naming itself), so naming any OTHER account here, even one
+    // this registrar custodies, always goes through the pending,
+    // guardian-signs-it-themselves flow instead of being silently
+    // signed on that other account's behalf.
+    result = await registerWard(env, name, guardianDid, password, session.did);
   } catch (e) {
     if (e instanceof RegistrarError) {
       return html(pageShell("Create account", createAccountFormBody({ nameValue: name, credentialMode, error: e.message })), e.status);
@@ -141,7 +148,7 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
            <dl><dt>Login secret</dt><dd>${secretBox(result.login_secret)}</dd></dl>`
         : `<p class="hint">The password you set is ready to use -- share it with whoever this account is for; they can change it any time from their own account dashboard.</p>`
     }
-    ${result.pending_guardian_add ? `<p class="hint">The named guardian is hosted on a different registrar -- waiting on their own signature before it takes effect (pending operation <code>${escapeHtml(result.pending_guardian_add.id)}</code>).</p>` : ""}
+    ${result.pending_guardian_add ? `<p class="hint">The named guardian hasn't consented yet -- waiting on their own signature, under their own session, before this guardianship takes effect (pending operation <code>${escapeHtml(result.pending_guardian_add.id)}</code>).</p>` : ""}
     <p><a href="/admin/create-account">Create another</a> -- <a href="/admin">Back to admin console</a></p>
   `;
   return html(pageShell("Account created", body), 201);

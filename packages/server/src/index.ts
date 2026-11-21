@@ -560,7 +560,12 @@ export default {
         } else if (registrationClosed) {
           return error("this registrar doesn't accept public registration -- a Managed Identity API access token is required", 403);
         }
-        const result = await registerWard(env, body.name, guardianDid, body.password);
+        // guardianDid, when set, IS the consenting caller here (derived
+        // above from the access token's own sub) -- callerDid === it,
+        // always, so registerWard stays on its synchronous auto-sign
+        // path exactly as before WS-1.11's change (which only tightened
+        // the admin console's own, previously caller-independent, call).
+        const result = await registerWard(env, body.name, guardianDid, body.password, guardianDid);
         return json(result, 201);
       } catch (e) {
         if (e instanceof RegistrarError) return error(e.message, e.status);

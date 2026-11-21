@@ -152,35 +152,58 @@ export async function acceptGenesis(
  * `guardianDid`, when given, establishes a real first guardian via a
  * genuine, separately-signed `guardian_add` (REQ-7.2-5, zero-to-one) --
  * two log entries, one API call, not genesis itself carrying a guardian
- * directly. Only ever reached with a caller-supplied value once
- * index.ts's own route handler has derived it from a validated access
- * token's own `sub` (registrar API spec §9) -- never a client-supplied
- * free-text field. Two different outcomes depending on where that
- * guardian's own key actually lives:
- * - **Same registrar** (`guardianDid` names one of this registrar's own
- *   wards): both required signatures -- the new ward's own and the
- *   guardian's -- are producible server-side, so this finishes
- *   synchronously, in the same call, with no interactive signing round
- *   trip needed.
- * - **Foreign registrar**: this registrar can never produce a signature
- *   for a key it doesn't hold. The `guardian_add` is proposed instead,
- *   signed only with the new ward's own key, and left pending the
- *   guardian's own signature -- the same async collection (§3) any other
- *   cross-registrar guardian relationship already goes through. The
- *   response's own `pending_guardian_add.id` names it; the identity
- *   exists and is usable immediately, just guardian-less until that
- *   signature actually lands.
+ * directly. Two different outcomes, gated on `callerDid` (WS-1.11,
+ * audit) rather than merely on where the guardian's key happens to
+ * live:
+ * - **`guardianDid === callerDid`** (the caller is naming itself):
+ *   whoever is making this call has already, by making it, consented to
+ *   becoming this new ward's guardian -- the Managed Identity API path
+ *   (registrar API spec §9) derives `guardianDid` FROM a validated
+ *   access token's own `sub`, the real end user who consented on a real
+ *   OAuth screen (scope=create:managed-identity), so it's always equal
+ *   to `callerDid` there; the admin console path (adminPage.ts) passes
+ *   its own root session's DID as `callerDid`, so this only fires when
+ *   an operator names THEMSELVES, matching that form's own "e.g. your
+ *   own, to oversee this account" hint. When this holds AND that key is
+ *   registrar-held, both required signatures are producible server-
+ *   side, so this finishes synchronously, with no interactive signing
+ *   round trip needed.
+ * - **Anything else** -- a different registrar-held ward (what WS-1.11
+ *   closed: an admin naming some OTHER account it merely happens to
+ *   custody is not that other account's own consent, no matter whose
+ *   form field the DID came from) or a genuinely foreign/self-held key
+ *   this registrar never had a signature for in the first place --
+ *   the `guardian_add` is proposed instead, signed only with the new
+ *   ward's own key, left pending the guardian's own signature via the
+ *   same async collection (§3) any other guardian relationship goes
+ *   through. The response's own `pending_guardian_add.id` names it; the
+ *   identity exists and is usable immediately, just guardian-less until
+ *   that signature actually lands.
  *
  * Either way, genesis itself has already succeeded by the time
  * guardian_add is attempted -- the ward exists, ownerless, rather than
  * half-created; a same-registrar failure gets a clear error naming just
  * that failure, never rolling genesis back.
  */
+/**
+ * WS-1.11 (audit): true exactly when the caller is naming itself as the
+ * new ward's guardian -- the one case where the auto-sign, same-call
+ * convenience is actually that caller's own consent, not someone else's
+ * signed on their behalf. Isolated as its own function (rather than an
+ * inline comparison inside registerWard) so this specific condition --
+ * the entire fix -- can't later be loosened by an edit that doesn't
+ * realize what it's guarding.
+ */
+export function callerMayAutoSignAsGuardian(guardianDid: string, callerDid: string | null | undefined): boolean {
+  return guardianDid === callerDid;
+}
+
 export async function registerWard(
   env: Env,
   name: string,
   guardianDid?: string | null,
   password?: string,
+  callerDid?: string | null,
 ): Promise<{ did: string; document: unknown; login_secret?: string; pending_guardian_add?: { id: string } }> {
   assertValidName(name);
   if (password) assertValidPassword(password);
@@ -224,9 +247,10 @@ export async function registerWard(
   let pendingGuardianAdd: { id: string } | undefined;
   if (guardianDid) {
     const guardianWard = await getWardByDid(env, guardianDid);
-    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") {
-      // Same registrar, both keys producible server-side -- the one-call
-      // convenience this was originally built for.
+    if (callerMayAutoSignAsGuardian(guardianDid, callerDid) && guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") {
+      // Same registrar, both keys producible server-side, AND the
+      // caller is naming itself (WS-1.11) -- the one-call convenience
+      // this was originally built for.
       const guardianPrivateKey = await decryptWardPrivateKey(env, guardianWard);
       const addOp = await signGuardianAdd(
         { type: "guardian_add", incoming: guardianDid, prev: cid, anchor: await genesisAnchor(env, guardianDid) },
@@ -238,14 +262,17 @@ export async function registerWard(
         throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 500);
       }
     } else {
-      // Either a foreign guardian (this registrar never holds a key it
-      // doesn't custody) or a same-registrar guardian who's taken custody
-      // of their key -- either way, there's no way to produce that
-      // signature here, so this can't be the same one-call convenience:
-      // propose the guardian_add with only the ward's signature
-      // attached, same async collection every other cross-registrar
-      // guardian relationship already uses (§3) -- the guardian signs it
-      // themselves, whenever they do.
+      // A foreign guardian (this registrar never holds a key it doesn't
+      // custody), a same-registrar guardian who's taken custody of their
+      // own key, or -- WS-1.11 -- a same-registrar, still-custodied
+      // guardian the CALLER isn't itself: in every one of these cases
+      // there's either no signature to produce here, or producing one
+      // would mean signing on behalf of a party who never actually
+      // consented to this specific guardianship through this specific
+      // call. Propose the guardian_add with only the ward's own
+      // signature attached instead, same async collection every other
+      // guardian relationship already uses (§3) -- the named guardian
+      // signs it themselves, whenever they do, under their own session.
       const addOp = await signGuardianAdd({ type: "guardian_add", incoming: guardianDid, prev: cid }, { [did]: keypair.privateKey }, [did]);
       const proposeResult = await proposeOperation(env, name, addOp);
       pendingGuardianAdd = { id: proposeResult.id };
