@@ -16,7 +16,7 @@ description: "This reference registrar implementation's own HTTP surface -- the 
 
 # Registrar API (the reference registrar's own)
 
-**Version 1.** This document describes exactly one registrar implementation's own HTTP surface: `packages/server` in this repository, deployed as guardianspec.org's own registrar. It is versioned and evolves independently of [the formal method specification](/docs/did-guardian-spec-v0.2.0/) -- adding, removing, or reshaping anything here never changes method conformance, and a different registrar implementation is free to expose none of it. Only [§1](#1-method-required-endpoints) restates an actual method requirement; everything else is this registrar's own operational choice.
+**Version 1.** This document is a registrar profile, not the method: exactly one registrar implementation's HTTP surface -- `packages/server` in this repository, deployed as guardianspec.org's registrar. It is versioned and evolves independently of [the formal method specification](/docs/did-guardian-spec-v0.2.0/) -- adding, removing, or reshaping anything here never changes method conformance, and a different registrar implementation is free to expose none of it. Only [§1](#1-method-required-endpoints) restates an actual method requirement; everything else is this registrar's own operational choice. See the method spec's [Method and registrar profile](/docs/did-guardian-spec-v0.2.0/#method-and-registrar-profile) section for exactly where that line is drawn.
 
 All endpoints are rooted at `/.well-known/guardian/<name>` (or `/.well-known/guardian/_` for the bare-domain identity). All request/response bodies are JSON unless noted.
 
