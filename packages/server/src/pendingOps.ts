@@ -272,7 +272,13 @@ export async function contributeToOperation(env: Env, id: string, signerDid: Did
   }
 
   const collectedSigs = JSON.parse(row.collected_sigs) as Record<Did, DataIntegrityProof>;
-  const candidateOp = { ...op, proof: [...Object.values(collectedSigs), proof] } as Operation;
+  // Audit WS-1.6: same PoP-preservation requirement as finalize() below --
+  // op.proof (the original partial) may already carry a did:key: proof of
+  // possession for a custodial_rotate's new key, which collectedSigs (DID-
+  // keyed) can never hold. isSatisfied doesn't read PoP today, but this
+  // candidateOp should still reflect what the op would actually become.
+  const popProofs = ((op as { proof?: DataIntegrityProof[] }).proof ?? []).filter((p) => p.verificationMethod.startsWith("did:key:"));
+  const candidateOp = { ...op, proof: [...popProofs, ...Object.values(collectedSigs), proof] } as Operation;
   const satisfiedNow = await rule.isSatisfied(candidateOp as any, [], ctx);
 
   const resolved = pendingOperationMachine.resolveState({
@@ -433,7 +439,18 @@ async function finalize(
   requiredSigners: Did[],
   sigTimestamps: Record<Did, string>,
 ): Promise<{ state: string; document?: unknown }> {
-  const fullOp = { ...op, proof: Object.values(collectedSigs) } as Operation;
+  // Audit WS-1.6: `collectedSigs` is DID-keyed, tracking who has signed --
+  // it was never meant to be the sole source of truth for the final
+  // proof array, since a self-contained `did:key:` proof of possession
+  // (REQ-7.2-12, a custodial_rotate's new operational key proving it's
+  // actually held) has no DID to be keyed by at all, and was silently
+  // dropped on every path that rebuilt `proof` from `collectedSigs`
+  // alone. Those PoP proofs are fixed at propose time (the new key never
+  // changes mid-collection) and already sit in `op.proof` throughout --
+  // carried forward here alongside whatever DID-keyed signatures the
+  // collection process gathered.
+  const popProofs = ((op as { proof?: DataIntegrityProof[] }).proof ?? []).filter((p) => p.verificationMethod.startsWith("did:key:"));
+  const fullOp = { ...op, proof: [...popProofs, ...Object.values(collectedSigs)] } as Operation;
   const result = await submitOperation(env, name, fullOp, sigTimestamps);
   if (result.accepted) {
     await updatePendingOperationState(env, id, "finalized", JSON.stringify(collectedSigs), JSON.stringify(sigTimestamps));
