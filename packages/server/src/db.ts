@@ -123,6 +123,8 @@ export interface OidcClientRow {
   token_endpoint_auth_method: string; // "client_secret_basic" | "none"
   registration_access_token_hash: string | null; // RFC 7592 -- lets the registering party read back its own client later; null for a client inserted by hand (pre-dynamic-registration) rather than via /oauth/register-client
   created_at: string;
+  /** 0/1 (SQLite has no real boolean). Hotfix, migration 0012: whether this client may authenticate as a "trusted client acting on a ward's behalf" (clientAuth.ts) -- login-secret reissue, rotate, tombstone, relinquish, remove, adopt, take-custody. Always 0 for a dynamically self-registered client (insertOidcClient never mentions this column, so SQLite's own column default applies); settable only by a direct operator DB write, never through any endpoint. */
+  trusted: number;
 }
 
 export async function getOidcClient(env: Env, clientId: string): Promise<OidcClientRow | null> {
@@ -144,7 +146,8 @@ export async function deleteOidcClient(env: Env, clientId: string): Promise<void
   await env.DB.prepare("DELETE FROM oidc_clients WHERE client_id = ?").bind(clientId).run();
 }
 
-export async function insertOidcClient(env: Env, row: OidcClientRow): Promise<void> {
+/** `trusted` is deliberately not a parameter here -- every insert through this function (only ever dynamic self-registration, oidc.ts) gets SQLite's own column default (0, untrusted). Marking a client trusted is only ever a direct operator DB write. */
+export async function insertOidcClient(env: Env, row: Omit<OidcClientRow, "trusted">): Promise<void> {
   await env.DB.prepare(
     "INSERT INTO oidc_clients (client_id, client_secret_hash, redirect_uris, name, token_endpoint_auth_method, registration_access_token_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
   )

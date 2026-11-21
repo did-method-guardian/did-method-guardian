@@ -1,0 +1,15 @@
+-- Hotfix: clientAuth.ts's authenticateOidcClient previously returned ANY
+-- row in oidc_clients, including one created seconds earlier through the
+-- open, unauthenticated POST /oauth/register-client (RFC 7591 dynamic
+-- registration). Every "trusted client acting on a ward's behalf" check
+-- in index.ts (login-secret reissue, rotate, tombstone, relinquish,
+-- remove, adopt, take-custody, the root identity's own login-secret)
+-- treated that as sufficient -- a live, unauthenticated full-account-
+-- takeover path, including the bare-domain root.
+--
+-- `trusted` defaults to 0 and insertOidcClient's own INSERT never mentions
+-- this column at all, so a dynamically-registered client can structurally
+-- never set it to anything but the default -- only a direct operator
+-- write (UPDATE oidc_clients SET trusted = 1 WHERE client_id = ?) can mark
+-- a client trusted. No new endpoint; deliberately not self-service.
+ALTER TABLE oidc_clients ADD COLUMN trusted INTEGER NOT NULL DEFAULT 0;
