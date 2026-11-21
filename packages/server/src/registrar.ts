@@ -29,7 +29,7 @@ import {
 import type { CustodialCreateOp, DataIntegrityProof, Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { appendOperation, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, insertWardCustody, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
+import { appendOperation, appendOperationIfCountMatches, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, insertWardCustody, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, hashPassword, randomSecret } from "./secretBox.js";
 import { proposeOperation } from "./pendingOps.js";
 
@@ -37,6 +37,22 @@ export class RegistrarError extends Error {
   constructor(message: string, public status: number) {
     super(message);
   }
+}
+
+/**
+ * WS-1.12 (audit): `wards.name`/`wards.did` are each UNIQUE (name is
+ * even the PRIMARY KEY), so D1/SQLite itself already makes two
+ * concurrent inserts for the same name atomic -- at most one can ever
+ * succeed. What wasn't handled is the LOSER: both acceptGenesis and
+ * getOrCreateRootWard previously checked "does this name already exist"
+ * well before actually inserting, a classic check-then-act gap a
+ * concurrent request can land in. Without this, the loser's insert threw
+ * an unhandled D1 error (a 500, not the clean 409 the pre-check was
+ * supposed to guarantee) instead of being recognized as exactly the race
+ * the pre-check exists to catch.
+ */
+function isUniqueConstraintError(e: unknown): boolean {
+  return e instanceof Error && /UNIQUE constraint failed/i.test(e.message);
 }
 
 /** REQ-2-1, via the single source of truth in @did-guardian/lib -- registrar.ts previously had its own copy that let a double-hyphen and even a single-character name through. */
@@ -134,7 +150,18 @@ export async function acceptGenesis(
   const cid = await cidFor(genesis);
   const createdAt = acceptedAt;
 
-  await insertWard(env, { name, did, public_key: op.operationalKeys[0], private_key_enc: serverPrivateKeyEnc ?? "", created_at: createdAt, login_secret_hash: null });
+  // WS-1.12 (audit): the "already taken" check above read the table
+  // before this verification work ran -- a concurrent request for the
+  // SAME name could easily have inserted its own row in between. The
+  // wards table's own PRIMARY KEY makes the actual insert atomic either
+  // way; this only turns the loser's D1 error into the same clean
+  // rejection the earlier check was already supposed to produce.
+  try {
+    await insertWard(env, { name, did, public_key: op.operationalKeys[0], private_key_enc: serverPrivateKeyEnc ?? "", created_at: createdAt, login_secret_hash: null });
+  } catch (e) {
+    if (isUniqueConstraintError(e)) return { accepted: false, reason: `name "${name}" is already taken (REQ-7.1-6)` };
+    throw e;
+  }
   if (!serverPrivateKeyEnc) await insertWardCustody(env, did, "self", createdAt);
   await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
 
@@ -717,7 +744,22 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
   // way, it just can't log in anywhere until this is set.
   const loginSecretHash = env.ROOT_WARD_LOGIN_SECRET ? await hashPassword(env.ROOT_WARD_LOGIN_SECRET) : null;
   const ward: WardRow = { name: ROOT_WARD_NAME, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: loginSecretHash };
-  await insertWard(env, ward);
+  // WS-1.12 (audit): "first access wins" (this function's own header
+  // comment) means a SECOND, concurrent first-access must defer to
+  // whichever one actually won the insert, not return its own locally
+  // generated (and never persisted) keypair as if it had -- that keypair
+  // would silently diverge from what every later call to this function
+  // actually resolves. The `existing` check above is the normal path;
+  // this is only reached by the loser of a genuine race.
+  try {
+    await insertWard(env, ward);
+  } catch (e) {
+    if (isUniqueConstraintError(e)) {
+      const winner = await getWardByName(env, ROOT_WARD_NAME);
+      if (winner) return winner;
+    }
+    throw e;
+  }
   await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
   return ward;
 }
@@ -902,14 +944,31 @@ export async function submitOperation(
   const existingProof = (op as { proof?: DataIntegrityProof[] }).proof ?? [];
   const acceptedOp = { ...op, proof: [...existingProof, receipt] } as Operation;
 
-  await appendOperation(env, {
-    cid: candidateCid,
-    did: ward.did,
-    prev_cid: opPrev,
-    op_type: acceptedOp.type,
-    payload: JSON.stringify(acceptedOp),
-    created_at: acceptedAt,
-  });
+  // WS-1.12 (audit): expectedExistingCount closes the race between the
+  // verification above (against a log read at the start of this call)
+  // and this insert actually landing -- a concurrent request that
+  // verified against the same prev would otherwise also succeed,
+  // forking the log by accident. Ordinary append: nobody has used this
+  // exact (did, prev_cid) pair yet (0). Nullification: exactly the one
+  // original entry being superseded already has (1) -- checkNullification
+  // already enforced "one level only," so this can never be a second
+  // legitimate nullifier racing in; a count of 1 where 0 was expected
+  // (or vice versa) only ever means this request lost a race.
+  const inserted = await appendOperationIfCountMatches(
+    env,
+    {
+      cid: candidateCid,
+      did: ward.did,
+      prev_cid: opPrev,
+      op_type: acceptedOp.type,
+      payload: JSON.stringify(acceptedOp),
+      created_at: acceptedAt,
+    },
+    alreadyVerifiedAsNullification ? 1 : 0,
+  );
+  if (!inserted) {
+    return { accepted: false, reason: "a concurrent operation for this identity was accepted in the meantime -- re-fetch the current log and resubmit (WS-1.12, audit)" };
+  }
   return { accepted: true };
 }
 

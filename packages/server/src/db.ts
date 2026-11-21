@@ -56,9 +56,52 @@ export async function appendOperation(env: Env, op: OperationRow): Promise<void>
     .run();
 }
 
-/** Full operation log for a DID, oldest first -- the real resolution path, never a cache. */
+/**
+ * WS-1.12 (audit): appends `op`, but only if the number of existing rows
+ * for its exact (did, prev_cid) pair still equals `expectedExistingCount`
+ * at the instant of insert -- one atomic statement, not a separate
+ * read-then-write, closing the race between submitOperation's own
+ * verification (which read the log some time earlier in the request)
+ * and this insert actually landing. Two concurrent requests both
+ * extending the same then-current head would otherwise both pass
+ * verification and both insert, forking the log by accident rather than
+ * through a deliberate, policy-checked nullification. Returns whether
+ * the insert actually happened; `false` means some other operation won
+ * this exact (did, prev_cid) slot in between -- the caller must treat
+ * that as a conflict to retry against the now-current log, never as a
+ * silent success.
+ *
+ * `expectedExistingCount` is 0 for an ordinary append (nobody has used
+ * this prev_cid yet) and 1 for a nullification (exactly the one original
+ * entry being superseded, and only that one -- checkNullification
+ * already enforced "one level only" before this is ever called, so a
+ * count of 1 here is never itself someone else's nullification race;
+ * it's either the ordinary original entry, or this call has already
+ * lost the race and sees 1 where it expected 0).
+ */
+export async function appendOperationIfCountMatches(env: Env, op: OperationRow, expectedExistingCount: number): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `INSERT INTO operations (cid, did, prev_cid, op_type, payload, created_at)
+     SELECT ?, ?, ?, ?, ?, ?
+     WHERE (SELECT COUNT(*) FROM operations WHERE did = ? AND prev_cid IS ?) = ?`,
+  )
+    .bind(op.cid, op.did, op.prev_cid, op.op_type, op.payload, op.created_at, op.did, op.prev_cid, expectedExistingCount)
+    .run();
+  return (result.meta.rows_written ?? 0) > 0;
+}
+
+/**
+ * Full operation log for a DID, oldest first -- the real resolution
+ * path, never a cache. Ordered by SQLite's own implicit `rowid` (this
+ * table has no `WITHOUT ROWID` clause and no INTEGER PRIMARY KEY, so one
+ * exists and is assigned in strict insertion order), not `created_at` --
+ * WS-1.12 (audit): a TEXT millisecond timestamp has no tiebreaker for
+ * two operations accepted in the same millisecond, and reconstructChain
+ * (document.ts) requires its input in true causal order or it throws.
+ * rowid gives that order unconditionally, with no new column needed.
+ */
 export async function getOperationLog(env: Env, did: string): Promise<OperationRow[]> {
-  const result = await env.DB.prepare("SELECT * FROM operations WHERE did = ? ORDER BY created_at ASC").bind(did).all<OperationRow>();
+  const result = await env.DB.prepare("SELECT * FROM operations WHERE did = ? ORDER BY rowid ASC").bind(did).all<OperationRow>();
   return result.results;
 }
 
