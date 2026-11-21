@@ -571,6 +571,17 @@ test("Fix 6: policy_update's own checkShape refuses to install a policy version 
   assert.equal(result.valid, false);
 });
 
+test("audit WS-1.8: policy_update's checkShape rejects a malformed field beyond the version ceiling", async () => {
+  const wardDid: Did = "did:guardian:example.com:alice";
+  const g1Did: Did = "did:guardian:example.com:g1";
+  const state = makeState({ did: wardDid, guardians: [g1Did] });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
+  const malformedPolicy = { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "literally_anything" } as unknown as GuardianPolicy;
+  const op = { type: "policy_update" as const, policy: malformedPolicy, prev: "cid0", proof: [] };
+  const result = await OPERATION_RULES.policy_update.checkShape(op, ctx);
+  assert.equal(result.valid, false, "a malformed threshold must be rejected before it's ever installed into guardianPolicy");
+});
+
 test("Fix 6: verifyByRules refuses to evaluate ANY operation once the current policy's own version exceeds what this verifier understands", async () => {
   const { verifyByRules } = await import("../src/rules.js");
   const wardDid: Did = "did:guardian:example.com:alice";

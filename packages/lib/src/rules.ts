@@ -18,7 +18,7 @@
 import { unsecuredDocument, verificationMethodDid, verifyAgainstKeys, verifyPop, verifySignerProof } from "./operations.js";
 import type { KeyResolver } from "./operations.js";
 import { meetsThreshold } from "./quorum.js";
-import { MAX_SUPPORTED_POLICY_VERSION } from "./types.js";
+import { MAX_SUPPORTED_POLICY_VERSION, validatePolicy } from "./types.js";
 import type {
   CustodialRotateOp,
   CustodialTombstoneOp,
@@ -274,13 +274,15 @@ export const policyUpdateRule: OperationRule<PolicyUpdateOp> = {
   reqIds: ["REQ-7.2-9", "REQ-7.2-10", "REQ-5-6"],
   governingPolicyField: "policy_threshold",
   async checkShape(op, ctx) {
-    // Fix 6: refuse to accept an update that would itself make the policy
-    // unverifiable going forward -- a restrictive field a future version
-    // adds (a witness threshold, say) must never take effect under cover
-    // of an old verifier that doesn't know to look for it.
-    if (op.policy.version > MAX_SUPPORTED_POLICY_VERSION) {
-      return { valid: false, reason: `Fix 6: GuardianPolicy version ${op.policy.version} is newer than this verifier understands (max ${MAX_SUPPORTED_POLICY_VERSION})` };
-    }
+    // WS-1.8: validatePolicy covers Fix 6's version-ceiling check (a
+    // restrictive field a future version adds must never take effect
+    // under cover of an old verifier that doesn't know to look for it)
+    // plus every other field's well-formedness -- a malformed threshold,
+    // a negative/non-integer version or min_guardian_count, a malformed
+    // on_orphan, or an unexpected extra field, none of which the
+    // previous version-only check caught.
+    const policyCheck = validatePolicy(op.policy);
+    if (!policyCheck.valid) return { valid: false, reason: `WS-1.8: ${policyCheck.reason}` };
     const live = await liveGuardians(ctx.state, ctx.isGuardianLive);
     if (live.length === 0) return { valid: false, reason: "REQ-7.2-10: policy_update rejected while the current guardian set is empty" };
     return { valid: true };

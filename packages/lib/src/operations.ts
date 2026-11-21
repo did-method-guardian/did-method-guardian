@@ -1,6 +1,7 @@
 import { canonicalize, assertJCSSafe, sha256Bytes, signRawBytes, verifyRawBytes, contentRef, signPayload, verifyPayload } from "./crypto.js";
 import { meetsThreshold, requiredTransferSigners } from "./quorum.js";
 import { parseDid } from "./resolve.js";
+import { DEFAULT_GUARDIAN_POLICY, validatePolicy } from "./types.js";
 import type {
   CustodialCreateOp,
   CustodialRotateOp,
@@ -274,6 +275,17 @@ export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyR
   }
   if (registrarDid !== expected) {
     return { valid: false, reason: `registrarDid "${registrarDid}" is not the domain root of genesis.did "${op.did}" -- expected "${expected}" (REQ-7.1-5/WS-4.4)` };
+  }
+  // WS-1.8: genesis's own `policy` (REQ-7.1-7) is Partial, so the check
+  // runs against it merged with DEFAULT_GUARDIAN_POLICY -- the same
+  // result document.ts's replay() will actually install into
+  // ResolvedState.guardianPolicy. Without this, a genesis naming a
+  // future policy version or a malformed threshold would be accepted
+  // outright and leave the ward unverifiable from its very first
+  // post-genesis operation onward.
+  if (op.policy !== undefined) {
+    const policyCheck = validatePolicy({ ...DEFAULT_GUARDIAN_POLICY, ...op.policy });
+    if (!policyCheck.valid) return { valid: false, reason: `genesis policy (REQ-7.1-7): ${policyCheck.reason}` };
   }
   const unsecuredDoc = unsecuredDocument(op as any);
   const pop = await verifyPop(unsecuredDoc, op.operationalKeys, op.proof); // REQ-7.1-8

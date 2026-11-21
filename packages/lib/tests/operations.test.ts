@@ -214,6 +214,32 @@ test("audit WS-1.7: an unexplained extra proof in the genesis proof set is rejec
   assert.equal(result.valid, false, "a stray proof not tied to any operational key, incoming guardian, or the registrar must be rejected outright, not silently ignored");
 });
 
+test("audit WS-1.8: a genesis naming a malformed policy field is rejected, not merged blindly into default state", async () => {
+  const ward = await generateKeypair();
+  const registrar = await generateKeypair();
+  const resolve = makeResolver({ [REGISTRAR_DID]: registrar.publicKey });
+
+  const op = await attestedGenesis(
+    {
+      type: "custodial_create",
+      did: "did:guardian:example.com:alice",
+      name: "alice",
+      operationalKeys: [ward.publicKey],
+      services: {},
+      outgoing: [],
+      incoming: [],
+      prev: null,
+      policy: { recovery_threshold: "literally_anything" } as any, // REQ-7.1-7's own field is Partial -- malformed even partially
+    },
+    {},
+    registrar,
+    { [ward.publicKey]: ward.privateKey },
+  );
+
+  const result = await verifyCustodialCreate(op, resolve, REGISTRAR_DID);
+  assert.equal(result.valid, false, "a genesis must never be accepted with a policy that would leave the ward unverifiable from its first post-genesis operation onward");
+});
+
 const WARD_DID: Did = "did:guardian:fred:example:com";
 
 test("guardian_transfer establishes a guardian from zero (empty outgoing, non-empty incoming) -- requires BOTH the incoming guardian's consent AND the ward's own", async () => {

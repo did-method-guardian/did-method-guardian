@@ -49,6 +49,81 @@ export const DEFAULT_GUARDIAN_POLICY: GuardianPolicy = {
   on_orphan: "sovereign",
 };
 
+function validateThreshold(t: unknown): t is Threshold {
+  if (t === "any" || t === "majority" || t === "unanimous") return true;
+  if (typeof t === "object" && t !== null && !Array.isArray(t)) {
+    const keys = Object.keys(t);
+    const atLeast = (t as Record<string, unknown>).at_least;
+    return keys.length === 1 && keys[0] === "at_least" && typeof atLeast === "number" && Number.isInteger(atLeast) && atLeast >= 1;
+  }
+  return false;
+}
+
+function validateOnOrphan(o: unknown): o is OnOrphanPolicy {
+  if (o === "sovereign" || o === "tombstone") return true;
+  if (typeof o === "object" && o !== null && !Array.isArray(o)) {
+    const keys = Object.keys(o);
+    const transferTo = (o as Record<string, unknown>).transfer_to;
+    return keys.length === 1 && keys[0] === "transfer_to" && typeof transferTo === "string" && transferTo.length > 0;
+  }
+  return false;
+}
+
+const GUARDIAN_POLICY_FIELDS = ["version", "recovery_threshold", "tombstone_threshold", "removal_threshold", "addition_threshold", "policy_threshold", "min_guardian_count", "on_orphan"] as const;
+const THRESHOLD_FIELDS = ["recovery_threshold", "tombstone_threshold", "removal_threshold", "addition_threshold", "policy_threshold"] as const;
+
+/**
+ * WS-1.8 (audit): the one place every GuardianPolicy field is actually
+ * checked for well-formedness -- called on genesis's policy (merged with
+ * DEFAULT_GUARDIAN_POLICY first, since that field is only ever Partial)
+ * and on policy_update's (the whole thing), in operations.ts and rules.ts
+ * respectively, which is every path a policy can ever be installed
+ * through (the server has no policy-handling code of its own outside
+ * those two). Fix 6's version-ceiling check alone caught a too-new
+ * version, but nothing previously caught a non-integer/negative version
+ * or min_guardian_count, a malformed Threshold (an arbitrary string, or
+ * `at_least` that's fractional or less than 1), a malformed on_orphan,
+ * or an unexpected extra field -- any of which would otherwise flow
+ * straight into ResolvedState.guardianPolicy and from there into
+ * quorum.ts's requiredCount, which either throws on an unrecognized
+ * Threshold (an uncaught exception instead of a clean rejection) or
+ * silently miscomputes in whichever direction happens to fall out of
+ * the comparison. Rejecting an unexpected field within an otherwise-
+ * known version is a judgment call (WS-5.17 is still open on whether the
+ * spec should say this explicitly) -- taken here because it's the
+ * conservative reading consistent with Fix 6's own rationale: an unknown
+ * field inside a policy labeled with a version this verifier understands
+ * is far more likely a mistake or a smuggled future-version field than
+ * a legitimate informational extra.
+ */
+export function validatePolicy(policy: unknown): { valid: boolean; reason?: string } {
+  if (typeof policy !== "object" || policy === null || Array.isArray(policy)) {
+    return { valid: false, reason: "policy must be an object" };
+  }
+  const p = policy as Record<string, unknown>;
+  if (typeof p.version !== "number" || !Number.isInteger(p.version) || p.version < 1) {
+    return { valid: false, reason: "policy.version must be an integer >= 1" };
+  }
+  if (p.version > MAX_SUPPORTED_POLICY_VERSION) {
+    return { valid: false, reason: `GuardianPolicy version ${p.version} is newer than this verifier understands (max ${MAX_SUPPORTED_POLICY_VERSION})` };
+  }
+  for (const field of THRESHOLD_FIELDS) {
+    if (!validateThreshold(p[field])) return { valid: false, reason: `policy.${field} is not a valid threshold` };
+  }
+  if (typeof p.min_guardian_count !== "number" || !Number.isInteger(p.min_guardian_count) || p.min_guardian_count < 0) {
+    return { valid: false, reason: "policy.min_guardian_count must be a non-negative integer" };
+  }
+  if (!validateOnOrphan(p.on_orphan)) {
+    return { valid: false, reason: "policy.on_orphan is not valid" };
+  }
+  for (const key of Object.keys(p)) {
+    if (!(GUARDIAN_POLICY_FIELDS as readonly string[]).includes(key)) {
+      return { valid: false, reason: `policy has an unexpected field: ${key}` };
+    }
+  }
+  return { valid: true };
+}
+
 /**
  * v0.4, Fix 5: a W3C Data Integrity proof (ecdsa-jcs-2019 cryptosuite --
  * see operations.ts's createProof/verifyProof for the exact signing
