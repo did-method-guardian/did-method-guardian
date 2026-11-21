@@ -1,17 +1,18 @@
-// Declarative description of every v0.2 operation's own acceptance rule --
+// Declarative description of every v0.2 operation's acceptance rule --
 // required shape, signer formula, which GuardianPolicy field (if any)
 // governs it, and its replay() state-transition effect. One source,
 // checkable line-by-line against the formal spec
-// (website/content/docs/did-guardian-spec-v0.2.0/), imported by both this
-// package's own tests (rules.test.ts) and, eventually, by operations.ts
-// once task #107 wires real sign/verify functions through it.
-//
-// Deliberately NOT wired into operations.ts/document.ts yet -- this file
-// and its tests stand alone so the existing (v0.1, guardian_transfer-based)
-// implementation and its own test suite keep passing unmodified. Task #107
-// is where this table actually replaces today's per-operation functions.
+// (website/content/docs/did-guardian-spec-v0.2.0/), used by this package's
+// tests (rules.test.ts) and by the reference registrar's real acceptance
+// path (packages/server/src/registrar.ts's submitOperation, via
+// verifyByRules below) for every operation type except custodial_create,
+// whose genesis-specific checks live in operations.ts's
+// verifyCustodialCreate instead (document.ts's replay() still needs the
+// v0.1 guardian_transfer case for already-accepted history -- see its
+// comment -- which is why that type isn't retired from the Operation
+// union, only from new-submission acceptance).
 
-import { verifySignerSig } from "./operations.js";
+import { corePayload, verifyKeySigs, verifySignerSig } from "./operations.js";
 import type { KeyResolver } from "./operations.js";
 import { meetsThreshold } from "./quorum.js";
 import type {
@@ -121,9 +122,13 @@ interface OperationRule<Op> {
 }
 
 export const rotateRule: OperationRule<CustodialRotateOp> = {
-  reqIds: ["REQ-7.2-1", "REQ-7.2-2", "REQ-5-2"],
+  reqIds: ["REQ-7.2-1", "REQ-7.2-2", "REQ-5-2", "REQ-7.2-12"],
   governingPolicyField: "recovery_threshold",
-  checkShape: () => ({ valid: true }), // REQ-7.2-2 holds by construction -- the type carries no guardian/policy fields
+  // REQ-7.2-2 holds by construction -- the type carries no guardian/policy
+  // fields. REQ-7.2-12: every key being installed proves it's actually
+  // held, checked here rather than in isSatisfied -- this is about the
+  // operation's validity, not about who authorized installing it.
+  checkShape: (op) => verifyKeySigs(corePayload(op as any), op.operationalKeys, op.keySigs),
   async isSatisfied(op, _validSigners, ctx) {
     if (op.sig) {
       const wardTs = ctx.sigTimestamps?.[ctx.wardDid];

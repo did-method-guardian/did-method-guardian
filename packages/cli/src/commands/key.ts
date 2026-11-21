@@ -1,10 +1,10 @@
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
-import { generateKeypair, spkiToMultikey } from "@did-guardian/lib";
+import { generateKeypair, replay, corePayload, signPayload, spkiToMultikey } from "@did-guardian/lib";
 import type { Did } from "@did-guardian/lib";
 import { saveKey, loadKey, listLocalKeys } from "../keystore.js";
 import { loadSession } from "../state.js";
-import { takeCustody } from "../registrar-client.js";
+import { takeCustody, fetchLog } from "../registrar-client.js";
 
 export function registerKeyCommand(program: Command): void {
   const key = program.command("key").description("generate and inspect local keypairs");
@@ -71,7 +71,25 @@ export function registerKeyCommand(program: Command): void {
         label = `${wardDid}-self-held`;
         newKey = await generateKeypair();
       }
-      const result = await takeCustody(wardDid, session.cookie, newKey.publicKey, opts.force);
+      // REQ-7.2-12: this registrar will never hold newKey's private half,
+      // so it can't prove possession of it the way it does for a
+      // server-generated rotation -- that proof has to come from here,
+      // over the identical content the server independently reconstructs
+      // (same operationalKeys/verificationMethods/services/prev shape
+      // signCustodialRotate would build). A stale prev by the time this
+      // reaches the server just fails like any other prev mismatch.
+      const log = await fetchLog(wardDid);
+      if (log.length === 0) throw new Error(`no operations found for ${wardDid} -- is it registered?`);
+      const state = replay(wardDid, log);
+      const rotationPartial = {
+        type: "custodial_rotate" as const,
+        operationalKeys: [newKey.publicKey],
+        verificationMethods: { "key-1": newKey.publicKey },
+        services: state.services,
+        prev: log[log.length - 1].cid,
+      };
+      const keySig = await signPayload(corePayload(rotationPartial as any), newKey.privateKey);
+      const result = await takeCustody(wardDid, session.cookie, newKey.publicKey, keySig, opts.force);
       if (!result.accepted) throw new Error(result.reason);
       if (!opts.newKey) await saveKey(label, newKey, opts);
       console.log(`${wardDid} now holds its key${opts.newKey ? "" : ` (saved as "${label}")`}. This registrar can no longer sign on its behalf.`);

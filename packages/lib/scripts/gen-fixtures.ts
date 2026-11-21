@@ -51,14 +51,15 @@ const registrarDid = "did:guardian:example:com";
 const registrar = await generateKeypair();
 const registrarKnownKeys = { [registrarDid]: registrar.publicKey };
 
-/** Attaches `creator` (REQ-7.1-4) and a real registrar attestation (REQ-7.1-5) to a genesis op before it's signed -- every fixture below builds its genesis this way now, matching what registerWard actually produces. */
+/** Attaches `creator` (REQ-7.1-4) and a real registrar attestation (REQ-7.1-5) to a genesis op before it's signed -- every fixture below builds its genesis this way now, matching what registerWard actually produces. `operationalPrivateKeys` satisfies REQ-7.1-8's proof of possession. */
 async function signGenesis(
-  partial: Omit<CustodialCreateOp, "sigs" | "creator" | "registrar">,
+  partial: Omit<CustodialCreateOp, "sigs" | "creator" | "registrar" | "keySigs">,
   incomingKeys: Record<Did, string>,
+  operationalPrivateKeys: Record<string, string>,
 ): Promise<CustodialCreateOp> {
   const withCreator = { ...partial, creator: registrarDid };
   const attestation = await signRegistrarAttestation(withCreator, registrarDid, registrar.privateKey);
-  return signCustodialCreate({ ...withCreator, registrar: attestation }, incomingKeys);
+  return signCustodialCreate({ ...withCreator, registrar: attestation }, incomingKeys, operationalPrivateKeys);
 }
 
 // --- valid: genesis with a two-member initial guardian set ---
@@ -75,6 +76,7 @@ async function signGenesis(
       prev: null,
     },
     { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
+    { [ward.publicKey]: ward.privateKey },
   );
   write(
     "valid",
@@ -101,6 +103,7 @@ async function signGenesis(
       prev: null,
     },
     { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
+    { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
 
@@ -108,6 +111,7 @@ async function signGenesis(
   const rotate = await signCustodialRotate(
     { type: "custodial_rotate", operationalKeys: [newWardKey.publicKey], verificationMethods: { "key-1": newWardKey.publicKey }, services: {}, prev: genesisCid },
     ward.privateKey,
+    { [newWardKey.publicKey]: newWardKey.privateKey },
   );
   const rotateCid = await cidFor(rotate);
 
@@ -151,6 +155,7 @@ async function signGenesis(
       prev: null,
     },
     { "did:guardian:board-a:example:com": boardA.privateKey, "did:guardian:board-b:example:com": boardB.privateKey },
+    { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   const relinquish = await signGuardianRelinquish(
@@ -173,6 +178,7 @@ async function signGenesis(
   const genesis = await signGenesis(
     { type: "custodial_create", name: "fred", operationalKeys: [ward.publicKey], verificationMethods: {}, services: {}, outgoing: [], incoming: [], prev: null },
     {},
+    { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   const tombstone = await signCustodialTombstone({ type: "custodial_tombstone", prev: genesisCid }, { [wardDid]: ward.privateKey }, [wardDid]);
@@ -200,6 +206,7 @@ async function signGenesis(
       prev: null,
     },
     { "did:guardian:board-a:example:com": impostor.privateKey }, // forged: not board-a's real key
+    { [ward.publicKey]: ward.privateKey },
   );
   write(
     "invalid",
@@ -225,6 +232,7 @@ async function signGenesis(
       prev: null,
     },
     { "did:guardian:troy:example:com": boardA.privateKey, "did:guardian:jane:example:com": boardB.privateKey },
+    { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   const transfer = await signGuardianTransfer(
@@ -262,6 +270,7 @@ async function signGenesis(
       "did:guardian:board-b:example:com": boardB.privateKey,
       "did:guardian:board-c:example:com": boardC.privateKey,
     },
+    { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
   // Only board-a signs the relinquish; default removal/relinquish bar is
@@ -302,6 +311,7 @@ async function signGenesis(
       // no `registrar` field -- the thing under test
     },
     {},
+    { [ward.publicKey]: ward.privateKey },
   );
   write(
     "invalid",

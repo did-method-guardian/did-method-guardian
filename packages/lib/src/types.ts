@@ -41,13 +41,15 @@ export interface CustodialCreateOp {
   type: "custodial_create";
   name: string | null; // null for the bare-domain (nameless) identity -- see spec §2.1
   operationalKeys: string[];
+  /** v0.3, REQ-7.1-8: one signature per entry in operationalKeys, keyed by the key itself (not a DID), produced by that key's private half over the same stripped payload sig/sigs/registrar are checked against. Proves the party declaring a key actually holds it -- without this, the control chain's root was whatever the registrar asserted, nothing self-verifiable. */
+  keySigs: Record<string, string>;
   verificationMethods: Record<string, string>;
   services: Record<string, { type: string; endpoint: string }>;
   registrar?: RegistrarAttestation;
   outgoing: []; // always empty at genesis -- nothing to remove
-  incoming: Did[]; // v0.2 (REQ-7.1-1): MUST be `[]` -- runtime-checked, not type-narrowed, since this is exactly the shape a malformed/pre-v0.2 submission needs to be rejected rather than excluded from the type
+  incoming: Did[]; // v0.3 (REQ-7.1-1 relaxed): MAY be non-empty if each named DID co-signs genesis (see sigs) -- runtime-checked, not type-narrowed
   prev: null;
-  sigs: Record<Did, string>; // one per `incoming` entry -- always `{}` once REQ-7.1-1 is enforced
+  sigs: Record<Did, string>; // one per `incoming` entry, v0.3: required when incoming is non-empty (co-signed consent), not merely always `{}`
   /** v0.2, REQ-7.1-4: optional at the type level (a wire payload can omit it); required at the rules-engine level -- see rules.ts. */
   creator?: Did;
   /** v0.2, REQ-7.1-7. */
@@ -57,6 +59,8 @@ export interface CustodialCreateOp {
 export interface CustodialRotateOp {
   type: "custodial_rotate";
   operationalKeys: string[];
+  /** v0.3, REQ-7.2-12: one signature per entry in operationalKeys (the NEW keys being installed), keyed by the key itself, same idea as genesis's keySigs -- required whether the rotation is self-authorized or guardian-initiated, since either way a new key is being added to the document. */
+  keySigs: Record<string, string>;
   verificationMethods: Record<string, string>;
   services: Record<string, { type: string; endpoint: string }>;
   prev: string;

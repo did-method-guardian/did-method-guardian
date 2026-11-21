@@ -1,5 +1,7 @@
 import {
   generateKeypair,
+  signPayload,
+  corePayload,
   signCustodialCreate,
   signCustodialRotate,
   signGuardianAdd,
@@ -118,7 +120,7 @@ export async function registerWard(
     creator: rootWard.did,
   };
   const attestation = await signRegistrarAttestation(genesisPartial, rootWard.did, rootPrivateKey);
-  const genesis = await signCustodialCreate({ ...genesisPartial, registrar: attestation }, {});
+  const genesis = await signCustodialCreate({ ...genesisPartial, registrar: attestation }, {}, { [keypair.publicKey]: keypair.privateKey });
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();
 
@@ -257,6 +259,7 @@ export async function rotateWard(env: Env, name: string): Promise<{ did: string;
       prev: latestCid,
     },
     oldPrivateKey,
+    { [newKeypair.publicKey]: newKeypair.privateKey },
   );
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`rotation failed: ${result.reason}`, 500);
@@ -472,11 +475,23 @@ export async function adoptWard(env: Env, name: string, incomingDid: Did): Promi
  * `force` bypasses the two warnings below, not the hard refusals (already
  * self-held, is root, or no genesis to rotate from) -- those stay errors
  * regardless, since there's nothing coherent to do about them here.
+ *
+ * `newKeySig`, v0.3 (REQ-7.2-12): this registrar never holds the private
+ * half of `publicKey` -- that's the entire point of this endpoint -- so it
+ * can't produce the new key's proof-of-possession signature the way
+ * `rotateWard`/`registerWard` do for a server-generated key. The caller
+ * must sign the rotation payload with `publicKey`'s private key before
+ * calling this, over the identical content this function independently
+ * reconstructs below (same `operationalKeys`/`verificationMethods`/
+ * `services`/`prev` shape `signCustodialRotate` would build); a stale
+ * `prev` or wrong content just fails `verifyByRules`'s `keySigs` check the
+ * same way any other invalid signature does, through `submitOperation`.
  */
 export async function takeCustody(
   env: Env,
   name: string,
   publicKey: string,
+  newKeySig: string,
   force?: boolean,
 ): Promise<{ did: string; document: unknown; warnings: string[] }> {
   if (name === ROOT_WARD_NAME) {
@@ -508,16 +523,15 @@ export async function takeCustody(
   }
 
   const oldPrivateKey = await decryptWardPrivateKey(env, ward);
-  const op = await signCustodialRotate(
-    {
-      type: "custodial_rotate",
-      operationalKeys: [publicKey],
-      verificationMethods: { "key-1": publicKey },
-      services: state.services,
-      prev: latestCid,
-    },
-    oldPrivateKey,
-  );
+  const partial = {
+    type: "custodial_rotate" as const,
+    operationalKeys: [publicKey],
+    verificationMethods: { "key-1": publicKey },
+    services: state.services,
+    prev: latestCid,
+  };
+  const payload = corePayload(partial as any);
+  const op = { ...partial, sig: await signPayload(payload, oldPrivateKey), keySigs: { [publicKey]: newKeySig } };
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`take-custody failed: ${result.reason}`, 500);
 
@@ -578,6 +592,7 @@ export async function getOrCreateRootWard(env: Env): Promise<WardRow> {
       creator: did,
     },
     {},
+    { [keypair.publicKey]: keypair.privateKey },
   );
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();

@@ -19,6 +19,7 @@ const REAL_SPKI_KEY =
 test("replay resolves genesis correctly, guardians kept method-internal", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
+    keySigs: {},
     name: "fred",
     operationalKeys: ["did:key:op1"],
     verificationMethods: { "key-1": REAL_SPKI_KEY },
@@ -42,6 +43,7 @@ test("replay resolves genesis correctly, guardians kept method-internal", () => 
 test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all reference every operational key's own verificationMethod", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
+    keySigs: {},
     name: "fred",
     operationalKeys: ["did:key:op1"],
     verificationMethods: { "key-1": REAL_SPKI_KEY },
@@ -62,6 +64,7 @@ test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all ref
 test("replay applies a rotation and a guardian transfer in order", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
+    keySigs: {},
     name: "fred",
     operationalKeys: ["did:key:op1"],
     verificationMethods: { "key-1": "did:key:op1" },
@@ -73,6 +76,7 @@ test("replay applies a rotation and a guardian transfer in order", () => {
   };
   const rotate: CustodialRotateOp = {
     type: "custodial_rotate",
+    keySigs: {},
     operationalKeys: ["did:key:op2"],
     verificationMethods: { "key-1": "did:key:op2" },
     services: {},
@@ -100,6 +104,7 @@ test("replay applies a rotation and a guardian transfer in order", () => {
 test("replay marks a tombstoned ward as deactivated but keeps full history", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",
+    keySigs: {},
     name: "fred",
     operationalKeys: ["did:key:op1"],
     verificationMethods: {},

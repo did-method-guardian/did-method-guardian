@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fc from "fast-check";
 import { generateKeypair, signPayload } from "../src/crypto.js";
+import { signCustodialRotate } from "../src/operations.js";
 import type { KeyResolver } from "../src/operations.js";
 import { meetsThreshold, requiredCount } from "../src/quorum.js";
 import {
@@ -116,7 +117,27 @@ test("REQ-2-1: names with consecutive hyphens, too short, or non-alphanumeric ed
   }
 });
 
-// --- REQ-7.2-1/7.2-2/REQ-5-2: custodial_rotate --------------------------
+// --- REQ-7.2-1/7.2-2/7.2-12/REQ-5-2: custodial_rotate -------------------
+
+test("REQ-7.2-12: checkShape rejects a rotation whose new key carries no proof of possession, even when isSatisfied's signer requirement is otherwise met", async () => {
+  const ward = await generateKeypair();
+  const newKey = await generateKeypair();
+  const wardDid = "did:guardian:example.com:alice";
+  const state = makeState({ did: wardDid });
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [wardDid]: ward.publicKey }), isGuardianLive: allLive() };
+
+  const op = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: [newKey.publicKey], verificationMethods: {}, services: {}, prev: "cid0" },
+    ward.privateKey,
+    { [newKey.publicKey]: newKey.privateKey },
+  );
+  const validShape = await OPERATION_RULES.custodial_rotate.checkShape(op, ctx);
+  assert.equal(validShape.valid, true, validShape.reason);
+
+  const missingProof = { ...op, keySigs: {} };
+  const rejectedShape = await OPERATION_RULES.custodial_rotate.checkShape(missingProof, ctx);
+  assert.equal(rejectedShape.valid, false, "a new key with no proof of possession must be rejected regardless of who authorized installing it");
+});
 
 test("REQ-7.2-1(a): a ward's own single operational key alone satisfies rotation, regardless of recovery_threshold", async () => {
   const ward = await generateKeypair();
@@ -124,7 +145,7 @@ test("REQ-7.2-1(a): a ward's own single operational key alone satisfies rotation
   const state = makeState({ did: wardDid, guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "unanimous" } });
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
   const sig = await signPayload(partial, ward.privateKey);
-  const op = { ...partial, sig };
+  const op = { ...partial, sig, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [wardDid]: ward.publicKey }), isGuardianLive: allLive() };
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctx), true);
 });
@@ -142,7 +163,7 @@ test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate w
   });
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
   const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]); // majority of N=2 is 2 -- one alone should NOT suffice
-  const op = { ...partial, sigs };
+  const op = { ...partial, sigs, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
   const ctx: VerificationContext = {
     wardDid,
     state,
@@ -152,7 +173,7 @@ test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate w
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctx), false, "one of two guardians should not meet majority");
 
   const sigsBoth = await signMap(partial, { [g1Did]: g1.privateKey, [g2Did]: g2.privateKey }, [g1Did, g2Did]);
-  const opBoth = { ...partial, sigs: sigsBoth };
+  const opBoth = { ...partial, sigs: sigsBoth, keySigs: {} };
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(opBoth, [], ctx), true);
 });
 
@@ -173,7 +194,7 @@ test("REQ-4-2 regression: a guardian signature collected before that guardian's 
   const state = makeState({ did: wardDid, guardians: [g1Did], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } });
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
   const sigs = await signMap(partial, { [g1Did]: g1OldKey.privateKey }, [g1Did]);
-  const op = { ...partial, sigs };
+  const op = { ...partial, sigs, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
 
   const asOfAwareResolver: KeyResolver = (did, asOf) => {
     if (did !== g1Did) return undefined;
@@ -200,7 +221,7 @@ test("REQ-4-4: a deactivated guardian's signature no longer counts toward recove
   });
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], verificationMethods: {}, services: {}, prev: "cid0" };
   const sigs = await signMap(partial, { [g1Did]: g1.privateKey }, [g1Did]);
-  const op = { ...partial, sigs };
+  const op = { ...partial, sigs, keySigs: {} }; // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
   const resolveKey = makeResolver({ [g1Did]: g1.publicKey, [g2Did]: g2.publicKey });
 
   const ctxLive: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
@@ -339,7 +360,7 @@ test("REQ-7.2-1 regression: custodial_rotate's requiredSigners lists the live gu
   const state = makeState({ did: wardDid, guardians: [g1Did] });
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({}), isGuardianLive: allLive() };
   const required = await OPERATION_RULES.custodial_rotate.requiredSigners(
-    { type: "custodial_rotate", operationalKeys: [], verificationMethods: {}, services: {}, prev: "cid0" },
+    { type: "custodial_rotate", keySigs: {}, operationalKeys: [], verificationMethods: {}, services: {}, prev: "cid0" },
     ctx,
   );
   assert.ok(required.includes(g1Did), "the guardian committee, whose approval a recovery rotation can use, must be listed");

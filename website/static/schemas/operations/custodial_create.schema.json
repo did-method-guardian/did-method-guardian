@@ -8,6 +8,11 @@
     "type": { "const": "custodial_create" },
     "name": { "type": ["string", "null"], "description": "null for the bare-domain identity (spec §2.1)." },
     "operationalKeys": { "type": "array", "items": { "type": "string" }, "description": "REQ-7.1-3: must be present." },
+    "keySigs": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "REQ-7.1-8: one signature per entry in operationalKeys, keyed by the key itself, each over the same content the registrar attestation covers. Proves the party declaring a key holds it."
+    },
     "verificationMethods": { "type": "object", "additionalProperties": { "type": "string" }, "description": "REQ-7.1-3: must be present." },
     "services": { "type": "object", "description": "REQ-7.1-3: must be present." },
     "registrar": {
@@ -24,6 +29,6 @@
     "creator": { "type": "string", "description": "REQ-7.1-4: the DID of whichever party initiated this registration. Carries no signature requirement." },
     "policy": { "$ref": "../guardian-policy.schema.json", "description": "REQ-7.1-7: optional full or partial GuardianPolicy proposed at genesis." }
   },
-  "required": ["type", "name", "operationalKeys", "verificationMethods", "services", "registrar", "outgoing", "incoming", "prev", "sigs"],
+  "required": ["type", "name", "operationalKeys", "keySigs", "verificationMethods", "services", "registrar", "outgoing", "incoming", "prev", "sigs"],
   "additionalProperties": false
 }

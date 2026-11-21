@@ -2,17 +2,17 @@
   "note": "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8VACrxTIwe3C80GHArMbnyUhLK-IKQkeqgeNy16-B_LF52_5RsClLmBLlUd9b7Qw2npZ2DshMzZVZADbwURgxA",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEVAh2XA0vupPaSApAWwYIATM4am7iCouXoxbU2oEGN29K7AZzUVQUM88v4DKIVwwMTZw3djWOhgMm9vq8d2uVlA"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE_kkZUR68Ts_uEI1Nrw0vyM0ISDneqHKooFKY0H_BNK0h8p9BX_9hflW5QQ8lge8BUo9ZQB6InuqOoi1y522a4w",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmnvdDZ9-c4TURsl7xIIwOXSPT61-pAdvSNsnpJ3L-bfzyyi3_5ad-xlqlQN6GGGjzcBg6PBxU1oyKps9wCbE0Q"
   },
   "log": [
     {
-      "cid": "8111409fbd0e1616e9770204b03cfc62d312b975b226dbef35a75e62a9186745",
+      "cid": "248e1d4f7481b2f55fdbe9e6b27d3dfc7d7667911a51a3ad494eb575ce2d6b23",
       "op": {
         "type": "custodial_create",
         "name": "puppet",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWpeB6SzfwkDjvWhM5QZHUSmTnZJsRrwtkIl1tCL8WzdHBDlzRGqtkW_Ek0MhxFqN40qhh2euHedGaSUBQlhUXg"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIUnC0OX-yH9tvLAg2mLDTXhANHCT580ePlbLeLJnVpGuiFFzCft3iOTkpuAJh4qIuZUPKdSz_lq3SMr63P1zLg"
         ],
         "verificationMethods": {},
         "services": {},
@@ -24,10 +24,13 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "8B3fKHIAUM3f6HE9-EBGzZMc6YkRrXJawceLwifPmkGZGg6B246koXcDO4pluUJWsZA0ew3V0auniuhRS53_Kg"
+          "sig": "ZJ-EVMD2DUNoQpQexTM6YRAQn8TakWUtM_p65ftzbjG-nKdRGNOd6bObgj1Kx77J5a_7YYck80dG8A4HcmU4Bg"
         },
         "sigs": {
-          "did:guardian:board-a:example:com": "t_fRQetNzbilKfisUkj7LGy5EA2yKl2RzK5rcPU_Cz3PBv_K9aHPZUYuc1FhaLIVoG5w7mk_SvEk_320Sdx56w"
+          "did:guardian:board-a:example:com": "3y8r8-1oBXeWVOncnwbCJQe8bC8jMi5W0TFBJYIfcpRnA5_rjZrhiuMKetFDrA2EMEjKicDotHw0fsCzssByrA"
+        },
+        "keySigs": {
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIUnC0OX-yH9tvLAg2mLDTXhANHCT580ePlbLeLJnVpGuiFFzCft3iOTkpuAJh4qIuZUPKdSz_lq3SMr63P1zLg": "zXFcqyd_3yG-ogdNwBEH5z-VMJR-obCzKwj4p530kxXviRPz_msz8u54KxfND31QqhGzZUfVs0V52ExrjKjryg"
         }
       }
     }

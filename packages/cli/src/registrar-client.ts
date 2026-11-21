@@ -87,17 +87,24 @@ export async function login(registrarDomain: string, name: string, loginSecret: 
   return match[1];
 }
 
+/**
+ * `keySig`, v0.3 (REQ-7.2-12): proof that the caller holds `publicKey`'s
+ * private half, signed locally before this call (see key.ts's take-custody
+ * command) -- this registrar never holds that key, so it can't produce
+ * that signature the way it does for a server-generated rotation.
+ */
 export async function takeCustody(
   did: Did,
   sessionCookie: string,
   publicKey: string,
+  keySig: string,
   force?: boolean,
 ): Promise<{ accepted: boolean; warnings: string[]; reason?: string }> {
   const { domain, name } = parseDid(did);
   const res = await fetch(`https://${domain}${wellKnownPath(name)}/take-custody`, {
     method: "POST",
     headers: { "content-type": "application/json", cookie: `gw_session=${sessionCookie}` },
-    body: JSON.stringify({ public_key: publicKey, force }),
+    body: JSON.stringify({ public_key: publicKey, key_sig: keySig, force }),
   });
   const body = (await res.json()) as { warnings?: string[]; error?: string };
   if (!res.ok) return { accepted: false, warnings: body.warnings ?? [], reason: body.error ?? `HTTP ${res.status}` };

@@ -25,7 +25,7 @@ test("REQ-7.1-5: a registrar attestation signs over genesis's own content withou
   const registrarDid = "did:guardian:registrar.example.com";
   const resolve = makeResolver({ [registrarDid]: registrar.publicKey });
 
-  const partial: Omit<CustodialCreateOp, "sigs" | "registrar"> = {
+  const partial: Omit<CustodialCreateOp, "sigs" | "registrar" | "keySigs"> = {
     type: "custodial_create",
     name: "alice",
     operationalKeys: [ward.publicKey],
@@ -37,7 +37,7 @@ test("REQ-7.1-5: a registrar attestation signs over genesis's own content withou
     creator: registrarDid,
   };
   const attestation = await signRegistrarAttestation(partial, registrarDid, registrar.privateKey);
-  const genesis = await signCustodialCreate({ ...partial, registrar: attestation }, {});
+  const genesis = await signCustodialCreate({ ...partial, registrar: attestation }, {}, { [ward.publicKey]: ward.privateKey });
 
   const result = await verifyCustodialCreate(genesis, resolve);
   assert.equal(result.valid, true, result.reason);
@@ -50,7 +50,7 @@ test("REQ-7.1-5: a forged registrar attestation (wrong key) is rejected", async 
   const realRegistrarKey = await generateKeypair();
   const resolve = makeResolver({ [registrarDid]: realRegistrarKey.publicKey }); // verifier resolves the REAL key, not the impostor's
 
-  const partial: Omit<CustodialCreateOp, "sigs" | "registrar"> = {
+  const partial: Omit<CustodialCreateOp, "sigs" | "registrar" | "keySigs"> = {
     type: "custodial_create",
     name: "alice",
     operationalKeys: [ward.publicKey],
@@ -62,7 +62,7 @@ test("REQ-7.1-5: a forged registrar attestation (wrong key) is rejected", async 
     creator: registrarDid,
   };
   const forgedAttestation = await signRegistrarAttestation(partial, registrarDid, impostor.privateKey);
-  const genesis = await signCustodialCreate({ ...partial, registrar: forgedAttestation }, {});
+  const genesis = await signCustodialCreate({ ...partial, registrar: forgedAttestation }, {}, { [ward.publicKey]: ward.privateKey });
 
   const result = await verifyCustodialCreate(genesis, resolve);
   assert.equal(result.valid, false);
@@ -70,15 +70,16 @@ test("REQ-7.1-5: a forged registrar attestation (wrong key) is rejected", async 
 
 const REGISTRAR_DID = "did:guardian:registrar.example.com";
 
-/** A valid registrar attestation (REQ-7.1-5) over `partial`, plus a resolver that already knows the registrar's key -- shared by tests below that aren't themselves testing the attestation, so they can still construct an otherwise-valid genesis. */
+/** A valid registrar attestation (REQ-7.1-5) over `partial`, plus a resolver that already knows the registrar's key -- shared by tests below that aren't themselves testing the attestation, so they can still construct an otherwise-valid genesis. `operationalPrivateKeys` satisfies REQ-7.1-8's proof of possession. */
 async function attestedGenesis(
-  partial: Omit<CustodialCreateOp, "sigs" | "registrar" | "creator">,
+  partial: Omit<CustodialCreateOp, "sigs" | "registrar" | "creator" | "keySigs">,
   incomingKeys: Record<string, string>,
   registrar: { publicKey: string; privateKey: string },
+  operationalPrivateKeys: Record<string, string>,
 ) {
   const withCreator = { ...partial, creator: REGISTRAR_DID };
   const registrarAttestation = await signRegistrarAttestation(withCreator, REGISTRAR_DID, registrar.privateKey);
-  return signCustodialCreate({ ...withCreator, registrar: registrarAttestation }, incomingKeys);
+  return signCustodialCreate({ ...withCreator, registrar: registrarAttestation }, incomingKeys, operationalPrivateKeys);
 }
 
 test("genesis with one consenting guardian verifies", async () => {
@@ -100,6 +101,7 @@ test("genesis with one consenting guardian verifies", async () => {
     },
     { "did:guardian:board:example:com": guardian.privateKey },
     registrar,
+    { [ward.publicKey]: ward.privateKey },
   );
 
   const result = await verifyCustodialCreate(op, resolve);
@@ -130,6 +132,7 @@ test("forged guardian claim fails -- the named party never signed", async () => 
     },
     { "did:guardian:board:example:com": impostorKey.privateKey }, // forged
     registrar,
+    { [ward.publicKey]: ward.privateKey },
   );
 
   const result = await verifyCustodialCreate(op, resolve);
@@ -154,6 +157,7 @@ test("REQ-7.1-5: genesis with no registrar attestation at all is rejected", asyn
       // no `registrar` field at all -- this is the thing under test
     },
     {},
+    { [ward.publicKey]: ward.privateKey }, // valid proof of possession, so this fails for the registrar-attestation reason, not this one
   );
 
   const result = await verifyCustodialCreate(op, resolve);
@@ -255,6 +259,7 @@ test("tampering with signed content after signing invalidates the signature", as
   const op = await signCustodialRotate(
     { type: "custodial_rotate", operationalKeys: [ward.publicKey], verificationMethods: {}, services: {}, prev: "abc123" },
     ward.privateKey,
+    { [ward.publicKey]: ward.privateKey },
   );
   const tampered = { ...op, operationalKeys: ["did:key:attacker"] };
   const result = await verifyCustodialRotate(tampered, [ward.publicKey], () => undefined);
@@ -305,9 +310,11 @@ test("REQ-4-2: verifySignerSig's own asOf parameter resolves a signer's key as o
     return [newKey.publicKey];
   };
 
+  const newKeyPair = await generateKeypair();
   const op = await signCustodialRotate(
-    { type: "custodial_rotate", operationalKeys: ["did:key:zNew"], verificationMethods: {}, services: {}, prev: "cid0" },
+    { type: "custodial_rotate", operationalKeys: [newKeyPair.publicKey], verificationMethods: {}, services: {}, prev: "cid0" },
     oldKey.privateKey,
+    { [newKeyPair.publicKey]: newKeyPair.privateKey }, // not under test here -- this test only checks verifySignerSig's asOf behavior against op.sig
   );
   const signedAt = new Date("2026-05-01T00:00:00Z"); // before rotatedAt
 
@@ -320,6 +327,7 @@ test("cidFor is deterministic for identical content", async () => {
   const op = await signCustodialRotate(
     { type: "custodial_rotate", operationalKeys: [ward.publicKey], verificationMethods: {}, services: {}, prev: "abc123" },
     ward.privateKey,
+    { [ward.publicKey]: ward.privateKey },
   );
   assert.equal(await cidFor(op), await cidFor({ ...op }));
 });

@@ -26,6 +26,7 @@ export function registerCreateCommand(program: Command): void {
           prev: null,
         },
         {},
+        { [key.publicKey]: key.privateKey },
       );
       const anchor = await cidFor(genesis);
       const did = `did:guardian:${opts.domain}:${name}`;

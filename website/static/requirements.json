@@ -312,6 +312,15 @@
       ]
     },
     {
+      "id": "REQ-7.1-8",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-8",
+      "section": "7.1 Create",
+      "text": "`keySigs` *MUST* be present -- one signature per entry in `operationalKeys`, keyed by the key itself rather than a DID (an operational key is not independently resolvable the way a guardian DID is), each over the genesis content excluding `sig`/`sigs`/`keySigs`/`registrar`, the same content [REQ-7.1-5](#req-7.1-5)'s attestation covers. A verifier *MUST* reject a genesis operation missing a valid signature from any declared key. Control ([\u00a712.1](#121-the-three-authorities)) is otherwise whatever the registrar's naming attestation asserts it to be, with nothing self-certifying behind it; this closes that gap at the one point where the control chain begins.",
+      "tests": [
+        "packages/lib/tests/operations.test.ts"
+      ]
+    },
+    {
       "id": "REQ-7.2-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.2-1",
       "section": "7.2 Update",
@@ -326,6 +335,15 @@
       "section": "7.2 Update",
       "text": "*MUST NOT* modify the guardian tier or `GuardianPolicy`.",
       "tests": []
+    },
+    {
+      "id": "REQ-7.2-12",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.2-12",
+      "section": "7.2 Update",
+      "text": "`keySigs` *MUST* be present -- one signature per entry in `operationalKeys` (the new keys being installed), keyed by the key itself, each over the rotation content excluding `sig`/`sigs`/`keySigs`, the same proof-of-possession requirement as genesis ([REQ-7.1-8](#req-7.1-8)) applied every time a key is installed, not just at genesis. Required whether the rotation is authorized by (a) or (b) above -- either way a new key is being added to the document, and REQ-7.2-1's signer requirement authorizes the change, not the new key's possession of itself.",
+      "tests": [
+        "packages/lib/tests/rules.test.ts"
+      ]
     },
     {
       "id": "REQ-7.2-3",
@@ -485,5 +503,5 @@
       ]
     }
   ],
-  "count": 59
+  "count": 61
 }

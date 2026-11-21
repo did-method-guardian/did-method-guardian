@@ -16,6 +16,7 @@ const wardDid = "did:guardian:example.com:alice";
 function genesisEntry(overrides: Partial<CustodialCreateOp> = {}): LogEntry {
   const op: CustodialCreateOp = {
     type: "custodial_create",
+    keySigs: {},
     name: "alice",
     operationalKeys: ["ward-pk"],
     verificationMethods: { "key-1": "ward-pk" },
@@ -68,22 +69,22 @@ test("reconstructChain is a no-op when every entry's prev matches the immediatel
 
 test("REQ-6-10: an entry naming an earlier prev truncates everything between it and the then-current head", () => {
   const genesis = genesisEntry();
-  const e1: LogEntry = { cid: "cid-1", op: { type: "custodial_rotate", operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" } };
-  const e2: LogEntry = { cid: "cid-2", op: { type: "custodial_rotate", operationalKeys: ["k2"], verificationMethods: {}, services: {}, prev: "cid-1", sig: "x" } };
+  const e1: LogEntry = { cid: "cid-1", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" } };
+  const e2: LogEntry = { cid: "cid-2", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k2"], verificationMethods: {}, services: {}, prev: "cid-1", sig: "x" } };
   // e3 nullifies e1 (names cid-genesis, not cid-2) -- e2 should be excluded.
-  const e3: LogEntry = { cid: "cid-3", op: { type: "custodial_rotate", operationalKeys: ["k3"], verificationMethods: {}, services: {}, prev: "cid-genesis", sigs: { g: "y" } } };
+  const e3: LogEntry = { cid: "cid-3", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k3"], verificationMethods: {}, services: {}, prev: "cid-genesis", sigs: { g: "y" } } };
   const chain = reconstructChain([genesis, e1, e2, e3]);
   assert.deepEqual(chain.map((e) => e.cid), ["cid-genesis", "cid-3"]);
 });
 
 test("REQ-6-11: a nullification can itself be nullified -- the same mechanism applied again, targeting the same earlier point, not a resurrection of the specific superseded entry", () => {
   const genesis = genesisEntry();
-  const e1: LogEntry = { cid: "cid-1", op: { type: "custodial_rotate", operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" } };
-  const e2: LogEntry = { cid: "cid-2", op: { type: "custodial_rotate", operationalKeys: ["k2"], verificationMethods: {}, services: {}, prev: "cid-1", sig: "x" } };
+  const e1: LogEntry = { cid: "cid-1", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" } };
+  const e2: LogEntry = { cid: "cid-2", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k2"], verificationMethods: {}, services: {}, prev: "cid-1", sig: "x" } };
   // nullify1 supersedes both e1 and e2 by pointing all the way back to genesis.
-  const nullify1: LogEntry = { cid: "cid-3", op: { type: "custodial_rotate", operationalKeys: ["k3"], verificationMethods: {}, services: {}, prev: "cid-genesis", sigs: { g: "y" } } };
+  const nullify1: LogEntry = { cid: "cid-3", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k3"], verificationMethods: {}, services: {}, prev: "cid-genesis", sigs: { g: "y" } } };
   // reversal: a further guardian-signed rotation naming the SAME prev nullify1 did -- nullify1 is now "the operation immediately following cid-genesis", so this supersedes nullify1 in exactly the way nullify1 superseded e1. cid-1/cid-2 are never reachable again by name; a guardian wanting that state back would have to recreate it as new op content.
-  const reversal: LogEntry = { cid: "cid-4", op: { type: "custodial_rotate", operationalKeys: ["k4"], verificationMethods: {}, services: {}, prev: "cid-genesis", sigs: { g: "z" } } };
+  const reversal: LogEntry = { cid: "cid-4", op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k4"], verificationMethods: {}, services: {}, prev: "cid-genesis", sigs: { g: "z" } } };
   const chain = reconstructChain([genesis, e1, e2, nullify1, reversal]);
   assert.deepEqual(chain.map((e) => e.cid), ["cid-genesis", "cid-4"]);
 });
@@ -107,7 +108,7 @@ test("REQ-6-8: a guardian-signed rotation naming an earlier prev, within the rec
 
   const e1: LogEntry = {
     cid: "cid-1",
-    op: { type: "custodial_rotate", operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" },
+    op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" },
     acceptedAt: new Date().toISOString(),
   };
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["recovery-k"], verificationMethods: {}, services: {}, prev: "cid-genesis" };
@@ -129,7 +130,7 @@ test("REQ-6-8: a ward-signed rotation (not guardian-signed) may never nullify, e
   };
   const e1: LogEntry = {
     cid: "cid-1",
-    op: { type: "custodial_rotate", operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" },
+    op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" },
     acceptedAt: new Date().toISOString(),
   };
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-k"], verificationMethods: {}, services: {}, prev: "cid-genesis" };
@@ -150,7 +151,7 @@ test("REQ-6-9: a nullification naming a prev whose successor was accepted more t
   const old = new Date(Date.now() - 73 * 60 * 60 * 1000).toISOString();
   const e1: LogEntry = {
     cid: "cid-1",
-    op: { type: "custodial_rotate", operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" },
+    op: { type: "custodial_rotate", keySigs: {}, operationalKeys: ["k1"], verificationMethods: {}, services: {}, prev: "cid-genesis", sig: "x" },
     acceptedAt: old,
   };
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["recovery-k"], verificationMethods: {}, services: {}, prev: "cid-genesis" };

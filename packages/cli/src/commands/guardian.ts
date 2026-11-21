@@ -120,6 +120,7 @@ export function registerGuardianCommand(program: Command): void {
         },
         { [guardianDid]: guardianKey.privateKey },
         [guardianDid],
+        { [newKey.publicKey]: newKey.privateKey },
       );
       await printOrSubmit(wardDid, op, opts.submit);
     });

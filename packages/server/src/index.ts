@@ -190,9 +190,10 @@ export default {
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
             return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
           }
-          const body = (await request.json().catch(() => ({}))) as { public_key?: string; force?: boolean };
+          const body = (await request.json().catch(() => ({}))) as { public_key?: string; key_sig?: string; force?: boolean };
           if (!body.public_key) return error("public_key is required", 400);
-          const result = await takeCustody(env, targetName, body.public_key, body.force);
+          if (!body.key_sig) return error("key_sig is required -- proof that the caller holds public_key's private half, signed over the rotation payload (see the registrar API doc)", 400);
+          const result = await takeCustody(env, targetName, body.public_key, body.key_sig, body.force);
           return json({ ok: true, did: result.did, document: result.document, warnings: result.warnings });
         }
         if (suffix === "/relinquish" && request.method === "POST") {

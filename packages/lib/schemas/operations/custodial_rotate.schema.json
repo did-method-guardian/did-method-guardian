@@ -7,12 +7,17 @@
   "properties": {
     "type": { "const": "custodial_rotate" },
     "operationalKeys": { "type": "array", "items": { "type": "string" } },
+    "keySigs": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "REQ-7.2-12: one signature per entry in operationalKeys (the new keys being installed), keyed by the key itself. Required whether the rotation is self-authorized or guardian-initiated."
+    },
     "verificationMethods": { "type": "object", "additionalProperties": { "type": "string" } },
     "services": { "type": "object" },
     "prev": { "type": "string" },
     "sig": { "type": "string", "description": "REQ-7.2-1(a): signed by any single current operational key." },
     "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "REQ-7.2-1(b): guardian-initiated recovery rotation, keyed by guardian DID. Mutually exclusive with sig in practice." }
   },
-  "required": ["type", "operationalKeys", "verificationMethods", "services", "prev"],
+  "required": ["type", "operationalKeys", "keySigs", "verificationMethods", "services", "prev"],
   "additionalProperties": false
 }
