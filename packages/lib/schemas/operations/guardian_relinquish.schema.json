@@ -7,8 +7,12 @@
   "properties": {
     "type": { "const": "guardian_relinquish" },
     "prev": { "type": "string" },
-    "sigs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Enough current guardians to meet removal_threshold, evaluated against the full current guardian set." }
+    "proof": {
+      "type": "array",
+      "items": { "$ref": "../data-integrity-proof.schema.json" },
+      "description": "Enough current guardians to meet removal_threshold, evaluated against the full current guardian set."
+    }
   },
-  "required": ["type", "prev", "sigs"],
+  "required": ["type", "prev", "proof"],
   "additionalProperties": false
 }

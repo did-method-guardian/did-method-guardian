@@ -9,12 +9,12 @@
     "incoming": { "type": "string", "description": "The DID being added as a guardian. REQ-7.2-11: MUST NOT be the ward's identity." },
     "prev": { "type": "string" },
     "anchor": { "type": "string", "description": "REQ-12-4, v0.2.1: incoming's genesis CID, RECOMMENDED but not required. Lets a verifier pin this specific guardian relationship at L1 without a fresh L3 resolution of incoming." },
-    "sigs": {
-      "type": "object",
-      "additionalProperties": { "type": "string" },
-      "description": "REQ-7.2-4 (non-empty guardian set): incoming's key plus enough current guardians to meet addition_threshold. REQ-7.2-5 (empty set): incoming's key plus the ward's current operational key."
+    "proof": {
+      "type": "array",
+      "items": { "$ref": "../data-integrity-proof.schema.json" },
+      "description": "REQ-7.2-4 (non-empty guardian set): incoming's own proof plus enough current guardians to meet addition_threshold. REQ-7.2-5 (empty set): incoming's own proof plus the ward's current operational key."
     }
   },
-  "required": ["type", "incoming", "prev", "sigs"],
+  "required": ["type", "incoming", "prev", "proof"],
   "additionalProperties": false
 }

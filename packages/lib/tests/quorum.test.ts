@@ -48,10 +48,28 @@ test("unanimous requires every eligible party", () => {
   assert.equal(meetsThreshold("unanimous", ["a", "b", "c"], ["a", "b", "c"]), true);
 });
 
+test("unanimous: vacuously unsatisfiable at n=0, not trivially met by zero signers (audit WS-1.3)", () => {
+  assert.equal(requiredCount("unanimous", 0), Infinity, "unanimous over an empty eligible set must never resolve to 0 required");
+  assert.equal(meetsThreshold("unanimous", [], []), false, "zero signers must never satisfy a threshold evaluated against zero eligible parties");
+});
+
 test("at_least(n): an absolute count regardless of eligible set size", () => {
   assert.equal(requiredCount({ at_least: 2 }, 10), 2);
   assert.equal(meetsThreshold({ at_least: 2 }, ["a"], ["a", "b", "c"]), false);
   assert.equal(meetsThreshold({ at_least: 2 }, ["a", "b"], ["a", "b", "c"]), true);
+});
+
+test("at_least(0) or negative: unsatisfiable, never trivially met by zero signers (audit WS-1.3)", () => {
+  assert.equal(requiredCount({ at_least: 0 }, 5), Infinity, "at_least:0 must not resolve to 0 required signers");
+  assert.equal(requiredCount({ at_least: -3 }, 5), Infinity, "a negative at_least must not resolve to 0 required signers either");
+  assert.equal(meetsThreshold({ at_least: 0 }, [], ["a", "b", "c"]), false, "an empty proof array must never satisfy at_least:0");
+});
+
+test("every threshold kind is unsatisfiable over an empty eligible set (audit WS-1.3: a guardian-less ward, or one whose sole guardian is deactivated, must never be trivially satisfied)", () => {
+  for (const threshold of ["any", "unanimous", "majority", { at_least: 1 }] as const) {
+    assert.equal(requiredCount(threshold, 0), Infinity, JSON.stringify(threshold));
+    assert.equal(meetsThreshold(threshold, [], []), false, JSON.stringify(threshold));
+  }
 });
 
 test("ineligible or duplicate signers are never double-counted", () => {

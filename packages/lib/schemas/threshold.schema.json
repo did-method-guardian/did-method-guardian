@@ -9,7 +9,7 @@
     { "const": "unanimous", "description": "M = N." },
     {
       "type": "object",
-      "properties": { "at_least": { "type": "integer", "description": "M = max(k, 0)." } },
+      "properties": { "at_least": { "type": "integer", "minimum": 1, "description": "M = k. k < 1 would be trivially satisfiable by zero signers (audit WS-1.3) -- unsatisfiable over an empty eligible set regardless." } },
       "required": ["at_least"],
       "additionalProperties": false
     }

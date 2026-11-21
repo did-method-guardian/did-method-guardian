@@ -18,9 +18,10 @@
     "gen-fixtures": "npm run build && node dist/scripts/gen-fixtures.js"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
     "@types/node": "^22.0.0",
-    "fast-check": "^3.23.0"
+    "ajv": "^8.20.0",
+    "fast-check": "^3.23.0",
+    "typescript": "^5.6.0"
   },
   "license": "MIT OR Apache-2.0",
   "repository": {
@@ -30,7 +31,14 @@
   },
   "homepage": "https://guardianspec.org/docs/",
   "bugs": "https://github.com/did-method-guardian/did-method-guardian/issues",
-  "keywords": ["did", "decentralized-identity", "ssi", "guardianship", "key-recovery", "did-method"],
+  "keywords": [
+    "did",
+    "decentralized-identity",
+    "ssi",
+    "guardianship",
+    "key-recovery",
+    "did-method"
+  ],
   "engines": {
     "node": ">=18"
   }

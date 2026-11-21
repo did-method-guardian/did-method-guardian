@@ -8,11 +8,23 @@ import type { Did, Threshold } from "./types.js";
  * See spec §4.6.
  */
 export function requiredCount(threshold: Threshold, n: number): number {
-  if (threshold === "any") return n === 0 ? Infinity : 1;
+  // Audit WS-1.3/REQ-5-1: every threshold kind is unsatisfiable over an
+  // empty eligible set -- zero valid signers must never be enough, no
+  // matter which kind is configured. Without this, a guardian-less ward
+  // (recovery_threshold evaluated against zero guardians) or a ward whose
+  // sole guardian is deactivated (REQ-4-4) would let an attacker's bare
+  // PoP-only proof satisfy "unanimous" or "at_least: 0" trivially.
+  if (n === 0) return Infinity;
+  if (threshold === "any") return 1;
   if (threshold === "unanimous") return n;
   if (threshold === "majority") return Math.floor(n / 2) + 1;
   if (typeof threshold === "object" && "at_least" in threshold) {
-    return Math.max(threshold.at_least, 0);
+    // k < 1 would make this kind trivially satisfiable by zero signers too
+    // (Math.max(k,0) === 0) -- treat it the same as an empty eligible set:
+    // unsatisfiable, not merely "0 required". validatePolicy (WS-1.8)
+    // additionally refuses to install a policy with k < 1 at all; this is
+    // defense in depth for any threshold value that reaches here regardless.
+    return threshold.at_least < 1 ? Infinity : threshold.at_least;
   }
   throw new Error(`unknown threshold: ${JSON.stringify(threshold)}`);
 }

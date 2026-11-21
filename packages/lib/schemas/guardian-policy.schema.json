@@ -3,9 +3,10 @@
   "$id": "https://guardianspec.org/schemas/guardian-policy.schema.json",
   "title": "GuardianPolicy",
   "description": "Formal spec §5. The full set of configurable consensus thresholds governing a ward's guardians.",
-  "$comment": "REQ-5-9: additionalProperties is true deliberately -- a verifier must ignore any field it doesn't recognize, so a future version can add new policy fields (a witness threshold, say) without breaking a verifier built against this one.",
+  "$comment": "REQ-5-9 (Fix 6): additionalProperties is true structurally -- a future version can add new policy fields (a witness threshold, say). What actually governs whether a verifier may TRUST those fields is `version`: a verifier MUST refuse to evaluate any operation governed by a policy whose version exceeds what it understands, rather than merely ignoring the field(s) it doesn't recognize.",
   "type": "object",
   "properties": {
+    "version": { "type": "integer", "minimum": 1, "default": 1, "description": "REQ-5-9 (Fix 6): a verifier MUST refuse to evaluate ANY operation governed by a policy whose version exceeds the highest version that verifier understands." },
     "recovery_threshold": { "$ref": "threshold.schema.json", "description": "REQ-5-2: governs a guardian-initiated custodial_rotate. Default \"any\"." },
     "tombstone_threshold": { "$ref": "threshold.schema.json", "description": "REQ-5-3: governs custodial_tombstone. Default \"any\"." },
     "removal_threshold": { "$ref": "threshold.schema.json", "description": "REQ-5-4: governs both a forced guardian_remove and guardian_relinquish. Default \"majority\"." },

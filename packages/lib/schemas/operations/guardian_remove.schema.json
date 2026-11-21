@@ -8,12 +8,12 @@
     "type": { "const": "guardian_remove" },
     "outgoing": { "type": "string", "description": "The guardian being removed. REQ-7.2-6: MUST be a current guardian and not the only one." },
     "prev": { "type": "string" },
-    "sigs": {
-      "type": "object",
-      "additionalProperties": { "type": "string" },
-      "description": "REQ-7.2-7a (voluntary): outgoing's own key, alone. REQ-7.2-7b (forced): enough of the other current guardians to meet removal_threshold, evaluated against the full current guardian set."
+    "proof": {
+      "type": "array",
+      "items": { "$ref": "../data-integrity-proof.schema.json" },
+      "description": "REQ-7.2-7a (voluntary): outgoing's own proof, alone. REQ-7.2-7b (forced): enough of the other current guardians to meet removal_threshold, evaluated against the full current guardian set."
     }
   },
-  "required": ["type", "outgoing", "prev", "sigs"],
+  "required": ["type", "outgoing", "prev", "proof"],
   "additionalProperties": false
 }
