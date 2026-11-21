@@ -24,7 +24,7 @@ Matches the shape other identity-tooling CLIs use (`age-keygen`, `ssh-keygen`, `
 A `did:guardian` identity's operational key is either:
 
 - **Registrar-held** -- the registrar generated it and still holds it, encrypted. This is what `register` produces. Day-to-day operations (`login`, `guardian adopt`) go through a session; the registrar signs on the identity's behalf.
-- **Self-held** -- you hold the key, the registrar holds nothing usable. Either `create` (fully offline -- but see the note below) or `key take-custody` (ends a registrar's custody of an existing identity) gets you here. Once self-held, `guardian add`/`recover`/`tombstone` sign and submit directly with your key -- no session needed.
+- **Self-held** -- you hold the key, the registrar holds nothing usable. Either `create` (with `--registrar`, publishes for real; with `--domain` alone, stays an offline draft) or `key take-custody` (ends a registrar's custody of an existing identity) gets you here. Once self-held, `guardian add`/`recover`/`tombstone` sign and submit directly with your key -- no session needed.
 
 Spec reference: [§12, Authority and trust model](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#12-authority-and-trust-model) and [§12.4, Key custody modes](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#124-key-custody-modes).
 
@@ -42,9 +42,10 @@ did-guardian key take-custody <ward-did> [--new-key <label>] [-f/--force] [-y/--
 ### Create and register
 
 ```
+did-guardian create <name> --registrar <domain> [--key <label>]
 did-guardian create <name> --domain <domain> [--key <label>]
 ```
-Builds a self-held genesis operation entirely offline -- no network call at all. The result is a **draft**: nothing makes the identifier real until some registrar accepts it, and the reference registrar in this repository doesn't accept a self-held genesis yet ([issue #4](https://github.com/did-method-guardian/did-method-guardian/issues/4)). Useful today for understanding the mechanics, or for embedding `packages/lib` in your own registrar.
+Builds a self-held genesis operation with a key you generate yourself and never hand to any registrar. With `--registrar`, submits it for real -- genesis submission is part of the method (formal spec REQ-8-2), so this works against any conformant registrar, including the reference one in this repository. With `--domain` alone, stays entirely offline instead -- no network call at all, and the result is a **draft** until something actually accepts it. Useful for understanding the mechanics, or for embedding `packages/lib` in your own registrar.
 
 ```
 did-guardian register <name> --registrar <domain> [--json]
@@ -80,7 +81,6 @@ These sign directly with keys you hold and only touch the network with `--submit
 
 ## What this doesn't do yet
 
-- No bring-your-own-key genesis against a live registrar ([issue #4](https://github.com/did-method-guardian/did-method-guardian/issues/4)) -- `create` produces a draft only.
 - No OAuth device-code login -- `login` uses a login secret or password directly. A device-code flow is worth adding once the registrar's OAuth surface supports it.
 - No `--keychain` support on Windows.
 - No propose/sign-individual flow for a guardian relationship that's partly self-held and partly registrar-held, or for a non-empty guardian set -- see the [registrar API spec](https://guardianspec.org/docs/registrar/)'s §3 for the asynchronous collection endpoints this would wrap.

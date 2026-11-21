@@ -2,6 +2,7 @@ import {
   generateKeypair,
   signPayload,
   corePayload,
+  verifyKeySigs,
   signCustodialCreate,
   signCustodialRotate,
   signGuardianAdd,
@@ -22,10 +23,10 @@ import {
   DEFAULT_GUARDIAN_POLICY,
   signLogHeadStatement,
 } from "@did-guardian/lib";
-import type { Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
+import type { CustodialCreateOp, Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { appendOperation, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
+import { appendOperation, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, insertWardCustody, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, hashPassword, randomSecret } from "./secretBox.js";
 import { proposeOperation } from "./pendingOps.js";
 
@@ -55,14 +56,71 @@ export function assertValidPassword(password: string): void {
 }
 
 /**
- * Registers a brand-new identity. Genesis itself is always guardian-less
- * now (REQ-7.1-1) -- `incoming` is always `[]`, and `signCustodialCreate`'s
- * own loop over it is trivially a no-op, so genesis never needs a guardian
- * signature at all. `creator` (REQ-7.1-4) is this registrar's own bare-
- * domain root identity for an ordinary self-service signup (no other party
- * initiated it); a `registrar` attestation (REQ-7.1-5), signed with that
- * same root identity's own key, is attached unconditionally -- cheap, since
- * the root ward is already auto-provisioned on first access regardless.
+ * v0.3, REQ-8-2: genesis submission is part of the method now, not a
+ * registerWard-only special case -- a client that built and self-signed
+ * a `custodial_create` (keySigs already attached, REQ-7.1-8) gets
+ * accepted here exactly like registerWard's server-generated one does,
+ * through this one shared path. The op arriving here carries no
+ * `registrar` attestation yet (adding it is this function's job, same
+ * as it always was); everything else about it -- `name`, keys, keySigs,
+ * `creator`, `policy` -- is already fixed and signed by the time it
+ * gets here, so nothing below may touch any of that content once
+ * computed, only check it.
+ *
+ * REQ-7.1-1 still requires `incoming` to be empty -- a client can't
+ * establish a guardian at genesis yet (that's a separate, not-yet-made
+ * change). REQ-7.1-6 is name validity plus availability, checked here
+ * independently of whatever a caller already checked, since this is
+ * reachable directly from an external submission with nothing upstream
+ * guaranteeing either.
+ */
+export async function acceptGenesis(
+  env: Env,
+  name: string,
+  op: CustodialCreateOp,
+  // registerWard's use only: this registrar generated operationalKeys[0]
+  // and will go on custodying it, so the ward row stores its real
+  // encrypted private key and no ward_custody row at all (registrar
+  // custody is the no-row default) -- never set by an external submission,
+  // which is always self-held by construction (nothing else custodies a
+  // key it was never given).
+  serverPrivateKeyEnc?: string,
+): Promise<{ accepted: true; did: string; cid: string; document: unknown } | { accepted: false; reason: string }> {
+  if (op.prev !== null) return { accepted: false, reason: "genesis must have prev: null (REQ-7.1-2)" };
+  if (op.name !== name) return { accepted: false, reason: `operation names "${op.name}", but was submitted to "${name}"` };
+  if (!isValidName(name)) return { accepted: false, reason: `invalid name "${name}" -- must be 3-32 lowercase alphanumeric/hyphen characters, no leading/trailing/double hyphens (REQ-7.1-6)` };
+  if (await getWardByName(env, name)) return { accepted: false, reason: `name "${name}" is already taken (REQ-7.1-6)` };
+  if (!Array.isArray(op.operationalKeys) || op.operationalKeys.length === 0) return { accepted: false, reason: "operationalKeys must be a non-empty array (REQ-7.1-3)" };
+  if (!op.verificationMethods || !op.services) return { accepted: false, reason: "verificationMethods and services must be present (REQ-7.1-3)" };
+  if (!op.creator) return { accepted: false, reason: "creator must be present (REQ-7.1-4)" };
+  if (op.incoming.length !== 0) return { accepted: false, reason: "incoming must be empty at genesis (REQ-7.1-1) -- guardianship is established by a later guardian_add" };
+
+  const payload = corePayload(op as any);
+  const pop = await verifyKeySigs(payload, op.operationalKeys, op.keySigs);
+  if (!pop.valid) return { accepted: false, reason: pop.reason ?? "invalid proof of possession (REQ-7.1-8)" };
+
+  const did = didFor(name, env.REGISTRAR_DOMAIN);
+  const rootWard = await getOrCreateRootWard(env);
+  const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
+  const attestation = await signRegistrarAttestation(op, rootWard.did, rootPrivateKey);
+  const genesis = { ...op, registrar: attestation };
+  const cid = await cidFor(genesis);
+  const createdAt = new Date().toISOString();
+
+  await insertWard(env, { name, did, public_key: op.operationalKeys[0], private_key_enc: serverPrivateKeyEnc ?? "", created_at: createdAt, login_secret_hash: null });
+  if (!serverPrivateKeyEnc) await insertWardCustody(env, did, "self", createdAt);
+  await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
+
+  const state = replay(did as Did, [{ cid, op: genesis }]);
+  return { accepted: true, did, cid, document: toDidDocument(state) };
+}
+
+/**
+ * Registers a brand-new, server-custodied identity -- this registrar
+ * generates the key, signs proof of possession (REQ-7.1-8) with
+ * it, and submits the result through `acceptGenesis` above, the exact
+ * same acceptance path a client-built, self-held genesis goes through.
+ * One creation path, two kinds of callers.
  *
  * `guardianDid`, when given, establishes a real first guardian via a
  * genuine, separately-signed `guardian_add` (REQ-7.2-5, zero-to-one) --
@@ -106,7 +164,6 @@ export async function registerWard(
   const did = didFor(name, env.REGISTRAR_DOMAIN);
   const keypair = await generateKeypair();
   const rootWard = await getOrCreateRootWard(env);
-  const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
 
   const genesisPartial = {
     type: "custodial_create" as const,
@@ -119,10 +176,11 @@ export async function registerWard(
     prev: null,
     creator: rootWard.did,
   };
-  const attestation = await signRegistrarAttestation(genesisPartial, rootWard.did, rootPrivateKey);
-  const genesis = await signCustodialCreate({ ...genesisPartial, registrar: attestation }, {}, { [keypair.publicKey]: keypair.privateKey });
-  const cid = await cidFor(genesis);
-  const createdAt = new Date().toISOString();
+  const genesis = await signCustodialCreate(genesisPartial, {}, { [keypair.publicKey]: keypair.privateKey });
+  const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
+  const accepted = await acceptGenesis(env, name, genesis, privateKeyEnc);
+  if (!accepted.accepted) throw new RegistrarError(`registration failed: ${accepted.reason}`, 500);
+  const { cid } = accepted;
 
   // The login secret proves control of this ward to THIS registrar's own
   // login/OIDC flow -- a separate credential from the operational key,
@@ -134,11 +192,7 @@ export async function registerWard(
   // needs real key stretching that a generated secret doesn't.
   const loginSecret = password ? undefined : randomSecret();
   const loginSecretHash = password ? await hashPassword(password) : await hashSecret(loginSecret!);
-
-  const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
-  const ward: WardRow = { name, did, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: createdAt, login_secret_hash: loginSecretHash };
-  await insertWard(env, ward);
-  await appendOperation(env, { cid, did, prev_cid: null, op_type: genesis.type, payload: JSON.stringify(genesis), created_at: createdAt });
+  await setLoginSecretHash(env, name, loginSecretHash);
 
   let pendingGuardianAdd: { id: string } | undefined;
   if (guardianDid) {
@@ -683,8 +737,10 @@ export async function resolveLog(env: Env, name: string | null): Promise<LogEntr
  * bespoke per-type call. `guardian_transfer` (v0.1) is no longer accepted
  * for new submissions -- superseded by guardian_add/guardian_remove; it
  * stays supported for REPLAYING any already-accepted history (document.ts),
- * just not for new writes. `custodial_create` isn't reachable here at all --
- * genesis has its own path (registerWard).
+ * just not for new writes. `custodial_create` (v0.3, REQ-8-2) delegates to
+ * acceptGenesis above, before the findWard check below -- a fresh genesis
+ * has no ward row yet by definition, which every other operation type
+ * requires.
  */
 /**
  * `sigTimestamps`, when given (registrar API spec §3's own async collection,
@@ -700,7 +756,12 @@ export async function submitOperation(
   name: string | null,
   op: Operation,
   sigTimestamps?: Record<Did, string>,
-): Promise<{ accepted: true } | { accepted: false; reason: string }> {
+): Promise<{ accepted: true; cid?: string; document?: unknown } | { accepted: false; reason: string }> {
+  if (op.type === "custodial_create") {
+    if (name === null) return { accepted: false, reason: "the bare-domain root identity can't be created this way" };
+    const result = await acceptGenesis(env, name, op);
+    return result.accepted ? { accepted: true, cid: result.cid, document: result.document } : result;
+  }
   const ward = await findWard(env, name);
   if (!ward) return { accepted: false, reason: `no such ward "${name}"` };
   const log = await loadLog(env, ward.did);

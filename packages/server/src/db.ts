@@ -104,6 +104,17 @@ export async function takeCustodyOfWardKey(env: Env, did: string, publicKey: str
     .run();
 }
 
+/**
+ * For a ward that's self-held from birth (v0.3, a client-submitted
+ * genesis accepted by registrar.ts's acceptGenesis) -- unlike
+ * takeCustodyOfWardKey above, there's no prior "registrar" row to
+ * transition from and no wards.public_key to overwrite (insertWard
+ * already wrote the ward's key and an empty private_key_enc).
+ */
+export async function insertWardCustody(env: Env, did: string, custodyMode: "registrar" | "self", at: string): Promise<void> {
+  await env.DB.prepare("INSERT INTO ward_custody (did, custody_mode, taken_custody_at) VALUES (?, ?, ?)").bind(did, custodyMode, at).run();
+}
+
 export interface OidcClientRow {
   client_id: string;
   client_secret_hash: string; // a throwaway, never-issued random value for a public client (token_endpoint_auth_method = "none") -- the column predates dynamic registration and stays NOT NULL rather than forcing a disruptive table rebuild

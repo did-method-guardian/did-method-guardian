@@ -54,16 +54,27 @@ export async function fetchLog(did: Did): Promise<LogEntry[]> {
   return body as LogEntry[];
 }
 
-export async function submitOperation(did: Did, op: Operation): Promise<{ accepted: boolean; reason?: string }> {
+/**
+ * `cid`, when the registrar returns one (currently only for a genesis
+ * submission, v0.3 REQ-8-2): the accepted operation's REAL cid, computed
+ * server-side over the content the registrar actually stored, including
+ * its just-added `registrar` attestation. Never the same value a
+ * caller could have computed locally before submitting -- the
+ * attestation is part of the signed content, so adding it necessarily
+ * changes the cid. Anything that needs to report or pin an anchor for a
+ * newly-created identity must use this value, not one computed from the
+ * unattested op it sent.
+ */
+export async function submitOperation(did: Did, op: Operation): Promise<{ accepted: boolean; reason?: string; cid?: string }> {
   const { domain, name } = parseDid(did);
   const res = await fetch(`https://${domain}${wellKnownPath(name)}/operations`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(op),
   });
-  const body = (await res.json()) as { accepted?: boolean; error?: string };
+  const body = (await res.json()) as { accepted?: boolean; error?: string; cid?: string };
   if (!res.ok) return { accepted: false, reason: body.error ?? `HTTP ${res.status}` };
-  return { accepted: true };
+  return { accepted: true, cid: body.cid };
 }
 
 /**

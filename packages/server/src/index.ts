@@ -91,9 +91,23 @@ export default {
           return handleAgentCard(env, name);
         }
         if (suffix === "/operations" && request.method === "POST") {
-          const op = await request.json();
+          const op = (await request.json()) as { type?: string };
+          // v0.3, REQ-8-2: a custodial_create here is a brand-new identity
+          // claiming this name -- anonymous self-service by construction
+          // (there's no session or bearer token for a DID that doesn't
+          // exist yet), so it gets exactly /register's gate: rate-
+          // limited per IP, and blocked outright when this deployment has
+          // closed public registration (REGISTRATION_MODE, env.ts).
+          if (op.type === "custodial_create") {
+            if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
+              return error("too many registration attempts from this address -- try again in a few minutes", 429);
+            }
+            if (env.REGISTRATION_MODE === "closed") {
+              return error("this registrar doesn't accept public registration", 403);
+            }
+          }
           const result = await submitOperation(env, name, op as any);
-          return result.accepted ? json({ accepted: true }) : error(result.reason, 400);
+          return result.accepted ? json({ accepted: true, cid: result.cid, document: result.document }) : error(result.reason, 400);
         }
         if (suffix === "/propose" && request.method === "POST") {
           // No session/trusted-client gate, deliberately -- same trust model
