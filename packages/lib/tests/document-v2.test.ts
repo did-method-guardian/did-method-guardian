@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeypair } from "../src/crypto.js";
-import { createProof, unsecuredDocument } from "../src/operations.js";
+import { createProof, popVerificationMethod, unsecuredDocument } from "../src/operations.js";
 import { checkNullification, reconstructChain, replay } from "../src/document.js";
 import type { VerificationContext } from "../src/rules.js";
 import { DEFAULT_GUARDIAN_POLICY } from "../src/types.js";
@@ -18,8 +18,14 @@ const wardDid: Did = "did:guardian:example.com:alice";
 // validity -- only `checkNullification`'s own rule-driven path (via
 // rotateRule.isSatisfied) does, and those specific tests build real
 // proofs with createProof. Everywhere else, a placeholder is enough.
-function fakeProof(verificationMethod: string): DataIntegrityProof {
-  return { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod, proofPurpose: "assertionMethod", created: "2026-01-01T00:00:00.000Z", proofValue: "zTest" };
+function fakeProof(verificationMethod: string, created: string = "2026-01-01T00:00:00.000Z"): DataIntegrityProof {
+  return { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod, proofPurpose: "assertionMethod", created, proofValue: "zTest" };
+}
+
+const REGISTRAR_DID: Did = "did:guardian:example.com";
+/** WS-4.1: the registrar's own acceptance receipt -- checkNullification's window check (REQ-6-9) reads this, never the storage-layer LogEntry.acceptedAt. */
+function fakeReceipt(createdAt: string): DataIntegrityProof {
+  return fakeProof(`${REGISTRAR_DID}#key-0`, createdAt);
 }
 
 function genesisEntry(overrides: Partial<CustodialCreateOp> = {}): LogEntry {
@@ -105,10 +111,19 @@ test("REQ-6-11: a nullification can itself be nullified -- the same mechanism ap
 
 // --- REQ-6-8/6-9: checkNullification -------------------------------------
 
+/** Genesis with `guardianDid` actually established via `incoming` (co-signed) and `recovery_threshold: "any"` set directly in genesis's own `policy` -- not a post-hoc ctx.state patch, which checkNullification's state-at-prev replay (WS-1.4) would now simply ignore. */
+function guardianGenesisEntry(guardianDid: Did): LogEntry {
+  return genesisEntry({
+    incoming: [guardianDid],
+    policy: { recovery_threshold: "any" },
+    proof: [fakeProof(`${REGISTRAR_DID}#key-0`), fakeProof(`${guardianDid}#key-0`)],
+  });
+}
+
 async function makeGuardianContext(wardDid: Did, guardianDid: Did, guardianPrivateKey: string, guardianPublicKey: string): Promise<VerificationContext> {
   return {
     wardDid,
-    state: replay(wardDid, [genesisEntry()]),
+    state: replay(wardDid, [guardianGenesisEntry(guardianDid)]),
     resolveKey: (did) => (did === guardianDid ? [guardianPublicKey] : undefined),
     isGuardianLive: () => true,
   };
@@ -118,19 +133,20 @@ test("REQ-6-8: a guardian-signed rotation naming an earlier prev, within the rec
   const guardianDid: Did = "did:guardian:example.com:g1";
   const guardian = await generateKeypair();
   const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
-  ctx.state = { ...ctx.state, guardians: [guardianDid], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } };
 
   const e1: LogEntry = {
     cid: "cid-1",
-    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1")] },
+    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1"), fakeReceipt(new Date().toISOString())] },
     acceptedAt: new Date().toISOString(),
   };
-  const partial = { type: "custodial_rotate" as const, operationalKeys: ["recovery-k"], services: {}, prev: "cid-genesis" };
+  const recoveryKey = await generateKeypair(); // REQ-7.2-12: PoP must be real -- nullification enforces it like any other rotation
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [recoveryKey.publicKey], services: {}, prev: "cid-genesis" };
   const unsecuredDoc = unsecuredDocument(partial as any);
   const guardianProof = await createProof(unsecuredDoc, `${guardianDid}#key-0`, guardian.privateKey);
-  const op = { ...partial, proof: [guardianProof] };
+  const popProof = await createProof(unsecuredDoc, popVerificationMethod(recoveryKey.publicKey), recoveryKey.privateKey);
+  const op = { ...partial, proof: [popProof, guardianProof] };
 
-  const result = await checkNullification([genesisEntry(), e1], op, ctx);
+  const result = await checkNullification([guardianGenesisEntry(guardianDid), e1], op, ctx);
   assert.equal(result.ok, true, result.reason);
   assert.equal(result.nullifiedEntry?.cid, "cid-1");
 });
@@ -162,20 +178,99 @@ test("REQ-6-9: a nullification naming a prev whose successor was accepted more t
   const guardianDid: Did = "did:guardian:example.com:g1";
   const guardian = await generateKeypair();
   const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
-  ctx.state = { ...ctx.state, guardians: [guardianDid], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "any" } };
 
   const old = new Date(Date.now() - 73 * 60 * 60 * 1000).toISOString();
   const e1: LogEntry = {
     cid: "cid-1",
-    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1")] },
+    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1"), fakeReceipt(old)] },
     acceptedAt: old,
   };
-  const partial = { type: "custodial_rotate" as const, operationalKeys: ["recovery-k"], services: {}, prev: "cid-genesis" };
+  const recoveryKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [recoveryKey.publicKey], services: {}, prev: "cid-genesis" };
   const unsecuredDoc = unsecuredDocument(partial as any);
   const guardianProof = await createProof(unsecuredDoc, `${guardianDid}#key-0`, guardian.privateKey);
-  const op = { ...partial, proof: [guardianProof] };
+  const popProof = await createProof(unsecuredDoc, popVerificationMethod(recoveryKey.publicKey), recoveryKey.privateKey);
+  const op = { ...partial, proof: [popProof, guardianProof] };
 
-  const result = await checkNullification([genesisEntry(), e1], op, ctx);
+  const result = await checkNullification([guardianGenesisEntry(guardianDid), e1], op, ctx);
   assert.equal(result.ok, false);
   assert.match(result.reason!, /72 hours/);
+});
+
+test("audit WS-1.4: a nullifying rotation installing a key with NO proof of possession is rejected -- the same requirement every other rotation is held to", async () => {
+  const guardianDid: Did = "did:guardian:example.com:g1";
+  const guardian = await generateKeypair();
+  const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
+
+  const e1: LogEntry = {
+    cid: "cid-1",
+    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1"), fakeReceipt(new Date().toISOString())] },
+    acceptedAt: new Date().toISOString(),
+  };
+  const recoveryKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [recoveryKey.publicKey], services: {}, prev: "cid-genesis" };
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const guardianProof = await createProof(unsecuredDoc, `${guardianDid}#key-0`, guardian.privateKey);
+  const op = { ...partial, proof: [guardianProof] }; // no PoP proof for recoveryKey.publicKey at all
+
+  const result = await checkNullification([guardianGenesisEntry(guardianDid), e1], op, ctx);
+  assert.equal(result.ok, false, "a key with no proof of possession must never be installed via nullification, same as any other rotation path");
+  assert.match(result.reason!, /proof of possession/);
+});
+
+test("audit WS-4.2(d): a nullification can't itself be nullified -- one level only, closing the ping-pong two-guardian deadlock", async () => {
+  const guardianDid: Did = "did:guardian:example.com:g1";
+  const guardian = await generateKeypair();
+  const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
+
+  const e1: LogEntry = {
+    cid: "cid-1",
+    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1"), fakeReceipt(new Date().toISOString())] },
+    acceptedAt: new Date().toISOString(),
+  };
+  const e2: LogEntry = {
+    cid: "cid-2",
+    op: { type: "custodial_rotate", operationalKeys: ["k2"], services: {}, prev: "cid-1", proof: [fakeProof("did:key:k2#k2"), fakeReceipt(new Date().toISOString())] },
+    acceptedAt: new Date().toISOString(),
+  };
+  // nullify1 already nullified e1 (and so e2) by naming cid-genesis -- itself a nullification, by construction (its own prev, cid-genesis, does not match e2's cid, the entry immediately preceding it in storage order).
+  const nullify1: LogEntry = {
+    cid: "cid-3",
+    op: { type: "custodial_rotate", operationalKeys: ["k3"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k3#k3"), fakeProof(`${guardianDid}#key-0`), fakeReceipt(new Date().toISOString())] },
+    acceptedAt: new Date().toISOString(),
+  };
+
+  const recoveryKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [recoveryKey.publicKey], services: {}, prev: "cid-genesis" }; // attempts to nullify nullify1 by naming the SAME prev it did
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const guardianProof = await createProof(unsecuredDoc, `${guardianDid}#key-0`, guardian.privateKey);
+  const popProof = await createProof(unsecuredDoc, popVerificationMethod(recoveryKey.publicKey), recoveryKey.privateKey);
+  const op = { ...partial, proof: [popProof, guardianProof] };
+
+  const result = await checkNullification([guardianGenesisEntry(guardianDid), e1, e2, nullify1], op, ctx);
+  assert.equal(result.ok, false, "nullify1 is itself a nullification -- it must not be nullifiable a second time");
+  assert.match(result.reason!, /itself a nullification/);
+});
+
+test("audit WS-4.1: a nullification target with no registrar receipt at all is rejected -- never falls back to trusting an unsigned acceptedAt", async () => {
+  const guardianDid: Did = "did:guardian:example.com:g1";
+  const guardian = await generateKeypair();
+  const ctx = await makeGuardianContext(wardDid, guardianDid, guardian.privateKey, guardian.publicKey);
+
+  const e1: LogEntry = {
+    cid: "cid-1",
+    // no receipt proof at all -- only a PoP proof, same as a log entry predating this registrar's own adoption of receipts would have
+    op: { type: "custodial_rotate", operationalKeys: ["k1"], services: {}, prev: "cid-genesis", proof: [fakeProof("did:key:k1#k1")] },
+    acceptedAt: new Date().toISOString(), // recent by the unsigned, no-longer-trusted field -- must not matter
+  };
+  const recoveryKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [recoveryKey.publicKey], services: {}, prev: "cid-genesis" };
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const guardianProof = await createProof(unsecuredDoc, `${guardianDid}#key-0`, guardian.privateKey);
+  const popProof = await createProof(unsecuredDoc, popVerificationMethod(recoveryKey.publicKey), recoveryKey.privateKey);
+  const op = { ...partial, proof: [popProof, guardianProof] };
+
+  const result = await checkNullification([guardianGenesisEntry(guardianDid), e1], op, ctx);
+  assert.equal(result.ok, false, "a missing receipt must never be treated as 'recent enough' via the unsigned acceptedAt fallback");
+  assert.match(result.reason!, /registrar receipt/);
 });

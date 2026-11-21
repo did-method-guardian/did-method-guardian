@@ -11,6 +11,7 @@ import {
   signGuardianRelinquish,
   signCustodialTombstone,
   signRegistrarAttestation,
+  signReceipt,
   cidFor,
   replay,
   checkNullification,
@@ -108,9 +109,16 @@ export async function acceptGenesis(
   const shape = checkGenesisShape(op);
   if (!shape.valid) return { accepted: false, reason: shape.reason ?? "invalid genesis shape" };
 
+  // WS-1.14 (audit): one timestamp for both the attestation's own `created`
+  // and the stored `createdAt` -- previously two separate `new Date()`
+  // calls a couple of lines apart, so they drifted by 1-2ms. For genesis,
+  // this attestation IS the acceptance receipt (WS-4.1) -- no second proof
+  // needed, unlike every other operation type, which gets one appended
+  // below in submitOperation.
+  const acceptedAt = new Date().toISOString();
   const rootWard = await getOrCreateRootWard(env);
   const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
-  const attestation = await signRegistrarAttestation(op, rootWard.did, rootPrivateKey);
+  const attestation = await signRegistrarAttestation(op, rootWard.did, rootPrivateKey, acceptedAt);
   const genesis = { ...op, proof: [...op.proof, attestation] };
 
   // Everything cryptographic -- proof of possession (REQ-7.1-8), every
@@ -124,7 +132,7 @@ export async function acceptGenesis(
   if (!verified.valid) return { accepted: false, reason: verified.reason ?? "genesis verification failed" };
 
   const cid = await cidFor(genesis);
-  const createdAt = new Date().toISOString();
+  const createdAt = acceptedAt;
 
   await insertWard(env, { name, did, public_key: op.operationalKeys[0], private_key_enc: serverPrivateKeyEnc ?? "", created_at: createdAt, login_secret_hash: null });
   if (!serverPrivateKeyEnc) await insertWardCustody(env, did, "self", createdAt);
@@ -795,6 +803,20 @@ export async function submitOperation(
     return { accepted: false, reason: "this identity is deactivated -- no further operations are accepted (REQ-6-5)" };
   }
 
+  // WS-1.5 (audit): a cid is content-addressed and deterministic (REQ-6-4),
+  // so an operation that was once superseded by a nullification (REQ-6-10)
+  // still has exactly the same cid if resubmitted verbatim -- proofs are
+  // public, carry no nonce or expiry, so anyone could otherwise replay a
+  // superseded guardian-signed custodial_rotate with the same prev and
+  // nullify the current head all over again within a fresh 72h window.
+  // Rejecting any cid that already appears ANYWHERE in the log (not just
+  // the currently-active chain) closes this regardless of which branch it
+  // originally landed on.
+  const candidateCid = await cidFor(op);
+  if (log.some((e) => e.cid === candidateCid)) {
+    return { accepted: false, reason: "this exact operation (by content hash) already appears in this identity's log -- resubmitting a superseded entry verbatim is not a new nullification (REQ-6-8, audit WS-1.5)" };
+  }
+
   const ctx: VerificationContext = {
     wardDid: ward.did,
     state,
@@ -838,14 +860,28 @@ export async function submitOperation(
 
   if (!result.valid) return { accepted: false, reason: result.reason ?? "verification failed" };
 
-  const cid = await cidFor(op);
+  // WS-4.1 (audit): every operation this registrar accepts gets its own
+  // signed acceptance receipt appended, one more independent proof in the
+  // same set -- the one trustworthy acceptance time REQ-6-8/6-9's
+  // nullification window (and any future time-sensitive check) reads,
+  // never the unsigned `created_at` row this same timestamp also becomes.
+  // Appended AFTER verification and never changes `candidateCid`/`cid`
+  // (REQ-6-4 strips every proof before hashing), so it's safe to add here
+  // regardless of which branch (ordinary append or nullification) accepted it.
+  const acceptedAt = new Date().toISOString();
+  const rootWard = await getOrCreateRootWard(env);
+  const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
+  const receipt = await signReceipt(unsecuredDocument(op as any), rootWard.did as Did, rootPrivateKey, acceptedAt);
+  const existingProof = (op as { proof?: DataIntegrityProof[] }).proof ?? [];
+  const acceptedOp = { ...op, proof: [...existingProof, receipt] } as Operation;
+
   await appendOperation(env, {
-    cid,
+    cid: candidateCid,
     did: ward.did,
     prev_cid: opPrev,
-    op_type: op.type,
-    payload: JSON.stringify(op),
-    created_at: new Date().toISOString(),
+    op_type: acceptedOp.type,
+    payload: JSON.stringify(acceptedOp),
+    created_at: acceptedAt,
   });
   return { accepted: true };
 }

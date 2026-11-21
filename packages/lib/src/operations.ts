@@ -185,9 +185,53 @@ export async function signCustodialCreate(
  * other operation type still relies on `LogEntry.acceptedAt`, unsigned,
  * since only genesis carries a registrar proof at all).
  */
-export async function signRegistrarAttestation(partial: Omit<CustodialCreateOp, "proof">, registrarDid: Did, registrarPrivateKey: string): Promise<DataIntegrityProof> {
+export async function signRegistrarAttestation(partial: Omit<CustodialCreateOp, "proof">, registrarDid: Did, registrarPrivateKey: string, created?: string): Promise<DataIntegrityProof> {
   const unsecuredDoc = unsecuredDocument(partial as any);
-  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey);
+  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, created);
+}
+
+/**
+ * WS-4.1 (audit): the registrar's own signed acceptance receipt -- one
+ * more independent proof in the same set as every other signer's,
+ * appended by the registrar AFTER an operation is otherwise fully
+ * verified, with `created` set to the actual acceptance instant. Every
+ * non-genesis operation type has no registrar proof at all until this is
+ * appended; for genesis, REQ-7.1-5's own attestation already fills this
+ * role (one mechanism, not two -- see `receiptCreatedAt` below for the
+ * matching read side).
+ */
+export async function signReceipt(unsecuredDoc: unknown, registrarDid: Did, registrarPrivateKey: string, acceptedAt: string): Promise<DataIntegrityProof> {
+  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, acceptedAt);
+}
+
+/**
+ * WS-4.1: the one trustworthy acceptance time for `op` -- the registrar's
+ * own receipt proof's `created`, never a signer's self-reported `created`
+ * (a rotated-away key could backdate it to whenever it was still valid)
+ * and never an unsigned, storage-layer timestamp. Every time-sensitive
+ * check (REQ-6-8/6-9's nullification window, REQ-4-4's cross-log
+ * deactivation timing) MUST read this, not `LogEntry.acceptedAt` directly.
+ *
+ * Genesis is the one case with no separate registrar receipt proof at
+ * all: REQ-7.1-5's attestation (`${registrarDid}#key-0`) already serves
+ * this role for an ordinary genesis, and Fix 7's root self-attestation
+ * (no separate attestation exists; the root's own PoP proof stands in
+ * for it) is checked as a fallback here for exactly that case.
+ *
+ * Returns undefined when no receipt can be found at all -- callers MUST
+ * treat that as "this operation's acceptance time can't be trusted,"
+ * never "assume now."
+ */
+export function receiptCreatedAt(op: { type: string; proof?: DataIntegrityProof[]; did?: Did; operationalKeys?: string[] }, registrarDid: Did): string | undefined {
+  const registrarProof = (op.proof ?? []).find((p) => p.verificationMethod === `${registrarDid}#key-0`);
+  if (registrarProof) return registrarProof.created;
+  if (op.type === "custodial_create" && op.did === registrarDid) {
+    for (const key of op.operationalKeys ?? []) {
+      const pop = findPopProof(op.proof ?? [], key);
+      if (pop) return pop.created;
+    }
+  }
+  return undefined;
 }
 
 export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyResolver, registrarDid: Did): Promise<{ valid: boolean; reason?: string }> {
