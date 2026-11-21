@@ -15,7 +15,7 @@
 // isn't retired from the Operation union, only from new-submission
 // acceptance).
 
-import { unsecuredDocument, verificationMethodDid, verifyPop, verifySignerProof } from "./operations.js";
+import { unsecuredDocument, verificationMethodDid, verifyAgainstKeys, verifyPop, verifySignerProof } from "./operations.js";
 import type { KeyResolver } from "./operations.js";
 import { meetsThreshold } from "./quorum.js";
 import { MAX_SUPPORTED_POLICY_VERSION } from "./types.js";
@@ -90,6 +90,15 @@ async function validSignersOf(op: { proof?: DataIntegrityProof[] }, ctx: Verific
   const unsecuredDoc = unsecuredDocument(op as any);
   const valid: Did[] = [];
   for (const did of candidateProofDids(proofs)) {
+    // Audit WS-1.1/1.2: the ward's own proof is checked directly against
+    // ctx.state.operationalKeys (the state this operation is being
+    // verified against), never through ctx.resolveKey -- an external
+    // resolver function is for OTHER identities (guardians), never this
+    // same ward, whose current keys ctx.state already states authoritatively.
+    if (did === ctx.wardDid) {
+      if (await verifyAgainstKeys(unsecuredDoc, proofs, did, ctx.state.operationalKeys)) valid.push(did);
+      continue;
+    }
     const ts = ctx.sigTimestamps?.[did];
     if (await verifySignerProof(unsecuredDoc, proofs, did, ctx.resolveKey, ts ? new Date(ts) : undefined)) valid.push(did);
   }
@@ -167,8 +176,13 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
   checkShape: (op) => verifyPop(unsecuredDocument(op as any), op.operationalKeys, op.proof),
   async isSatisfied(op, _validSigners, ctx) {
     const unsecuredDoc = unsecuredDocument(op as any);
-    const wardTs = ctx.sigTimestamps?.[ctx.wardDid];
-    const wardSigned = await verifySignerProof(unsecuredDoc, op.proof, ctx.wardDid, ctx.resolveKey, wardTs ? new Date(wardTs) : undefined);
+    // Audit WS-1.1/1.2: checked directly against ctx.state.operationalKeys
+    // (the state at this operation's own prev), never through
+    // ctx.resolveKey -- the ward's own current keys are already stated
+    // authoritatively there, so a second, external resolution can only
+    // ever introduce a way to disagree with it (the stale `wards.
+    // public_key` DB column bug this closes, on the server side).
+    const wardSigned = await verifyAgainstKeys(unsecuredDoc, op.proof, ctx.wardDid, ctx.state.operationalKeys);
     if (wardSigned) return true; // REQ-7.2-1(a)
     const validGuardianSigs = await validSignersOf(op, ctx);
     const live = await liveGuardians(ctx.state, ctx.isGuardianLive);

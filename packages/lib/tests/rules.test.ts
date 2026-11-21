@@ -171,12 +171,26 @@ test("REQ-7.2-12: checkShape rejects a rotation whose new key carries no proof o
 test("REQ-7.2-1(a): a ward's own single operational key alone satisfies rotation, regardless of recovery_threshold", async () => {
   const ward = await generateKeypair();
   const wardDid: Did = "did:guardian:example.com:alice";
-  const state = makeState({ did: wardDid, guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "unanimous" } });
+  const state = makeState({ did: wardDid, operationalKeys: [ward.publicKey], guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, recovery_threshold: "unanimous" } });
   const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], services: {}, prev: "cid0" };
   const proof = await signProofs(partial, { [wardDid]: ward.privateKey }, [wardDid]); // not under test here -- isSatisfied doesn't check proof of possession, checkShape does
   const op = { ...partial, proof };
   const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [wardDid]: ward.publicKey }), isGuardianLive: allLive() };
   assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctx), true);
+});
+
+test("audit WS-1.1/1.2: the ward's own signature is checked against ctx.state.operationalKeys, never a resolver that could disagree with it (the stale wards.public_key bug this closes)", async () => {
+  const ward = await generateKeypair();
+  const stale = await generateKeypair(); // stands in for a registrar's own stale cached key column
+  const wardDid: Did = "did:guardian:example.com:alice";
+  // ctx.state (the authoritative replayed state) says the ward's CURRENT key is `ward`...
+  const state = makeState({ did: wardDid, operationalKeys: [ward.publicKey] });
+  const partial = { type: "custodial_rotate" as const, operationalKeys: ["new-pk"], services: {}, prev: "cid0" };
+  const proof = await signProofs(partial, { [wardDid]: ward.privateKey }, [wardDid]); // ...and the ward signs with that same current key
+  const op = { ...partial, proof };
+  // ...but ctx.resolveKey, if it were ever consulted for the ward, would report a DIFFERENT, stale key -- must never be reached.
+  const ctx: VerificationContext = { wardDid, state, resolveKey: makeResolver({ [wardDid]: stale.publicKey }), isGuardianLive: allLive() };
+  assert.equal(await OPERATION_RULES.custodial_rotate.isSatisfied(op, [], ctx), true, "the ward's current-key signature must verify against ctx.state, regardless of what a stale resolver would have said");
 });
 
 test("REQ-7.2-1(b): a guardian committee meeting recovery_threshold can rotate without the ward's own key", async () => {
@@ -290,7 +304,7 @@ test("REQ-7.2-5: zero-to-one guardian_add requires both the incoming guardian's 
   const ward = await generateKeypair();
   const incomingDid: Did = "did:guardian:example.com:board";
   const incoming = await generateKeypair();
-  const state = makeState({ did: wardDid, guardians: [] });
+  const state = makeState({ did: wardDid, operationalKeys: [ward.publicKey], guardians: [] });
   const partial = { type: "guardian_add" as const, incoming: incomingDid, prev: "cid0" };
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey, [incomingDid]: incoming.publicKey });
 
@@ -311,7 +325,7 @@ test("REQ-12-4: guardian_add verifies the same whether or not it carries an anch
   const ward = await generateKeypair();
   const incomingDid: Did = "did:guardian:example.com:board";
   const incoming = await generateKeypair();
-  const state = makeState({ did: wardDid, guardians: [] });
+  const state = makeState({ did: wardDid, operationalKeys: [ward.publicKey], guardians: [] });
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey, [incomingDid]: incoming.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };
   const signerKeys = { [incomingDid]: incoming.privateKey, [wardDid]: ward.privateKey };
@@ -576,7 +590,7 @@ test("Fix 6: verifyByRules refuses to evaluate ANY operation once the current po
 test("REQ-7.3-1: the ward's own key alone satisfies tombstone under the default any-threshold", async () => {
   const wardDid: Did = "did:guardian:example.com:alice";
   const ward = await generateKeypair();
-  const state = makeState({ did: wardDid, guardians: [] });
+  const state = makeState({ did: wardDid, operationalKeys: [ward.publicKey], guardians: [] });
   const partial = { type: "custodial_tombstone" as const, prev: "cid0" };
   const resolveKey = makeResolver({ [wardDid]: ward.publicKey });
   const ctx: VerificationContext = { wardDid, state, resolveKey, isGuardianLive: allLive() };

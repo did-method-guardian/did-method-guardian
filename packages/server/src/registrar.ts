@@ -944,7 +944,25 @@ export function makeExternalResolver(env: Env) {
   return async (did: Did, asOf?: Date): Promise<string[] | undefined> => {
     const local = await getWardByDid(env, did);
     if (!asOf) {
-      if (local) return [local.public_key];
+      // Audit WS-1.1/1.2: `wards.public_key` is set once at genesis
+      // (registerWard/acceptGenesis) and only ever updated by rotateWard
+      // and takeCustody -- a self-held ward rotated through the generic
+      // POST .../operations path (submitOperation, never touches that
+      // column at all) leaves it permanently stale. A verification against
+      // "now" MUST read whatever the log's own latest state actually says,
+      // the same as the asOf branch below already does -- never a cached
+      // column that can silently disagree with the log it's supposed to
+      // summarize. Replaying the full log on every resolution is the same
+      // cost this function already pays for every `asOf` call; there is no
+      // cheaper "trust the DB" shortcut that's actually correct.
+      if (local) {
+        const log = await loadLog(env, local.did);
+        try {
+          return replay(local.did as Did, log).operationalKeys;
+        } catch {
+          return undefined;
+        }
+      }
       // External DID: resolve via its own registrar's .well-known endpoint --
       // the same deterministic, single-parse split used everywhere else in
       // this method (spec §5), not a bespoke re-implementation of it.

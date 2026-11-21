@@ -131,10 +131,26 @@ export async function verifyPop(unsecuredDoc: unknown, keys: string[], proofs: D
  * the first one that verifies wins.
  */
 export async function verifySignerProof(unsecuredDoc: unknown, proofs: DataIntegrityProof[], did: Did, resolve: KeyResolver, asOf?: Date): Promise<boolean> {
-  const candidates = proofs.filter((p) => verificationMethodDid(p.verificationMethod) === did);
-  if (candidates.length === 0) return false;
+  if (!proofs.some((p) => verificationMethodDid(p.verificationMethod) === did)) return false;
   const keys = await resolve(did, asOf);
   if (!keys || keys.length === 0) return false;
+  return verifyAgainstKeys(unsecuredDoc, proofs, did, keys);
+}
+
+/**
+ * The shared inner loop `verifySignerProof` uses once it has a key list in
+ * hand -- also exported directly for callers that already KNOW the right
+ * key set without needing to resolve it at all. Audit WS-1.1/1.2: the
+ * ward's own current operational keys are exactly this case -- they're
+ * already present in `ctx.state.operationalKeys` (the very state an
+ * operation is being verified against), so resolving them a second time
+ * through an external resolver function is both unnecessary and a risk
+ * that resolver might disagree with `ctx.state` (the stale-cached-column
+ * bug this closes). `proofs` is the operation's own full proof array --
+ * this filters by `did` itself, same as `verifySignerProof`.
+ */
+export async function verifyAgainstKeys(unsecuredDoc: unknown, proofs: DataIntegrityProof[], did: Did, keys: string[]): Promise<boolean> {
+  const candidates = proofs.filter((p) => verificationMethodDid(p.verificationMethod) === did);
   for (const proof of candidates) {
     for (const pk of keys) {
       if (await verifyProof(unsecuredDoc, proof, pk)) return true;
