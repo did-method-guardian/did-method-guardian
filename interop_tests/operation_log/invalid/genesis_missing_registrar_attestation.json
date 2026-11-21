@@ -2,19 +2,19 @@
   "note": "REJECT: genesis carries no registrar attestation at all -- REQ-7.1-5 requires one on every genesis, not only when a registrar happens to include it.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHnqNpBWain4vzfscP9Ev-TLAVQBQ_ZDy1QTgxXVk_FTG4F_K2NVz6xVpteCUQcTzUog1-wcztCOcdTTRhQ63-w"
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
   },
   "log": [
     {
-      "cid": "75e84bef8e311a9d45ee284eaa91cff58b221bd87beb17c94880c202156f4fb2",
+      "cid": "a1111a34920b358d435ea63cd43cb9a76bed1ac4ef82b44ff794cbc75da68a1e",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
         ],
         "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
         },
         "services": {},
         "outgoing": [],
@@ -23,7 +23,7 @@
         "creator": "did:guardian:example:com",
         "sigs": {},
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA": "8u_UGVdZreMc655fRiGDscJrr7lHoWrHXb7Uasv7vlQ8Qiu4reQDUI56tpu6qXZcya5ivWkQO7ZFAoU5rUUtbQ"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "B8em2Cn52A1QgmcURODvDwuH06lI2Egg8wOo8U8thPYy9OeUNlUl7gt7vqnLEPXR4t7hh-Uqg_1xV1kMC7WxrA"
         }
       }
     }

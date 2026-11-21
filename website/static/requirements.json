@@ -164,6 +164,15 @@
       "tests": []
     },
     {
+      "id": "REQ-5-9",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-9",
+      "section": "5. GuardianPolicy",
+      "text": "A verifier *MUST* ignore any `GuardianPolicy` field it does not recognize, rather than rejecting the operation that carries it. This exists so a future version can add new policy fields -- a witness threshold, say ([\u00a710](#10-security-considerations)) -- without breaking a verifier built against this version, or invalidating any log already accepted under it.",
+      "tests": [
+        "packages/lib/tests/document-v2.test.ts"
+      ]
+    },
+    {
       "id": "REQ-6-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-1",
       "section": "6. The operation log",
@@ -510,5 +519,5 @@
       ]
     }
   ],
-  "count": 62
+  "count": 63
 }

@@ -2,17 +2,17 @@
   "note": "Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHnqNpBWain4vzfscP9Ev-TLAVQBQ_ZDy1QTgxXVk_FTG4F_K2NVz6xVpteCUQcTzUog1-wcztCOcdTTRhQ63-w"
+    "did:guardian:fred:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
   },
   "log": [
     {
-      "cid": "3011bbc717091dd492dface81920029cf0f81f988542bdae7081b315bfe7492a",
+      "cid": "1a73036e1a4718c0e12f3b3128c0b5bb2b490250fd4a279b8ba66c272e7ba86f",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
         ],
         "verificationMethods": {},
         "services": {},
@@ -22,21 +22,21 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "naLWU7fnRsRzWXoxm4Mw-fAWaOXyB6LVfGJl_1odmIU2HW2B6nNwGt-lyM2FvfnpJujGPyj72ld62M6Ey4ubow"
+          "sig": "H0pBOBqqajRLU5RcOjPLLCGtZzzmbpoZNcxs2gTeCz3wDfptXgQsObzJY6Phr6ZOyJHy3mq2zV-GElGpJMlZIA"
         },
         "sigs": {},
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA": "P5Z-WKvCFAHmhA6pkfeDugVR5fpE_PbbOEEoroPHHEgn8sR0JgUncpIchu1kZe_D6ZGbEnbSBWnUI-Z7iAQEjw"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "sw28dU0Ruw6qdqKlmRRWRvP9YIJe_XLDaOPHXmcJfPNZoYRSGqpJUoxCHDsQ2ZQBXWGGsowft1Uh-sCXqLYOhQ"
         }
       }
     },
     {
-      "cid": "8b4cb2af0b608b29c7be6d8107a96337e0e8421d3200204fa08666d62dde2402",
+      "cid": "7ff6d101ff88ff94ee8a8ca98890b80691d2feb06d01fb51b228df099839e4c0",
       "op": {
         "type": "custodial_tombstone",
-        "prev": "3011bbc717091dd492dface81920029cf0f81f988542bdae7081b315bfe7492a",
+        "prev": "1a73036e1a4718c0e12f3b3128c0b5bb2b490250fd4a279b8ba66c272e7ba86f",
         "sigs": {
-          "did:guardian:fred:example:com": "QL1sn-FdZNo-1MaVeFWgpgWqKlmqoOMjw5WFddA7XyAEA2zE8P8sqCw8FZTx7nBEs70pqOAddHaDu8dkItOqPA"
+          "did:guardian:fred:example:com": "U9L_SRO0oLT40cctsILRfgXIZ6LkRxcCXTR1N8mtNRRa1PHwb788XOcAYc4LspRVzjNufbq344Gxl72S1U2bLw"
         }
       }
     }

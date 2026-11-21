@@ -39,6 +39,12 @@ test("REQ-7.1-7: replay merges genesis.policy over the stated defaults, field by
   assert.equal(state.guardianPolicy.min_guardian_count, DEFAULT_GUARDIAN_POLICY.min_guardian_count);
 });
 
+test("REQ-5-9: a policy field this version doesn't recognize survives replay untouched, not stripped or rejected", () => {
+  const entry = genesisEntry({ policy: { witnesses: ["did:guardian:example.com:watcher"] } as any });
+  const state = replay(wardDid, [entry]);
+  assert.deepEqual((state.guardianPolicy as any).witnesses, ["did:guardian:example.com:watcher"]);
+});
+
 test("replay applies guardian_add then guardian_remove in order", () => {
   const g1: Did = "did:guardian:example.com:g1";
   const g2: Did = "did:guardian:example.com:g2";

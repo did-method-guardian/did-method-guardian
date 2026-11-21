@@ -2,17 +2,17 @@
   "note": "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEV0FYVb10lB30KX6SLImhSPPtSvH1QO-mgG-WCTEQlPhD5ejs1ezp8tIB-pTCP1aedld5s9fXQx9kBXsLvTnwVQ",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHnqNpBWain4vzfscP9Ev-TLAVQBQ_ZDy1QTgxXVk_FTG4F_K2NVz6xVpteCUQcTzUog1-wcztCOcdTTRhQ63-w"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9hqAb6YTP3R4yL_bMZwCCg3el5FWbImqxs8Mz0VUrBoCQQ0i_ONB_kOeR0dxoFVeN2PQw6WjM2pF44VASI3Fuw",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
   },
   "log": [
     {
-      "cid": "4e58c1ca423fe6eb8e1caf6a0a493a364c419c3c9ce4bd891d851b5839bad8dd",
+      "cid": "912a1c37568c4b292bfb6131a1ee62f8572ebf5251448fddc4d6a30af2743312",
       "op": {
         "type": "custodial_create",
         "name": "puppet",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
         ],
         "verificationMethods": {},
         "services": {},
@@ -24,13 +24,13 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "sfMUJGGJ7mG9A_buSEGxxAr6DCk_P4SjdWK-_i1CusFdLnoO6-5uFA9tHP8fMVSGeM45lFdM8QkXv40ZEOuIpw"
+          "sig": "n_JjlmI3SPEBmW1Tg0gw0u3O2mNkomsJQw7kuNMIkftLCpmGD6j4P3-rrcU7Y8H3jDN9tWoZnEXcssaEbWHUww"
         },
         "sigs": {
-          "did:guardian:board-a:example:com": "NrrW8BGaN0msYGWYMUGzd8ZoOS3ULdQWMc1sQ5syPV3QJFBpcvcgmuxlG9x7opBwpEIlz1yEdMaHxEjJWg-Nzg"
+          "did:guardian:board-a:example:com": "cTZ12TUx6iySQS76A-l8Su8FVrXPayKxdcgK_CIBcZ3k7n8wK4JFe6E4NPXKmJVi_N-cTOCfvz76Qf12pmdLQQ"
         },
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA": "miIxJ_V1SNu-eLYtt2d9dTM-JeKoNX3RUF-OATK6Dgwi3o8htYTAlQLbyzoY1ttb2Upj9qut2aIPJxk6m-Ptrw"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "6B1-vE4VoJIs2KmnudpXs17F_yIbafbwcgNvPwmg0IwkSkXe-TIJ6737BI3Q4PhFx6zZ8iTRdEn1AcBSJw5EFw"
         }
       }
     }

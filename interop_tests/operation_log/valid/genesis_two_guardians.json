@@ -2,21 +2,21 @@
   "note": "Genesis establishing a two-member guardian set, both consenting.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEV0FYVb10lB30KX6SLImhSPPtSvH1QO-mgG-WCTEQlPhD5ejs1ezp8tIB-pTCP1aedld5s9fXQx9kBXsLvTnwVQ",
-    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXVsbbxDUIX0HC_hkvSx9C1psS7GrVA5ZguO2W5IJ3T4zhsOjbulHr9ME4iy9idptsV8zSeMplFckW9gvGKaPeg",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHnqNpBWain4vzfscP9Ev-TLAVQBQ_ZDy1QTgxXVk_FTG4F_K2NVz6xVpteCUQcTzUog1-wcztCOcdTTRhQ63-w"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9hqAb6YTP3R4yL_bMZwCCg3el5FWbImqxs8Mz0VUrBoCQQ0i_ONB_kOeR0dxoFVeN2PQw6WjM2pF44VASI3Fuw",
+    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECHfsz2s4LU526aUiF1rewx_F2JdEZe8XUWnutvbEZwOnvFStN3lgrWPsrgKfczqZzzjpWJmG35pgx60EDAnOZw",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhvD9D0n7VoWPfdfaAdFJ6Gevs_gKLbdOlSG8Navi8jiO93377MZK9ZoSg6JgxLf7EkaXFyvPfIp7Kk7ZWo08Bg"
   },
   "log": [
     {
-      "cid": "43d47ba5b1f417002cd001dc9f42311be5f78b9b2323811daa431d2e851f8839",
+      "cid": "4df8c91ff6a1fc2d39dd2b565c8f38398e4a4636cba1206c573c090e1045d335",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
         ],
         "verificationMethods": {
-          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
+          "key-1": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng"
         },
         "services": {},
         "outgoing": [],
@@ -28,14 +28,14 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "aUV7YyUJ3IVmWMzVemDhJmFt2LViNlv5q4BKpQo4UVlmhEwqhyUFCE2haCLo3HH0Vnhe4_y_Xw0b3NB3QaCTCw"
+          "sig": "p_eM-PJEPwCScuEjfkekUD9qidefE4-jHWC8sgnOY3cMWngfFmP9xKbQAvV5_yLrDKTjqvYsDglllq3c54CRyA"
         },
         "sigs": {
-          "did:guardian:board-a:example:com": "QM7G122dw78kvGrVQHlwscacWuVTkTi2RSNiV8cnto55lNDk21JQo9aUiIh2ajTK1TO7qbMv5MVS8CnuthVzyw",
-          "did:guardian:board-b:example:com": "yw0UrV9oZBS_ohnhRYWTIrL7pjBXZyqOc1wpDTHA_khzNuloJq8baPNuybOvBRBABj32P0it8WXNVFdyPEKVhw"
+          "did:guardian:board-a:example:com": "z09MvHoSfp_2hdAd5-Q1Gb5pFOYWjgrde4AzGn65RmfRbQiI9mzxRpSWznInIdrImABlq59i6D9uDo6rQ-2TSg",
+          "did:guardian:board-b:example:com": "Uxk6O8cUcGbVQfODOM4oWue4S8ujBV8JT__BJDmxUa-k3ZJYzG3fQ1b5jHZg07tsri_kxdwt_Ddvh4UtElflZw"
         },
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA": "3W3rtXO9fnOxkCqwrAyzo0u7rgncZBxZS8-LYv_YkA_nR_Lw857yHmGh-ju3ign8RqoWemyS4OeyhdCjRbz7_w"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGluH3fPBfsjA-ru35ZKJAj3n2pjn_pJ24KTs5-sBiC_KPUPr3kpPWgPhy75yNp3J-jXOYJ64s11j74jXAD8dng": "4X6ERanggUpgFbp9aQhpM1z5t8FwBzyQxADXhSLy2ewpWe_eQiog_ykujLkrWgYj7Uh5jb8gtlRFKw0w8SmofQ"
         }
       }
     }
