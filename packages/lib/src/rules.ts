@@ -5,12 +5,15 @@
 // (website/content/docs/did-guardian-spec-v0.2.0/), used by this package's
 // tests (rules.test.ts) and by the reference registrar's real acceptance
 // path (packages/server/src/registrar.ts's submitOperation, via
-// verifyByRules below) for every operation type except custodial_create,
-// whose genesis-specific checks live in operations.ts's
-// verifyCustodialCreate instead (document.ts's replay() still needs the
-// v0.1 guardian_transfer case for already-accepted history -- see its
-// comment -- which is why that type isn't retired from the Operation
-// union, only from new-submission acceptance).
+// verifyByRules below) for every operation type except custodial_create --
+// genesis's cryptographic checks (incoming guardian sigs, keySigs, the
+// registrar attestation) live in operations.ts's verifyCustodialCreate
+// instead, with checkGenesisShape (below) covering genesis's structural
+// requirements only, called directly by registrar.ts's acceptGenesis
+// (document.ts's replay() still needs the v0.1 guardian_transfer case for
+// already-accepted history -- see its comment -- which is why that type
+// isn't retired from the Operation union, only from new-submission
+// acceptance).
 
 import { corePayload, verifyKeySigs, verifySignerSig } from "./operations.js";
 import type { KeyResolver } from "./operations.js";
@@ -86,16 +89,34 @@ export interface ShapeResult {
   reason?: string;
 }
 
-/** REQ-7.1-1/7.1-2/7.1-3/7.1-4/7.1-7: genesis's own structural requirements -- no signer formula, since `incoming` MUST be `[]` (nothing to sign). */
+/**
+ * REQ-7.1-1/7.1-2/7.1-3/7.1-4/7.1-7: genesis's structural requirements --
+ * shape only, no cryptographic verification (an incoming guardian's sig,
+ * when `incoming` is non-empty, is checked for VALIDITY by
+ * `verifyCustodialCreate`, same as keySigs and the registrar attestation
+ * are; this only checks that a slot for it exists at all).
+ *
+ * `incoming` MAY be non-empty (relaxed from always-`[]` -- REQ-7.1-1,
+ * v0.3): a genesis establishing a guardian directly, as long as every
+ * named guardian co-signs. Doing this at genesis instead of via a
+ * separate `guardian_add` halves the operations an identity that's
+ * always born with a guardian needs (an ephemeral agent fleet under one
+ * long-lived guardian, say), and removes the "self-held identities are
+ * always born guardian-less" trap for anyone who wants a guardian from
+ * the start.
+ */
 export function checkGenesisShape(op: {
   incoming: Did[];
+  sigs: Record<Did, string>;
   prev: unknown;
   operationalKeys: unknown[];
   verificationMethods: Record<string, unknown>;
   services: Record<string, unknown>;
   creator?: Did;
 }): ShapeResult {
-  if (op.incoming.length !== 0) return { valid: false, reason: "REQ-7.1-1: incoming must be [] -- establish a guardian via guardian_add instead" };
+  for (const did of op.incoming) {
+    if (!op.sigs[did]) return { valid: false, reason: `REQ-7.1-1: incoming guardian ${did} must co-sign genesis` };
+  }
   if (op.prev !== null) return { valid: false, reason: "REQ-7.1-2: genesis prev must be null" };
   if (!op.operationalKeys || !op.verificationMethods || !op.services) {
     return { valid: false, reason: "REQ-7.1-3: operationalKeys/verificationMethods/services must be present" };

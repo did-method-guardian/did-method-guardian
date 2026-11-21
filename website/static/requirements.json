@@ -256,10 +256,17 @@
       "id": "REQ-7.1-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-1",
       "section": "7.1 Create",
-      "text": "`incoming` *MUST* be `[]`. Genesis *MUST NOT* establish a guardian directly -- guardianship, if any, is established by a subsequent `guardian_add` ([\u00a77.2](#72-update)).",
+      "text": "`incoming` *MAY* name one or more guardians directly at genesis (v0.3, relaxed from always-`[]`) -- each named DID *MUST* co-sign genesis, in `sigs`. A verifier *MUST* reject a genesis naming an incoming guardian with no corresponding, valid signature. Establishing a guardian later instead, via `guardian_add` ([\u00a77.2](#72-update)), remains available and is unaffected by this -- genesis establishing one directly is an additional option, not a replacement for it.",
       "tests": [
         "packages/lib/tests/rules.test.ts"
       ]
+    },
+    {
+      "id": "REQ-7.1-9",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7.1-9",
+      "section": "7.1 Create",
+      "text": "A registrar *MUST* reject a genesis naming the identity's DID in `incoming` -- same reasoning as [REQ-7.2-11](#req-7.2-11): a ward is never its own guardian, at genesis or afterward.",
+      "tests": []
     },
     {
       "id": "REQ-7.1-2",
@@ -455,7 +462,7 @@
       "id": "REQ-8-2",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-8-2",
       "section": "8. Resolution",
-      "text": "A conformant registrar *MUST* expose, for each identity it hosts, reachable under `https://<domain>/.well-known/guardian/<name>` (or `.../guardian/_` for the bare-domain identity): `GET` the current derived document; `GET` the full operation log; `POST` one new signed operation. A registrar *MAY* expose additional surface; this specification does not constrain it.",
+      "text": "A conformant registrar *MUST* expose, for each identity it hosts, reachable under `https://<domain>/.well-known/guardian/<name>` (or `.../guardian/_` for the bare-domain identity): `GET` the current derived document; `GET` the full operation log; `POST` one new signed operation. `POST` at a `<name>` this registrar does not yet host *MUST* accept a self-signed `custodial_create` establishing it -- genesis submission is part of the method (v0.3), not a registrar-specific convenience, and `.../operations` is the one surface every conformant registrar already exposes for every other operation type. The registrar checks name validity and availability ([REQ-7.1-6](#req-7.1-6)) and the submitted proof of possession ([REQ-7.1-8](#req-7.1-8)), then adds its attestation ([REQ-7.1-5](#req-7.1-5)) before storing it -- the client can never produce that attestation on its own. A registrar *MAY* expose additional surface; this specification does not constrain it.",
       "tests": []
     },
     {
@@ -503,5 +510,5 @@
       ]
     }
   ],
-  "count": 61
+  "count": 62
 }

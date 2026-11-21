@@ -42,10 +42,12 @@ did-guardian key take-custody <ward-did> [--new-key <label>] [-f/--force] [-y/--
 ### Create and register
 
 ```
-did-guardian create <name> --registrar <domain> [--key <label>]
-did-guardian create <name> --domain <domain> [--key <label>]
+did-guardian create <name> --registrar <domain> [--key <label>] [--guardian <did> --guardian-key <label>]
+did-guardian create <name> --domain <domain> [--key <label>] [--guardian <did> --guardian-key <label>]
 ```
 Builds a self-held genesis operation with a key you generate yourself and never hand to any registrar. With `--registrar`, submits it for real -- genesis submission is part of the method (formal spec REQ-8-2), so this works against any conformant registrar, including the reference one in this repository. With `--domain` alone, stays entirely offline instead -- no network call at all, and the result is a **draft** until something actually accepts it. Useful for understanding the mechanics, or for embedding `packages/lib` in your own registrar.
+
+`--guardian <did>` establishes that DID as a guardian directly at genesis (formal spec REQ-7.1-1) instead of via a later `guardian add`/`adopt` -- halves the operations needed for an identity that's always born with a guardian (a long-lived guardian managing an ephemeral agent fleet, say). Requires `--guardian-key <label>`, a saved key for that same DID, since a guardian established this way must co-sign genesis; that DID must also already be a resolvable identity (create it first if it doesn't exist yet). Only works when the same operator holds both keys locally -- for any other guardian relationship, create the identity guardian-less and add one afterward.
 
 ```
 did-guardian register <name> --registrar <domain> [--json]

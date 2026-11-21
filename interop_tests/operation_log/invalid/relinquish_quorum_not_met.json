@@ -2,19 +2,19 @@
   "note": "REJECT: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE_kkZUR68Ts_uEI1Nrw0vyM0ISDneqHKooFKY0H_BNK0h8p9BX_9hflW5QQ8lge8BUo9ZQB6InuqOoi1y522a4w",
-    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE5eTnIB4Raaey8fmU-GLz3ABP-VIZtrkwi_OGabF03CvUaKAXezmdWC1rOqCKmSljPnqpIVX59RQfhHnpSup_RQ",
-    "did:guardian:board-c:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGW-DXONxJlRhWpbjgoGUQAuJ0bDVbavzYl7ans2Y2VuxjBR0jA7vOW-2CnyOI6hCuTLqoOfmPs7QwyeQuP_mTw",
-    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmnvdDZ9-c4TURsl7xIIwOXSPT61-pAdvSNsnpJ3L-bfzyyi3_5ad-xlqlQN6GGGjzcBg6PBxU1oyKps9wCbE0Q"
+    "did:guardian:board-a:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEV0FYVb10lB30KX6SLImhSPPtSvH1QO-mgG-WCTEQlPhD5ejs1ezp8tIB-pTCP1aedld5s9fXQx9kBXsLvTnwVQ",
+    "did:guardian:board-b:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXVsbbxDUIX0HC_hkvSx9C1psS7GrVA5ZguO2W5IJ3T4zhsOjbulHr9ME4iy9idptsV8zSeMplFckW9gvGKaPeg",
+    "did:guardian:board-c:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJbDl250t-DNTWOH6stuNEcgVdBV_fgXk4FXPjP9tFhNug01Q0PuX9ZKGeH5zDgKN5tIcjZr-ksDV3q6KBR7ifQ",
+    "did:guardian:example:com": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEHnqNpBWain4vzfscP9Ev-TLAVQBQ_ZDy1QTgxXVk_FTG4F_K2NVz6xVpteCUQcTzUog1-wcztCOcdTTRhQ63-w"
   },
   "log": [
     {
-      "cid": "c39e8266473cf0e274fa9cfebe6596f81fae9cd907fc2e4d6ce8a2339e4a4679",
+      "cid": "823d29f4cb6dee80d2c31c2c98122f9d4f6f69b169a41c5e4a45927906e58d14",
       "op": {
         "type": "custodial_create",
         "name": "fred",
         "operationalKeys": [
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIUnC0OX-yH9tvLAg2mLDTXhANHCT580ePlbLeLJnVpGuiFFzCft3iOTkpuAJh4qIuZUPKdSz_lq3SMr63P1zLg"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA"
         ],
         "verificationMethods": {},
         "services": {},
@@ -28,25 +28,25 @@
         "creator": "did:guardian:example:com",
         "registrar": {
           "did": "did:guardian:example:com",
-          "sig": "ubXGgvEkeTovbZk0emloC_6EBl5rF2gcpk51Bg63BZMJXErdeUx8UmHN3gXqT6QQfHLnySk7CsXME2LDAwi0Sw"
+          "sig": "4I02ss1fQEz5tjC1_YOnI2QUDUrpMMhycrpWbmkt4LxUH3O-8775zyPPQlGnG2wKgCUdE297XjqIPmQc0aGAhQ"
         },
         "sigs": {
-          "did:guardian:board-a:example:com": "lFZLutHFZPW5rXahEb8NElLOpIr-Dpj9ho_AD-UhxY7-ofQy_88RMt9zAoQVFiRo12PtSCKHDMn2BJah18YtPQ",
-          "did:guardian:board-b:example:com": "IUMoXn--IWI27NwNhCoJ3E1kmxRqKHpj7Yj01vOkvA22z_cw14nuSk6uxMHDd8FKbWfd4aqtvObJMx06PO-PXQ",
-          "did:guardian:board-c:example:com": "5TYkpifoI4IjV6XxvZGqpEQ5LjrUdtO9jJWx7AjYUacKGV5Knx-RHxRBvTCQSm3fGyWXi9q0bbso9HtKGwysYg"
+          "did:guardian:board-a:example:com": "seqRU9QZ8CPlOlgiI8wFraO2GbYY3JSIedYCqsrMFOQTJlySQm0wNuEXp7PSfxz_MWYWwKfHsMHwV0H0IXOuhA",
+          "did:guardian:board-b:example:com": "XWj0kq81Kyx1buzca-U1PSmjpnAx_Zi2Vst_sOMFtRQm3FYcmtew6wHaSu4RboXdbQ5o07msxVh2LwKnGVFe_A",
+          "did:guardian:board-c:example:com": "OhYk9FVVfI5WD2G-HYZeQ959n8JghLqkQmcDHbFX65gwRVspLaGAoTKVz83zWPjTIU5qhBxdrwgMqM204MXSJw"
         },
         "keySigs": {
-          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEIUnC0OX-yH9tvLAg2mLDTXhANHCT580ePlbLeLJnVpGuiFFzCft3iOTkpuAJh4qIuZUPKdSz_lq3SMr63P1zLg": "3hKv4iR8IUq8TH4sMztzU5_oDKacxCoP2elFzaq0d-_XXMA6fpIdlPS4B1w9j9fFhDV_GweMwuifQb6OXVz6Gw"
+          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKdrYco2kotueOau-0_3hkOcCOqwu_L5RuSzFGAz4L4RHz7CsKI7iDPdf4b4Bg5DLN2dxPlxiUDGhmO9RQUrWA": "KaVL2r9pHb6TrNDVHIbm8bWo2m578Nwq_xKysMmncjbPwEFxAdND1frnK7NhuTVc7fcydbj9FMeda1gxs73viw"
         }
       }
     },
     {
-      "cid": "434faf91ab357253d2f57944c1509801edcff868023abd060fdfba4d259cdde9",
+      "cid": "18d6ec561f16a13ffde9e9d0c24ccbf6566e606decb9426c805c6d1baeda3b92",
       "op": {
         "type": "guardian_relinquish",
-        "prev": "c39e8266473cf0e274fa9cfebe6596f81fae9cd907fc2e4d6ce8a2339e4a4679",
+        "prev": "823d29f4cb6dee80d2c31c2c98122f9d4f6f69b169a41c5e4a45927906e58d14",
         "sigs": {
-          "did:guardian:board-a:example:com": "eWeYgOpYBjrCmeDJq7Dw8J1mlS7rYrOYCtMRy5ETfN7p4hI4NUig7kaivFWlnTQcMZJgUShHpT9oQB-6ijpgbw"
+          "did:guardian:board-a:example:com": "9e0Cs3lvXRwPanrGhIF9yDhayAx4p4GlT5CW_lHsjTjiDonUO3kOo9LRO30AkLnizdEuQz20-Ur_glBGAUB9Tg"
         }
       }
     }

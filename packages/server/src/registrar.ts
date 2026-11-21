@@ -3,6 +3,8 @@ import {
   signPayload,
   corePayload,
   verifyKeySigs,
+  checkGenesisShape,
+  verifyCustodialCreate,
   signCustodialCreate,
   signCustodialRotate,
   signGuardianAdd,
@@ -67,12 +69,14 @@ export function assertValidPassword(password: string): void {
  * gets here, so nothing below may touch any of that content once
  * computed, only check it.
  *
- * REQ-7.1-1 still requires `incoming` to be empty -- a client can't
- * establish a guardian at genesis yet (that's a separate, not-yet-made
- * change). REQ-7.1-6 is name validity plus availability, checked here
- * independently of whatever a caller already checked, since this is
- * reachable directly from an external submission with nothing upstream
- * guaranteeing either.
+ * `incoming` MAY be non-empty now (REQ-7.1-1, relaxed v0.3) -- a genesis
+ * establishing a guardian directly, as long as every named guardian
+ * co-signs (checkGenesisShape checks a slot exists; verifyCustodialCreate
+ * below, once this registrar's attestation is attached, checks those
+ * signatures are actually valid). REQ-7.1-6 is name validity plus
+ * availability, checked here independently of whatever a caller already
+ * checked, since this is reachable directly from an external submission
+ * with nothing upstream guaranteeing either.
  */
 export async function acceptGenesis(
   env: Env,
@@ -86,24 +90,31 @@ export async function acceptGenesis(
   // key it was never given).
   serverPrivateKeyEnc?: string,
 ): Promise<{ accepted: true; did: string; cid: string; document: unknown } | { accepted: false; reason: string }> {
-  if (op.prev !== null) return { accepted: false, reason: "genesis must have prev: null (REQ-7.1-2)" };
   if (op.name !== name) return { accepted: false, reason: `operation names "${op.name}", but was submitted to "${name}"` };
   if (!isValidName(name)) return { accepted: false, reason: `invalid name "${name}" -- must be 3-32 lowercase alphanumeric/hyphen characters, no leading/trailing/double hyphens (REQ-7.1-6)` };
   if (await getWardByName(env, name)) return { accepted: false, reason: `name "${name}" is already taken (REQ-7.1-6)` };
-  if (!Array.isArray(op.operationalKeys) || op.operationalKeys.length === 0) return { accepted: false, reason: "operationalKeys must be a non-empty array (REQ-7.1-3)" };
-  if (!op.verificationMethods || !op.services) return { accepted: false, reason: "verificationMethods and services must be present (REQ-7.1-3)" };
-  if (!op.creator) return { accepted: false, reason: "creator must be present (REQ-7.1-4)" };
-  if (op.incoming.length !== 0) return { accepted: false, reason: "incoming must be empty at genesis (REQ-7.1-1) -- guardianship is established by a later guardian_add" };
-
-  const payload = corePayload(op as any);
-  const pop = await verifyKeySigs(payload, op.operationalKeys, op.keySigs);
-  if (!pop.valid) return { accepted: false, reason: pop.reason ?? "invalid proof of possession (REQ-7.1-8)" };
 
   const did = didFor(name, env.REGISTRAR_DOMAIN);
+  if (op.incoming.includes(did)) return { accepted: false, reason: `${did} can't be named as a guardian of itself (REQ-7.1-9)` };
+
+  const shape = checkGenesisShape(op);
+  if (!shape.valid) return { accepted: false, reason: shape.reason ?? "invalid genesis shape" };
+
   const rootWard = await getOrCreateRootWard(env);
   const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
   const attestation = await signRegistrarAttestation(op, rootWard.did, rootPrivateKey);
   const genesis = { ...op, registrar: attestation };
+
+  // Everything cryptographic -- keySigs (REQ-7.1-8), every incoming
+  // guardian's signature, and (now that it's attached) this
+  // registrar's attestation -- checked in one call, through the
+  // same function the interop suite and every other verifier use. A
+  // local guardian resolves synchronously; a foreign one is fetched live
+  // fetched live from its registrar (makeExternalResolver, below), same as any
+  // other cross-registrar signature this registrar ever checks.
+  const verified = await verifyCustodialCreate(genesis, makeExternalResolver(env));
+  if (!verified.valid) return { accepted: false, reason: verified.reason ?? "genesis verification failed" };
+
   const cid = await cidFor(genesis);
   const createdAt = new Date().toISOString();
 

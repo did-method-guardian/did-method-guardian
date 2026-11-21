@@ -53,9 +53,10 @@ async function signMap(payload: unknown, signerKeys: Record<Did, string>, signer
 
 // --- REQ-7.1: genesis shape ---------------------------------------------
 
-test("REQ-7.1-1: genesis with non-empty incoming is rejected -- establishing a guardian directly at genesis is guardian_add's job now", () => {
+test("REQ-7.1-1: genesis with a non-empty incoming guardian who never co-signed is rejected", () => {
   const result = checkGenesisShape({
     incoming: ["did:guardian:example.com:board"],
+    sigs: {},
     prev: null,
     operationalKeys: ["pk"],
     verificationMethods: { "key-1": "pk" },
@@ -66,9 +67,23 @@ test("REQ-7.1-1: genesis with non-empty incoming is rejected -- establishing a g
   assert.match(result.reason!, /REQ-7\.1-1/);
 });
 
+test("REQ-7.1-1 (v0.3, relaxed): genesis with a non-empty incoming guardian who co-signed passes shape -- a guardian may now be established directly at genesis", () => {
+  const result = checkGenesisShape({
+    incoming: ["did:guardian:example.com:board"],
+    sigs: { "did:guardian:example.com:board": "sig" },
+    prev: null,
+    operationalKeys: ["pk"],
+    verificationMethods: { "key-1": "pk" },
+    services: {},
+    creator: "did:guardian:acme.com",
+  });
+  assert.equal(result.valid, true, result.reason);
+});
+
 test("REQ-7.1-2: genesis with non-null prev is rejected", () => {
   const result = checkGenesisShape({
     incoming: [],
+    sigs: {},
     prev: "some-cid",
     operationalKeys: ["pk"],
     verificationMethods: { "key-1": "pk" },
@@ -82,6 +97,7 @@ test("REQ-7.1-2: genesis with non-null prev is rejected", () => {
 test("REQ-7.1-4: genesis with no creator is rejected", () => {
   const result = checkGenesisShape({
     incoming: [],
+    sigs: {},
     prev: null,
     operationalKeys: ["pk"],
     verificationMethods: { "key-1": "pk" },
@@ -94,6 +110,7 @@ test("REQ-7.1-4: genesis with no creator is rejected", () => {
 test("REQ-7.1-1/2/3/4: a conformant genesis (empty incoming, null prev, full key material, a creator) is accepted", () => {
   const result = checkGenesisShape({
     incoming: [],
+    sigs: {},
     prev: null,
     operationalKeys: ["pk"],
     verificationMethods: { "key-1": "pk" },

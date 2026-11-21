@@ -10,17 +10,22 @@ export function registerCreateCommand(program: Command): void {
     .option("--domain <domain>", "build offline only -- the domain this identity would live under once something accepts it, with no network call made here")
     .option("--registrar <domain>", "actually submit the signed genesis to this domain's .../operations -- this identity is live the moment it's accepted, no further step needed")
     .option("--key <label>", "an existing saved key to use (default: generate and save a fresh one under <name>)")
+    .option("--guardian <did>", "establish this DID as a guardian directly at genesis (REQ-7.1-1, v0.3) -- requires --guardian-key, since a guardian MUST co-sign genesis")
+    .option("--guardian-key <label>", "a saved key for --guardian's DID -- only works when this is the same operator, holding both keys locally; otherwise add a guardian afterward with \"guardian add\" or \"guardian adopt\" instead")
     .option("--keychain", "save the new key to the OS keychain instead of a local file")
-    .action(async (name: string, opts: { domain?: string; registrar?: string; key?: string; keychain?: boolean }) => {
+    .action(async (name: string, opts: { domain?: string; registrar?: string; key?: string; guardian?: string; guardianKey?: string; keychain?: boolean }) => {
       const domain = opts.registrar ?? opts.domain;
       if (!domain) throw new Error("one of --domain (offline draft) or --registrar <domain> (publish) is required");
       if (opts.registrar && opts.domain && opts.registrar !== opts.domain) throw new Error("--domain and --registrar name different domains -- this identity can only live under one");
+      if (opts.guardian && !opts.guardianKey) throw new Error("--guardian requires --guardian-key -- a guardian established at genesis MUST co-sign it (REQ-7.1-1)");
 
       const label = opts.key ?? name;
       const key = opts.key ? await loadKey(label, opts) : await generateKeypair();
       if (!opts.key) await saveKey(label, key, opts);
 
       const did = `did:guardian:${domain}:${name}`;
+      const incoming = opts.guardian ? [opts.guardian] : [];
+      const incomingKeys = opts.guardian && opts.guardianKey ? { [opts.guardian]: (await loadKey(opts.guardianKey, opts)).privateKey } : {};
       const genesis = await signCustodialCreate(
         {
           type: "custodial_create",
@@ -29,11 +34,11 @@ export function registerCreateCommand(program: Command): void {
           verificationMethods: { "key-1": key.publicKey },
           services: {},
           outgoing: [],
-          incoming: [],
+          incoming,
           prev: null,
           creator: did, // self-initiated -- nobody else is party to a bring-your-own-key genesis built entirely offline
         },
-        {},
+        incomingKeys,
         { [key.publicKey]: key.privateKey },
       );
       if (opts.registrar) {

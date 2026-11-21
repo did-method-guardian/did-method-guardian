@@ -6,8 +6,8 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateKeypair } from "../src/crypto.js";
-import { signCustodialCreate, signCustodialRotate, signGuardianTransfer, signGuardianRelinquish, signCustodialTombstone, signRegistrarAttestation, cidFor } from "../src/operations.js";
+import { generateKeypair, signPayload } from "../src/crypto.js";
+import { signCustodialCreate, signCustodialRotate, signGuardianTransfer, signGuardianRelinquish, signCustodialTombstone, signRegistrarAttestation, corePayload, cidFor } from "../src/operations.js";
 import type { CustodialCreateOp, Did, LogEntry } from "../src/types.js";
 
 // `here` is dist/scripts when run compiled -- repo root is four levels up
@@ -214,6 +214,37 @@ async function signGenesis(
     [{ cid: await cidFor(genesis), op: genesis }],
     "REJECT: 'board-a' is named as initial guardian but the signature was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
     { "did:guardian:board-a:example:com": boardA.publicKey, ...registrarKnownKeys }, // the REAL board-a key -- the fixture's signature won't match it
+    "reject",
+  );
+}
+
+// --- invalid: genesis names an incoming guardian at genesis (v0.3, REQ-7.1-1) who never co-signed at all -- no sig entry, not even a forged one ---
+// Built directly, not via signGenesis -- that helper (signCustodialCreate)
+// refuses to produce an under-signed operation at all, which is correct
+// for honest callers but means this adversarial case has to be
+// constructed by hand, the same way the other forgery fixtures above do.
+{
+  const withCreator = {
+    type: "custodial_create" as const,
+    name: "unsigned",
+    operationalKeys: [ward.publicKey],
+    verificationMethods: {},
+    services: {},
+    outgoing: [] as [],
+    incoming: ["did:guardian:board-a:example:com"],
+    prev: null,
+    creator: registrarDid,
+  };
+  const registrarAttestation = await signRegistrarAttestation(withCreator, registrarDid, registrar.privateKey);
+  const payload = corePayload(withCreator as any);
+  const keySigs = { [ward.publicKey]: await signPayload(payload, ward.privateKey) };
+  const genesis = { ...withCreator, registrar: registrarAttestation, keySigs, sigs: {} }; // board-a never signs at all
+  write(
+    "invalid",
+    "genesis_unsigned_incoming_guardian",
+    [{ cid: await cidFor(genesis), op: genesis }],
+    "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no signature at all -- establishing a guardian this way still requires that guardian's consent.",
+    { "did:guardian:board-a:example:com": boardA.publicKey, ...registrarKnownKeys },
     "reject",
   );
 }
