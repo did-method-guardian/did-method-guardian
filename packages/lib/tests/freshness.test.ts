@@ -32,6 +32,52 @@ test("a log-head statement verifies against the registrar's resolved key", async
   assert.equal(result.valid, true, result.reason);
 });
 
+test("audit WS-3.5/4.6: a log-head statement is a real W3C Data Integrity proof, same shape as every other signature this method produces -- not the old raw base64url scheme", async () => {
+  const registrar = await generateKeypair();
+  const registrarDid: Did = "did:guardian:example.com";
+
+  const statement = await signLogHeadStatement(
+    {
+      did: "did:guardian:example.com:alice",
+      anchor: "genesis-cid",
+      headCid: "head-cid",
+      seq: 3,
+      logHash: await logHashFor([]),
+      timestamp: new Date().toISOString(),
+      registrar: registrarDid,
+    },
+    registrar.privateKey,
+  );
+
+  assert.equal(statement.proof.type, "DataIntegrityProof");
+  assert.equal(statement.proof.cryptosuite, "ecdsa-jcs-2019");
+  assert.equal(statement.proof.proofPurpose, "assertionMethod");
+  assert.equal(statement.proof.verificationMethod, `${registrarDid}#key-0`);
+  assert.equal((statement as any).sig, undefined, "the old raw base64url sig field must be gone entirely, not merely unused");
+});
+
+test("audit WS-3.5/4.6: tampering with the proof's own proofValue is detected, same as tampering with any signed field", async () => {
+  const registrar = await generateKeypair();
+  const registrarDid: Did = "did:guardian:example.com";
+  const resolve = makeResolver({ [registrarDid]: registrar.publicKey });
+
+  const statement = await signLogHeadStatement(
+    {
+      did: "did:guardian:example.com:alice",
+      anchor: "genesis-cid",
+      headCid: "head-cid",
+      seq: 3,
+      logHash: await logHashFor([]),
+      timestamp: new Date().toISOString(),
+      registrar: registrarDid,
+    },
+    registrar.privateKey,
+  );
+
+  const tampered = { ...statement, proof: { ...statement.proof, proofValue: "zTamperedProofValue111111111111111111111" } };
+  assert.equal((await verifyLogHeadStatement(tampered, resolve)).valid, false);
+});
+
 test("a log-head statement signed by a different key fails verification", async () => {
   const registrar = await generateKeypair();
   const impostor = await generateKeypair();

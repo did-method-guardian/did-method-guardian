@@ -6,16 +6,25 @@
 // a LogHeadStatement is never appended to any identity's log and isn't
 // an Operation -- it's a side statement about the log, re-derivable (and
 // re-signable) fresh on every request, never stored.
-import { signPayload, verifyPayload, contentRef } from "./crypto.js";
-import { cidFor } from "./operations.js";
-import type { Did, LogEntry } from "./types.js";
+import { contentRef } from "./crypto.js";
+import { cidFor, unsecuredDocument, createProof, verifyAgainstKeys } from "./operations.js";
+import type { Did, LogEntry, DataIntegrityProof } from "./types.js";
 import type { KeyResolver } from "./operations.js";
 
 export interface LogHeadStatement {
   did: Did;
   anchor: string; // genesis cid (REQ-6-3) -- lets a verifier confirm this statement is about the identity it thinks it is, not just trust the did field blindly
   headCid: string; // the log's current head cid at the moment this was signed -- excludes every proof (Fix 3), same as any other entryHash, so it stays independent of which valid signature happened to be produced
-  seq: number; // the log's length at that moment -- lets a verifier confirm a LATER statement from the same registrar is actually later (seq only grows), catching a registrar replaying a stale statement
+  /**
+   * The log's length at that moment, counting EVERY stored entry,
+   * superseded branches included (WS-4.6: this is the full `log` array
+   * registrar.ts's own log-head signer is already handed, not the
+   * active chain `reconstructChain` would narrow it to) -- lets a
+   * verifier confirm a LATER statement from the same registrar is
+   * actually later (seq only grows), catching a registrar replaying a
+   * stale statement.
+   */
+  seq: number;
   /**
    * Fix 5: a multihash over the full log -- every entry's op content,
    * proofs included, unlike `headCid`/`anchor` which deliberately
@@ -29,7 +38,16 @@ export interface LogHeadStatement {
   logHash: string;
   timestamp: string; // ISO 8601, when this was signed
   registrar: Did; // whose key signed this -- the accepting registrar's identity (REQ-7.1-5's same signer)
-  sig: string;
+  /**
+   * WS-4.6/3.5 (audit): a W3C Data Integrity proof, same as every other
+   * signature this method produces -- not the raw base64url scheme a
+   * previous version of this statement used, which was the one place in
+   * the whole method that didn't follow REQ-6-7's own format. Exactly
+   * one proof, never an array: a log-head statement has exactly one
+   * signer by construction (the accepting registrar), unlike an
+   * Operation's own proof set.
+   */
+  proof: DataIntegrityProof;
 }
 
 /**
@@ -52,28 +70,28 @@ export async function logHashFor(log: LogEntry[]): Promise<string> {
 }
 
 export async function signLogHeadStatement(
-  partial: Omit<LogHeadStatement, "sig">,
+  partial: Omit<LogHeadStatement, "proof">,
   registrarPrivateKey: string,
 ): Promise<LogHeadStatement> {
-  const sig = await signPayload(partial, registrarPrivateKey);
-  return { ...partial, sig };
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const proof = await createProof(unsecuredDoc, `${partial.registrar}#key-0`, registrarPrivateKey);
+  return { ...partial, proof };
 }
 
 /**
- * Checks the signature against `statement.registrar`'s resolved key(s) --
+ * Checks the proof against `statement.registrar`'s resolved key(s) --
  * never against a key the caller merely hopes is right. REQ-12-2 (first
  * contact) still applies here exactly as it does for an anchor: `resolve`
  * only ever provides real freshness once the caller already has a reason
  * to trust `registrar`'s key, from a prior L3 resolution or an
  * out-of-band channel -- this function has no opinion on where that trust
- * came from, it only checks the signature against whatever `resolve`
- * returns.
+ * came from, it only checks the proof against whatever `resolve` returns.
  */
 export async function verifyLogHeadStatement(statement: LogHeadStatement, resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
   const keys = await resolve(statement.registrar);
   if (!keys || keys.length === 0) return { valid: false, reason: `no known key for registrar ${statement.registrar}` };
-  const { sig, ...payload } = statement;
-  const ok = (await Promise.all(keys.map((pk) => verifyPayload(payload, sig, pk)))).some(Boolean);
+  const unsecuredDoc = unsecuredDocument(statement as any);
+  const ok = await verifyAgainstKeys(unsecuredDoc, [statement.proof], statement.registrar, keys);
   return ok ? { valid: true } : { valid: false, reason: "invalid registrar signature on log-head statement" };
 }
 
