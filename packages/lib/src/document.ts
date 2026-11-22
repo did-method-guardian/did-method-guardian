@@ -215,7 +215,12 @@ export function replay(did: Did, log: LogEntry[]): ResolvedState {
 export function toDidDocument(state: ResolvedState) {
   const vmIds = state.operationalKeys.map((_, i) => `${state.did}#key-${i}`);
   return {
-    "@context": ["https://www.w3.org/ns/did/v1"],
+    // WS-1.16 (audit): the base DID context alone never defines "Multikey"
+    // as a verification method type -- a strict JSON-LD processor has no
+    // term to resolve it against without this. https://w3id.org/security/
+    // multikey/v1 is the W3C-published context for exactly this term;
+    // verified directly against the Multikey specification, not assumed.
+    "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"],
     id: state.did,
     verificationMethod: state.operationalKeys.map((key, i) => ({
       id: `${state.did}#key-${i}`,
@@ -232,5 +237,19 @@ export function toDidDocument(state: ResolvedState) {
       serviceEndpoint: svc.endpoint,
     })),
     alsoKnownAs: [],
+    // WS-1.16 (audit): state.deactivated was already computed by replay()
+    // but never surfaced anywhere in the presented document -- a resolver
+    // had no way to learn REQ-6-5's own deactivated state short of
+    // independently fetching and replaying the full log itself. Reuses
+    // the W3C DID Resolution spec's own didDocumentMetadata.deactivated
+    // term (rather than inventing a new one), embedded directly in the
+    // document instead of a separate resolution-result envelope -- this
+    // method's own wire format has never wrapped the document that way,
+    // and changing that now would be a breaking change to every existing
+    // consumer for a problem an additive field already solves. Always
+    // present, not just when true, so its absence never has to be
+    // interpreted as "not deactivated" versus "this registrar doesn't
+    // support surfacing it."
+    didDocumentMetadata: { deactivated: state.deactivated },
   };
 }

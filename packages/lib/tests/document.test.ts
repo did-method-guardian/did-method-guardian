@@ -121,4 +121,47 @@ test("replay marks a tombstoned ward as deactivated but keeps full history", () 
   const state = replay("did:guardian:fred:example:com", log);
   assert.equal(state.deactivated, true);
   assert.equal(log.length, 2, "deactivation never removes prior log entries");
+
+  // audit WS-1.16: deactivation has to be visible from the presented
+  // document itself, not just internal ResolvedState -- a resolver that
+  // never independently replays the log otherwise has no way to learn
+  // REQ-6-5's own deactivated state at all.
+  const doc = toDidDocument(state);
+  assert.equal(doc.didDocumentMetadata.deactivated, true);
+});
+
+test("audit WS-1.16: an active (non-deactivated) identity's document still carries didDocumentMetadata.deactivated, as false -- its absence must never be mistaken for a registrar that doesn't support surfacing it", () => {
+  const genesis: CustodialCreateOp = {
+    type: "custodial_create",
+    did: "did:guardian:fred:example:com",
+    name: "fred",
+    operationalKeys: ["op1-pubkey"],
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    creator: "did:guardian:fred:example:com",
+    proof: [fakeProof(`did:key:op1-pubkey#op1-pubkey`)],
+  };
+  const state = replay("did:guardian:fred:example:com", [entry(genesis, "cid0")]);
+  const doc = toDidDocument(state);
+  assert.equal(doc.didDocumentMetadata.deactivated, false);
+});
+
+test("audit WS-1.16: @context includes the Multikey security vocabulary, not just the base DID context", () => {
+  const genesis: CustodialCreateOp = {
+    type: "custodial_create",
+    did: "did:guardian:fred:example:com",
+    name: "fred",
+    operationalKeys: ["op1-pubkey"],
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    creator: "did:guardian:fred:example:com",
+    proof: [fakeProof(`did:key:op1-pubkey#op1-pubkey`)],
+  };
+  const state = replay("did:guardian:fred:example:com", [entry(genesis, "cid0")]);
+  const doc = toDidDocument(state);
+  assert.ok(doc["@context"].includes("https://w3id.org/security/multikey/v1"), "the base DID context alone never defines the Multikey verification method type");
 });
