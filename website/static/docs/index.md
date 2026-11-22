@@ -8,7 +8,7 @@ description: >-
   with the power to recover, revoke, transfer, or act on behalf of an identity,
   under rules its owner sets in advance.
 stage: published
-updated_at: '2026-11-17T08:27:06.596Z'
+updated_at: '2026-11-22T00:00:00.000Z'
 ---
 <script type="application/ld+json">
 {
@@ -44,7 +44,7 @@ Three situations come up often enough to need a standard answer:
 ## How it works
 
 
-By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy the ward's registrar enforces. \
+By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy that any verifier checks by replaying the log. \
 \
 A simple example of this is a human that manages an agent. The agent has a fully functional id, and the human has a separate id, but the human can be assigned as the agent's *guardian*.
 

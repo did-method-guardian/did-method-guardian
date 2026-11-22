@@ -118,8 +118,8 @@ export interface ShapeResult {
  * `verifyCustodialCreate`, same as keySigs and the registrar attestation
  * are; this only checks that a slot for it exists at all).
  *
- * `incoming` MAY be non-empty (relaxed from always-`[]` -- REQ-7.1-1,
- * v0.3): a genesis establishing a guardian directly, as long as every
+ * `incoming` MAY be non-empty (relaxed from always-`[]` -- REQ-7.1-1):
+ * a genesis establishing a guardian directly, as long as every
  * named guardian co-signs. Doing this at genesis instead of via a
  * separate `guardian_add` halves the operations an identity that's
  * always born with a guardian needs (an ephemeral agent fleet under one

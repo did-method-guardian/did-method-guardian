@@ -164,7 +164,7 @@ export function replay(did: Did, log: LogEntry[]): ResolvedState {
     did,
     operationalKeys: [...genesis.operationalKeys],
     services: { ...genesis.services },
-    guardians: [...genesis.incoming], // v0.3: MAY be non-empty when each named guardian co-signed genesis (REQ-7.1-1)
+    guardians: [...genesis.incoming], // MAY be non-empty when each named guardian co-signed genesis (REQ-7.1-1)
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, ...(genesis.policy ?? {}) } as GuardianPolicy,
     registrarDid: extractRegistrarDid(genesis),
     deactivated: false,

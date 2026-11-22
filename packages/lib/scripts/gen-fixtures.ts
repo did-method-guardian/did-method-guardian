@@ -38,7 +38,7 @@ const outDir = join(here, "..", "..", "..", "..", "interop_tests", "operation_lo
  * identity (spec §5); a single fixture file bundling them is specifically so
  * this interop suite is checkable in isolation, without standing up real
  * resolvable identities for every guardian referenced. `registrar_did`
- * (v0.4) names which DID's own proof to check genesis's registrar
+ * names which DID's own proof to check genesis's registrar
  * attestation against (verifyCustodialCreate's 3rd argument) -- every
  * fixture carrying a custodial_create needs this, even an "accept" one
  * that's actually a root identity attesting its own genesis (Fix 7).
@@ -325,7 +325,7 @@ async function signGenesis(
   );
 }
 
-// --- invalid: genesis names an incoming guardian at genesis (v0.3, REQ-7.1-1) who never co-signed at all -- no proof entry, not even a forged one ---
+// --- invalid: genesis names an incoming guardian at genesis (REQ-7.1-1) who never co-signed at all -- no proof entry, not even a forged one ---
 // Built directly, not via signGenesis -- that helper (signCustodialCreate)
 // refuses to produce an under-signed operation at all, which is correct
 // for honest callers but means this adversarial case has to be
@@ -351,7 +351,7 @@ async function signGenesis(
     "invalid",
     "genesis_unsigned_incoming_guardian",
     [{ cid: await cidFor(genesis), op: genesis }],
-    "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no proof at all -- establishing a guardian this way still requires that guardian's consent.",
+    "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1) but carries no proof at all -- establishing a guardian this way still requires that guardian's consent.",
     { "did:guardian:example.com:board-a": boardA.publicKey, ...registrarKnownKeys },
     "reject",
   );

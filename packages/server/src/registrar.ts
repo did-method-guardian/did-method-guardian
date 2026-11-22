@@ -75,7 +75,7 @@ export function assertValidPassword(password: string): void {
 }
 
 /**
- * v0.3, REQ-8-2: genesis submission is part of the method now, not a
+ * REQ-8-2: genesis submission is part of the method now, not a
  * registerWard-only special case -- a client that built and self-signed
  * a `custodial_create` (keySigs already attached, REQ-7.1-8) gets
  * accepted here exactly like registerWard's server-generated one does,
@@ -86,7 +86,7 @@ export function assertValidPassword(password: string): void {
  * gets here, so nothing below may touch any of that content once
  * computed, only check it.
  *
- * `incoming` MAY be non-empty now (REQ-7.1-1, relaxed v0.3) -- a genesis
+ * `incoming` MAY be non-empty now (REQ-7.1-1) -- a genesis
  * establishing a guardian directly, as long as every named guardian
  * co-signs (checkGenesisShape checks a slot exists; verifyCustodialCreate
  * below, once this registrar's attestation is attached, checks those
@@ -623,7 +623,7 @@ export async function adoptWard(env: Env, name: string, incomingDid: Did): Promi
  * self-held, is root, or no genesis to rotate from) -- those stay errors
  * regardless, since there's nothing coherent to do about them here.
  *
- * `newKeyProof`, v0.4 (REQ-7.2-12): this registrar never holds the
+ * `newKeyProof` (REQ-7.2-12): this registrar never holds the
  * private half of `publicKey` -- that's the entire point of this
  * endpoint -- so it can't produce the new key's proof-of-possession
  * proof the way `rotateWard`/`registerWard` do for a server-generated
@@ -873,7 +873,7 @@ export async function resolveLog(env: Env, name: string | null): Promise<LogEntr
  * bespoke per-type call. `guardian_transfer` (v0.1) is no longer accepted
  * for new submissions -- superseded by guardian_add/guardian_remove; it
  * stays supported for REPLAYING any already-accepted history (document.ts),
- * just not for new writes. `custodial_create` (v0.3, REQ-8-2) delegates to
+ * just not for new writes. `custodial_create` (REQ-8-2) delegates to
  * acceptGenesis above, before the findWard check below -- a fresh genesis
  * has no ward row yet by definition, which every other operation type
  * requires.

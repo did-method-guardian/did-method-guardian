@@ -70,7 +70,7 @@ test("REQ-7.1-1: genesis with a non-empty incoming guardian who never co-signed 
   assert.match(result.reason!, /REQ-7\.1-1/);
 });
 
-test("REQ-7.1-1 (v0.3, relaxed): genesis with a non-empty incoming guardian who co-signed passes shape -- a guardian may now be established directly at genesis", async () => {
+test("REQ-7.1-1: genesis with a non-empty incoming guardian who co-signed passes shape -- a guardian may now be established directly at genesis", async () => {
   const boardDid: Did = "did:guardian:example.com:board";
   const board = await generateKeypair();
   const partial = { did: "did:guardian:acme.com:alice" as Did, name: "alice", incoming: [boardDid], prev: null, operationalKeys: ["pk"], services: {}, creator: "did:guardian:acme.com" as Did };

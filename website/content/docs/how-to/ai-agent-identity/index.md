@@ -27,13 +27,17 @@ did-guardian register support-bot-7 --registrar guardianspec.org
 ```text {linenos=false}
 Created did:guardian:guardianspec.org:support-bot-7
 
-Login secret (shown once -- store it with the agent, not with the human guardian):
+Login secret (shown once -- save it now, there's no recovery path if you lose it):
 <secret>
+
+This identity has no guardian yet -- register a guardian the same way, log in as them, and run "did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7" (this registrar still holds both keys, so that's the one step a bare key can't do). See "did-guardian guardian adopt --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.
 ```
+
+Store that secret with the agent's own operator, not with the human who's about to become its guardian -- the whole point of the next step is that the guardian shouldn't need it.
 
 ## Make a human its guardian
 
-A guardian can also be established directly at registration now (REQ-7.1-1, v0.3), via `create --guardian <did> --guardian-key <label>` -- but that needs the agent's key held locally, which `register` (above) deliberately avoids. The ordinary path below works regardless of who holds what, and is the one `register`-based setups need: a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
+A guardian can also be established directly at registration now ([REQ-7.1-1](/docs/did-guardian-spec-v0.2.0/#req-7.1-1)), via `create --guardian <did> --guardian-key <label>` -- but that needs the agent's key held locally, which `register` (above) deliberately avoids. The ordinary path below works regardless of who holds what, and is the one `register`-based setups need: a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
 
 ```text {linenos=false}
 did-guardian register priya --registrar guardianspec.org

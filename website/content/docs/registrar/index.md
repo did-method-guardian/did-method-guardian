@@ -37,7 +37,7 @@ Required by the formal spec's REQ-8-2; this registrar's own implementation of th
 
 ## 2. Self-contained convenience endpoints
 
-Each of these corresponds to an operation whose formal signer requirement can be satisfied by a single call from one authenticated party, with this registrar producing every needed signature itself from keys it already custodies -- no new authority is ever granted to a third party by any of these, which is what makes a single bare call safe. Auth model, uniformly: either an active `gw_session` cookie for the target identity itself, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its own caller (e.g. zz, having already confirmed its own user is a current guardian, before ever calling here).
+Each of these corresponds to an operation whose formal signer requirement can be satisfied by a single call from one authenticated party, with this registrar producing every needed signature itself from keys it already custodies -- no new authority is ever granted to a third party by any of these, which is what makes a single bare call safe. Auth model, uniformly: either an active `gw_session` cookie for the target identity itself, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its own caller (an agent-hosting platform, say, having already confirmed its own user is a current guardian, before ever calling here).
 
 | Method | Path | Operation produced | Why it's self-contained |
 |---|---|---|---|
@@ -208,7 +208,7 @@ Every action here, including email forwarding, works for the domain's own bare-d
 
 ## 9. Managed Identity API
 
-`POST /register` already exists for plain self-service -- this registrar's own profile convenience (§2), not the method-required `.../operations` path itself ([§1](#1-method-required-endpoints), formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), though it produces exactly the same kind of guardian-less genesis either way. This section is about the one case that's different: an agent-hosting platform (zz's own managed-identity feature is the motivating example, not the only one) wants to create a *new* identity with a human as its own signed guardian from the moment it exists -- never ownerless, and never guarded by the platform itself.
+`POST /register` already exists for plain self-service -- this registrar's own profile convenience (§2), not the method-required `.../operations` path itself ([§1](#1-method-required-endpoints), formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), though it produces exactly the same kind of guardian-less genesis either way. This section is about the one case that's different: an agent-hosting platform wants to create a *new* identity with a human as its own signed guardian from the moment it exists -- never ownerless, and never guarded by the platform itself.
 
 **The guardian is derived from a validated access token's own `sub`, never a client-supplied field.** `POST /register` with `Authorization: Bearer <access_token>` and a token whose own granted `scope` includes `create:managed-identity` creates the new ward with that token's own `sub` as its guardian. A request with no bearer token at all still gets the ordinary case: self-service, no guardian. A bearer token present but missing the scope is rejected outright (`403`), not silently downgraded to "no guardian."
 

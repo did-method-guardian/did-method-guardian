@@ -2,20 +2,20 @@
   "note": "REJECT: genesis carries a real, validly-signed extra proof from a DID that's neither a declared operational key, an incoming guardian, nor the registrar (WS-1.7) -- an unexplained proof must never be silently accepted.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:strayproof": "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
-    "did:guardian:evil.example": "zDnaefhDgQFiKsGkR2n1A1EyvsmYGTqpP1yW9u1F5fNd4rYd6",
-    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
+    "did:guardian:example.com:strayproof": "zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg",
+    "did:guardian:evil.example": "zDnaeS3hFaRKUcgMBjYQ3VGUoU1zyuVWRNLzJuFGzq9grXCpp",
+    "did:guardian:example.com": "zDnaeo9DWG2gthqcaUTxoMCgaM667nvUQdGLFabERCYejkQX3"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmdCm78dZGFcdobqsMfvexDE3SeXj7Mb1E6gDd9piL8ura",
+      "cid": "zQmYhc5obX8BJo8Pj5ajuiGFic4aSwQbL5XDzuB1gSaZshA",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:strayproof",
         "name": "strayproof",
         "operationalKeys": [
-          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
+          "zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg"
         ],
         "services": {},
         "outgoing": [],
@@ -26,26 +26,26 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+            "verificationMethod": "did:key:zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg#zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.348Z",
-            "proofValue": "z5wzZ8STnj6QgtYkWYFJJv18AhgTsL8vN895SPDxGowQJiWZQBbn9CY95wbr3mLQaf2FkfG2YBqHz6yveA8WzDHuk"
+            "created": "2026-11-22T03:45:34.312Z",
+            "proofValue": "z5yHYW7DMgaFZLdMM6X4gUqkEw5AH6YqTduCRESFMEAA31STbff6xECf8gELmscUU8ECnSH67FY7dLyiRuUhEqNwx"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:19:52.348Z",
-            "proofValue": "z53i4Y2fcA9e7yGuXhPBKi1aFFYoRbSYGC7zEcHpXBnCvVDJt7ut1VN9QdXybV5gJNATmK2cZsQUAtGgxWLhS7vpW"
+            "created": "2026-11-22T03:45:34.313Z",
+            "proofValue": "z5RLcso1XfuznuYriWGTFSdzPCdnNVr2zXGUhbXS5vjhWw5za5NqD6bVJMCKtBt8VnDd8GrUrAy6XbshwGa7Psj7"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:evil.example#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.348Z",
-            "proofValue": "z3vups4kxsfm3hQh4dzUGERihJdSHGM23egdfVA6CWXiVpdieA8ATvPPbFbp34x6Kn5gvhUG9tJP8TAM1BHPTJGs2"
+            "created": "2026-11-22T03:45:34.313Z",
+            "proofValue": "zES6SwduDTRKWQUCs2fWDaQSW1e69fpE5WQExJzf2fQxMHaPMMmDzYZJeqqaNbkep3AxrK2nVnSwcQK2AdLAdnVz"
           }
         ]
       }

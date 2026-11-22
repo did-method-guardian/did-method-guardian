@@ -2,18 +2,18 @@
   "note": "Fix 1 (PoP bypass): operationalKeys names a key the attacker does not hold; the only proof of possession attached is for a DIFFERENT key the attacker actually controls. Must reject -- a valid proof for the wrong key is not proof of possession of the right one.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
+    "did:guardian:example.com": "zDnaeo9DWG2gthqcaUTxoMCgaM667nvUQdGLFabERCYejkQX3"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmYpAz1we6fodRLtj6s4EcUYAz4ZEF7vC2BKuJcG36XzKe",
+      "cid": "zQmaUKcxSyFEri8RQ7FMuYTbidcYXDzJe83r81hwDe7fSYJ",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:keyswap",
         "name": "keyswap",
         "operationalKeys": [
-          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
+          "zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg"
         ],
         "services": {},
         "outgoing": [],
@@ -24,18 +24,18 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeiM88KJgLVVYGhn3JMwMEzXUaVe4M9hu5NBhnwXBj27WU#zDnaeiM88KJgLVVYGhn3JMwMEzXUaVe4M9hu5NBhnwXBj27WU",
+            "verificationMethod": "did:key:zDnaeYCgU52TA2gryYxhWJinY4J5bwtY4df85BCAvMDuZm5ks#zDnaeYCgU52TA2gryYxhWJinY4J5bwtY4df85BCAvMDuZm5ks",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.339Z",
-            "proofValue": "z3erJKYr11DkcSWxkw1rq4STivH3sk85PUCsHKcaroe7rrrfvjZVneRwod8pJfnXo597Hxa7nUwuVJqwWq7i11XMb"
+            "created": "2026-11-22T03:45:34.304Z",
+            "proofValue": "z5i69AUpYRMrRYnurMAMbAFYTi1cginefgzzXXN9GTDRFeG8Jh7JekTBHrw8AfpfBYuRxYv52kuWFkD9PFcSVKr12"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:19:52.340Z",
-            "proofValue": "z3L5DziqfwEs6a1v4MJ97KtZ2xthTkknZwu1HAxNQBfxpF7DqSUiW1SQVJ5NaaMWMbPjhY759NHEho2JRfrq5Meie"
+            "created": "2026-11-22T03:45:34.305Z",
+            "proofValue": "z3iXdPsGZKMjTMs6mUuF88u4RFhpzosriGcN9DnkPHoUQ2g1CvQa9LYA44cVEZKBZqhsaGYeF3v2rHbzXG5Y29rGh"
           }
         ]
       }

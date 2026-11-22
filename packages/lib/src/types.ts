@@ -11,7 +11,7 @@ export type OnOrphanPolicy = "sovereign" | "tombstone" | { transfer_to: Did };
 
 export interface GuardianPolicy {
   /**
-   * v0.4, Fix 6: a verifier that doesn't recognize this version number
+   * Fix 6: a verifier that doesn't recognize this version number
    * MUST report that it can't fully verify state governed by this
    * policy, never silently accept it as if every field it understands
    * were the complete picture. "Ignore unknown fields" (this field's own
@@ -125,7 +125,7 @@ export function validatePolicy(policy: unknown): { valid: boolean; reason?: stri
 }
 
 /**
- * v0.4, Fix 5: a W3C Data Integrity proof (ecdsa-jcs-2019 cryptosuite --
+ * Fix 5: a W3C Data Integrity proof (ecdsa-jcs-2019 cryptosuite --
  * see operations.ts's createProof/verifyProof for the exact signing
  * input construction, checked directly against the W3C specs rather
  * than assumed). Replaces the old, separate sig/sigs/keySigs/registrar
@@ -164,13 +164,13 @@ export interface DataIntegrityProof {
 
 export interface CustodialCreateOp {
   type: "custodial_create";
-  /** v0.4, Fix 2: the full DID this genesis is for, domain included. A registrar MUST reject a genesis whose `did` doesn't match `didFor(name, its own domain)` -- without this, a publicly-visible, already-accepted genesis (keys, keySigs-equivalent proofs, and any guardian consents, all still verifying) could be replayed verbatim at a second registrar under the same free name, becoming a second, distinct identity nobody who signed the original ever intended. */
+  /** Fix 2: the full DID this genesis is for, domain included. A registrar MUST reject a genesis whose `did` doesn't match `didFor(name, its own domain)` -- without this, a publicly-visible, already-accepted genesis (keys, keySigs-equivalent proofs, and any guardian consents, all still verifying) could be replayed verbatim at a second registrar under the same free name, becoming a second, distinct identity nobody who signed the original ever intended. */
   did: Did;
   name: string | null; // null for the bare-domain (nameless) identity -- see spec §2.1
   operationalKeys: string[]; // Multikey (Fix 4) -- one verificationMethod entry per entry, derived directly, index-matched (REQ-3-1); there is no separate map to fall out of sync with it (Fix 1)
   services: Record<string, { type: string; endpoint: string }>;
   outgoing: []; // always empty at genesis -- nothing to remove
-  incoming: Did[]; // v0.3 (REQ-7.1-1 relaxed): MAY be non-empty if each named DID co-signs genesis (a proof in `proof`, verificationMethod = that DID's own DID URL) -- runtime-checked, not type-narrowed
+  incoming: Did[]; // REQ-7.1-1: MAY be non-empty if each named DID co-signs genesis (a proof in `proof`, verificationMethod = that DID's own DID URL) -- runtime-checked, not type-narrowed
   prev: null;
   proof: DataIntegrityProof[];
   /** v0.2, REQ-7.1-4: optional at the type level (a wire payload can omit it); required at the rules-engine level -- see rules.ts. */

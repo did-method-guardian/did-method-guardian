@@ -2,19 +2,19 @@
   "note": "REJECT: genesis names the same guardian twice in incoming -- malformed, even though the single real signature would trivially satisfy both entries.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:dupguardian": "zDnaeqaF9sybGek9AiVNG5JRizW8cqBQGvMjAmBya7AKFqF8G",
-    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
+    "did:guardian:example.com:dupguardian": "zDnaem9vcyyvvwGZ6Dnxmnx8n7t8pyN2iiv3guspN9Qosc5yp",
+    "did:guardian:example.com": "zDnaeo9DWG2gthqcaUTxoMCgaM667nvUQdGLFabERCYejkQX3"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmeyawAFu7teYPDyGVE17QyGeA2L9SYER65YnT965uGcuu",
+      "cid": "zQmYPefSy71rksoCJAADpDYuCvYFaS9zWkBesfqxpRUSAN9",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:dupward",
         "name": "dupward",
         "operationalKeys": [
-          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
+          "zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg"
         ],
         "services": {},
         "outgoing": [],
@@ -28,34 +28,34 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+            "verificationMethod": "did:key:zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg#zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.343Z",
-            "proofValue": "z2X5XsnRnCeexewZMv8oL3CJTi1HGex25pHUKpJhVXqai1VGXJB31rnc4vpC1RG8qjEnJr1cBxaqhnALFE42jsJkp"
+            "created": "2026-11-22T03:45:34.308Z",
+            "proofValue": "z5Gp3DU3TGjniWwfJVh9KmnfswhvdC74mkiwbwBpdGcEZiNYBxkJLFZPzceijcQm96JMu4K976eBitjWKoct8qP6N"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:dupguardian#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.343Z",
-            "proofValue": "z2Ngt3xN83VoG1NciC7Ec3yPkHpF8L9X9y9YAeEwzc3gkfSL2GKbAKisuAq3RQZzptrR12b9BJYncwJFZPKtwrk12"
+            "created": "2026-11-22T03:45:34.308Z",
+            "proofValue": "z5jfBtuWHTfvZSZLwnw5cycq9wm1nFcWATpc7T3ha4GhxoFwTgxzRBmGycVeS4twaNyi7BfaTHDZuEwWcRa7n1PU9"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:dupguardian#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.343Z",
-            "proofValue": "z5Fy84shrJj5C7ALR3gHoQmhNsvMatdPmJhcHymPEauAAsDPBBXbcpMSGdQqgoCGXXENBsJvENQRskN43f62cfwnd"
+            "created": "2026-11-22T03:45:34.308Z",
+            "proofValue": "z3qzH1ohWF5cSPQsk6stm5f541YSuoRTMxuQVfHm5vrJiaz6twphHXYBjqa9tM5YLWbq96tsdzokZTdayAqWHzUVA"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:19:52.344Z",
-            "proofValue": "z2KnEd23eurAc3Fk7qRCNHwkbumPv6ahdtxuAzq35a5ZQDELMc3H4dAioTGYtXR5DqsDzQsGKNYf3H61HAJFqoG5"
+            "created": "2026-11-22T03:45:34.308Z",
+            "proofValue": "zgvb4Zyp6kd4oi3nu7NuDpnjLD8Pnv1JAxNHeqAHUZUKjnUzJyUKVNyisEK2bwXEpRCshVjABCtBjHkHJbG6syNm"
           }
         ]
       }

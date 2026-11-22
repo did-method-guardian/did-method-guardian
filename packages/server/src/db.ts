@@ -148,7 +148,7 @@ export async function takeCustodyOfWardKey(env: Env, did: string, publicKey: str
 }
 
 /**
- * For a ward that's self-held from birth (v0.3, a client-submitted
+ * For a ward that's self-held from birth (a client-submitted
  * genesis accepted by registrar.ts's acceptGenesis) -- unlike
  * takeCustodyOfWardKey above, there's no prior "registrar" row to
  * transition from and no wards.public_key to overwrite (insertWard

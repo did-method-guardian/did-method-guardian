@@ -281,7 +281,7 @@ async function filterValidSigners(unsecuredDoc: unknown, proofs: DataIntegrityPr
 /**
  * `operationalPrivateKeys`, keyed by Multikey public key: REQ-7.1-8,
  * every entry in `partial.operationalKeys` must prove possession.
- * `incomingKeys`, keyed by DID: v0.3 (REQ-7.1-1 relaxed), one proof per
+ * `incomingKeys`, keyed by DID: REQ-7.1-1, one proof per
  * `partial.incoming` entry, that guardian's own co-signed consent.
  */
 export async function signCustodialCreate(

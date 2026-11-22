@@ -6,11 +6,11 @@ import { submitOperation, confirmKeyIsCurrent } from "../registrar-client.js";
 export function registerCreateCommand(program: Command): void {
   program
     .command("create <name>")
-    .description("build a self-held genesis operation (v0.3, REQ-8-2: genesis is part of the method now, not a registrar convenience) -- with --registrar, publishes it for real; with --domain alone, stays fully offline, no network at all")
+    .description("build a self-held genesis operation (REQ-8-2: genesis is part of the method, not a registrar convenience) -- with --registrar, publishes it for real; with --domain alone, stays fully offline, no network at all")
     .option("--domain <domain>", "build offline only -- the domain this identity would live under once something accepts it, with no network call made here")
     .option("--registrar <domain>", "actually submit the signed genesis to this domain's .../operations -- this identity is live the moment it's accepted, no further step needed")
     .option("--key <label>", "an existing saved key to use (default: generate and save a fresh one under <name>)")
-    .option("--guardian <did>", "establish this DID as a guardian directly at genesis (REQ-7.1-1, v0.3) -- requires --guardian-key, since a guardian MUST co-sign genesis")
+    .option("--guardian <did>", "establish this DID as a guardian directly at genesis (REQ-7.1-1) -- requires --guardian-key, since a guardian MUST co-sign genesis")
     .option("--guardian-key <label>", "a saved key for --guardian's DID -- only works when this is the same operator, holding both keys locally; otherwise add a guardian afterward with \"guardian add\" or \"guardian adopt\" instead")
     .option("--keychain", "save the new key to the OS keychain instead of a local file")
     .action(async (name: string, opts: { domain?: string; registrar?: string; key?: string; guardian?: string; guardianKey?: string; keychain?: boolean }) => {

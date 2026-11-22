@@ -29,7 +29,7 @@ Three situations come up often enough to need a standard answer:
 ## How it works
 
 
-By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy the ward's registrar enforces. \
+By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy that any verifier checks by replaying the log. \
 \
 A simple example of this is a human that manages an agent. The agent has a fully functional id, and the human has a separate id, but the human can be assigned as the agent's *guardian*.
 
@@ -556,7 +556,7 @@ Required by the formal spec's REQ-8-2; this registrar's own implementation of th
 
 ## 2. Self-contained convenience endpoints
 
-Each of these corresponds to an operation whose formal signer requirement can be satisfied by a single call from one authenticated party, with this registrar producing every needed signature itself from keys it already custodies -- no new authority is ever granted to a third party by any of these, which is what makes a single bare call safe. Auth model, uniformly: either an active `gw_session` cookie for the target identity itself, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its own caller (e.g. zz, having already confirmed its own user is a current guardian, before ever calling here).
+Each of these corresponds to an operation whose formal signer requirement can be satisfied by a single call from one authenticated party, with this registrar producing every needed signature itself from keys it already custodies -- no new authority is ever granted to a third party by any of these, which is what makes a single bare call safe. Auth model, uniformly: either an active `gw_session` cookie for the target identity itself, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its own caller (an agent-hosting platform, say, having already confirmed its own user is a current guardian, before ever calling here).
 
 | Method | Path | Operation produced | Why it's self-contained |
 |---|---|---|---|
@@ -727,7 +727,7 @@ Every action here, including email forwarding, works for the domain's own bare-d
 
 ## 9. Managed Identity API
 
-`POST /register` already exists for plain self-service -- this registrar's own profile convenience (§2), not the method-required `.../operations` path itself ([§1](#1-method-required-endpoints), formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), though it produces exactly the same kind of guardian-less genesis either way. This section is about the one case that's different: an agent-hosting platform (zz's own managed-identity feature is the motivating example, not the only one) wants to create a *new* identity with a human as its own signed guardian from the moment it exists -- never ownerless, and never guarded by the platform itself.
+`POST /register` already exists for plain self-service -- this registrar's own profile convenience (§2), not the method-required `.../operations` path itself ([§1](#1-method-required-endpoints), formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), though it produces exactly the same kind of guardian-less genesis either way. This section is about the one case that's different: an agent-hosting platform wants to create a *new* identity with a human as its own signed guardian from the moment it exists -- never ownerless, and never guarded by the platform itself.
 
 **The guardian is derived from a validated access token's own `sub`, never a client-supplied field.** `POST /register` with `Authorization: Bearer <access_token>` and a token whose own granted `scope` includes `create:managed-identity` creates the new ward with that token's own `sub` as its guardian. A request with no bearer token at all still gets the ordinary case: self-service, no guardian. A bearer token present but missing the scope is rejected outright (`403`), not silently downgraded to "no guardian."
 
@@ -854,13 +854,13 @@ Canonical URL: https://guardianspec.org/docs/prior-art/
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "Prior art and comparisons",
-  "description": "How did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when one of those fits better.",
+  "description": "How did:guardian relates to did:webvh, did:plc, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when one of those fits better.",
   "url": "https://guardianspec.org/docs/prior-art/",
   "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
 }
 </script>
 
-did:guardian's contribution is group guardianship as a first-class part of a DID method: a configurable group of other identities, with changeable membership, that can recover, revoke, transfer, or act on behalf of a ward, verified the same way any other operation in the method's log is. Four other projects cover related ground, each from a different angle. None of them do exactly this; some do something better for a narrower need.
+did:guardian's contribution is group guardianship as a first-class part of a DID method: a configurable group of other identities, with changeable membership, that can recover, revoke, transfer, or act on behalf of a ward, verified the same way any other operation in the method's log is. Five other projects cover related ground, each from a different angle. None of them do exactly this; some do something better for a narrower need.
 
 ## did:webvh
 
@@ -868,7 +868,15 @@ did:guardian's contribution is group guardianship as a first-class part of a DID
 
 **Comparable:** witnesses are a multi-party mechanism, closer in shape than most of the others here to did:guardian's group concept.
 
-**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that.
+**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that. did:webvh's identifier is also self-certifying and portable in a way did:guardian's isn't: a did:webvh identifier can move to a new location (its own `#updateDomain` mechanism) without losing its identity, since the identifier's own hash is what anchors trust, not where it currently resolves. A did:guardian identifier is location-bound to the registrar's own domain for the life of the identifier -- domain migration is explicitly out of scope for this version (formal spec [§9](/docs/did-guardian-spec-v0.2.0/#9-deactivation-and-data-permanence)), with "link, don't move" (a new identifier plus mutual `alsoKnownAs`) as the documented alternative.
+
+## did:plc
+
+[did:plc](https://github.com/did-method-plc/did-method-plc) (Bluesky/AT Protocol's method) is the closest structural relative here: an append-only, hash-chained operation log, replayed to derive current state, with a two-tier key model (a rotation-key set and an operational key) and a 72-hour nullification window for recovering from a compromised key -- did:guardian's own operation log, replay model, and nullification window are deliberately the same shape.
+
+**Comparable:** the log/replay/nullification mechanics are close enough that did:guardian is best understood as did:plc's model plus group guardianship, not a wholly separate design.
+
+**Different:** did:plc's rotation-key tier is a single, ordered list of keys -- whichever one, in order, is willing and able to sign, authorizes recovery. did:guardian's guardian tier is a configurable, unordered M-of-N group instead, where a guardian can itself be a person, a committee, or another identity entirely, not just a second key one party happens to hold -- a deliberate difference from did:plc's own mechanism, not an extension of it. did:plc is also directory-resolved (a single, centrally-operated PLC directory), where did:guardian follows `did:web`'s own domain-scoped resolution instead -- any number of independent registrars, never one shared directory.
 
 ## KERI delegated AIDs
 
@@ -896,7 +904,7 @@ Ethereum's account abstraction standard lets a smart-contract wallet designate o
 
 ## When did:guardian fits, and when it doesn't
 
-did:guardian fits when guardianship needs to be a property of the identity -- portable, verifiable by replaying a log, with no dependency on a specific credential issuer, smart contract platform, or application staying alive to enforce it. It doesn't fit as well when you need hierarchical delegation (KERI), fine-grained per-relationship authority types (a verifiable-credential layer), on-chain enforcement tied to one execution environment (ERC-4337), or nothing more than a tamper-evident document history with no multi-party oversight at all (did:webvh).
+did:guardian fits when guardianship needs to be a property of the identity -- verifiable by replaying a log, with no dependency on a specific credential issuer, smart contract platform, or application staying alive to enforce it. It doesn't fit as well when you need a self-certifying, portable identifier instead of a domain-bound one (did:webvh), a single ordered recovery-key list with no group concept (did:plc), hierarchical delegation (KERI), fine-grained per-relationship authority types (a verifiable-credential layer), or on-chain enforcement tied to one execution environment (ERC-4337).
 
 
 ---
@@ -926,6 +934,8 @@ Created did:guardian:guardianspec.org:alice
 
 Login secret (shown once -- save it now, there's no recovery path if you lose it):
 <secret>
+
+This identity has no guardian yet -- register a guardian the same way, log in as them, and run "did-guardian guardian adopt did:guardian:guardianspec.org:alice" (this registrar still holds both keys, so that's the one step a bare key can't do). See "did-guardian guardian adopt --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.
 ```
 
 **Resolve it.** No authentication needed -- this works for anyone, anywhere:
@@ -951,7 +961,7 @@ did-guardian guardian adopt did:guardian:guardianspec.org:alice
 
 This is the session-based path (the registrar API's `.../adopt`): the caller is the *incoming guardian*, logged in, and the registrar produces both halves of the `guardian_add` signature since it still holds both keys. It's also the one step a bare `curl` call can't do -- a guardian relationship exists only when that guardian's key actually signs for it, and here that signature comes from an authenticated session, not a key you typed into a request body.
 
-Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.well-known/guardian/alice`, `POST /guardian-login` + `POST .../adopt`) -- see the [registrar API doc](/docs/registrar/) for the exact requests, or run any `did-guardian` command with the registrar's domain in your browser's network tab to watch them happen.
+Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.well-known/guardian/alice`, `POST /guardian-login` + `POST .../adopt`) -- see the [registrar API doc](/docs/registrar/) for the exact requests, or pass `--json` to any `did-guardian` command (or point it through a local HTTP proxy) to see exactly what it sent and got back.
 
 ### Holding a key yourself instead
 
@@ -995,13 +1005,17 @@ did-guardian register support-bot-7 --registrar guardianspec.org
 ```text {linenos=false}
 Created did:guardian:guardianspec.org:support-bot-7
 
-Login secret (shown once -- store it with the agent, not with the human guardian):
+Login secret (shown once -- save it now, there's no recovery path if you lose it):
 <secret>
+
+This identity has no guardian yet -- register a guardian the same way, log in as them, and run "did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7" (this registrar still holds both keys, so that's the one step a bare key can't do). See "did-guardian guardian adopt --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.
 ```
+
+Store that secret with the agent's own operator, not with the human who's about to become its guardian -- the whole point of the next step is that the guardian shouldn't need it.
 
 ## Make a human its guardian
 
-A guardian can also be established directly at registration now (REQ-7.1-1, v0.3), via `create --guardian <did> --guardian-key <label>` -- but that needs the agent's key held locally, which `register` (above) deliberately avoids. The ordinary path below works regardless of who holds what, and is the one `register`-based setups need: a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
+A guardian can also be established directly at registration now ([REQ-7.1-1](/docs/did-guardian-spec-v0.2.0/#req-7.1-1)), via `create --guardian <did> --guardian-key <label>` -- but that needs the agent's key held locally, which `register` (above) deliberately avoids. The ordinary path below works regardless of who holds what, and is the one `register`-based setups need: a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
 
 ```text {linenos=false}
 did-guardian register priya --registrar guardianspec.org

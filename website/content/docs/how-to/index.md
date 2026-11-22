@@ -37,6 +37,8 @@ Created did:guardian:guardianspec.org:alice
 
 Login secret (shown once -- save it now, there's no recovery path if you lose it):
 <secret>
+
+This identity has no guardian yet -- register a guardian the same way, log in as them, and run "did-guardian guardian adopt did:guardian:guardianspec.org:alice" (this registrar still holds both keys, so that's the one step a bare key can't do). See "did-guardian guardian adopt --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.
 ```
 
 **Resolve it.** No authentication needed -- this works for anyone, anywhere:
@@ -62,7 +64,7 @@ did-guardian guardian adopt did:guardian:guardianspec.org:alice
 
 This is the session-based path (the registrar API's `.../adopt`): the caller is the *incoming guardian*, logged in, and the registrar produces both halves of the `guardian_add` signature since it still holds both keys. It's also the one step a bare `curl` call can't do -- a guardian relationship exists only when that guardian's key actually signs for it, and here that signature comes from an authenticated session, not a key you typed into a request body.
 
-Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.well-known/guardian/alice`, `POST /guardian-login` + `POST .../adopt`) -- see the [registrar API doc](/docs/registrar/) for the exact requests, or run any `did-guardian` command with the registrar's domain in your browser's network tab to watch them happen.
+Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.well-known/guardian/alice`, `POST /guardian-login` + `POST .../adopt`) -- see the [registrar API doc](/docs/registrar/) for the exact requests, or pass `--json` to any `did-guardian` command (or point it through a local HTTP proxy) to see exactly what it sent and got back.
 
 ### Holding a key yourself instead
 

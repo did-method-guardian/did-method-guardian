@@ -20,6 +20,6 @@ export function registerRegisterCommand(program: Command): void {
         console.log(result.login_secret);
       }
       console.log("");
-      console.log(`This identity has no guardian yet -- see "did-guardian guardian add --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.`);
+      console.log(`This identity has no guardian yet -- register a guardian the same way, log in as them, and run "did-guardian guardian adopt ${result.did}" (this registrar still holds both keys, so that's the one step a bare key can't do). See "did-guardian guardian adopt --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.`);
     });
 }

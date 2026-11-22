@@ -2,19 +2,19 @@
   "note": "REJECT: 'board-a' is named as initial guardian but the proof was produced by a different, impostor key -- must fail verification against board-a's real, resolved public key.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:board-a": "zDnaeqaF9sybGek9AiVNG5JRizW8cqBQGvMjAmBya7AKFqF8G",
-    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
+    "did:guardian:example.com:board-a": "zDnaem9vcyyvvwGZ6Dnxmnx8n7t8pyN2iiv3guspN9Qosc5yp",
+    "did:guardian:example.com": "zDnaeo9DWG2gthqcaUTxoMCgaM667nvUQdGLFabERCYejkQX3"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmb5Njqe8qZiVYx3SAsN81Q2s8em6n5Tou7gkgsGHSYGcN",
+      "cid": "zQmU1XiRXBsTeGcgyqU2d18JpwxNm7uwLCDHgPDDerZdC8v",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:puppet",
         "name": "puppet",
         "operationalKeys": [
-          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
+          "zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg"
         ],
         "services": {},
         "outgoing": [],
@@ -27,26 +27,26 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+            "verificationMethod": "did:key:zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg#zDnaebfd88H3ByDLEMjvKcUaYgqcorGH76fnFCYeZsTV1HAkg",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.336Z",
-            "proofValue": "z2tnGYsK3sxEbEEb3avW5DQgGiGXvL1DBS18oi7m8jqoEhpVKx2U1iKXzSXK6vpF28bdaq1sCZcSGTFGwoK2krac9"
+            "created": "2026-11-22T03:45:34.301Z",
+            "proofValue": "z5WE2SEwrLcRJKuReeLry7Uz7BBCiN1Cs6kmnmW4kuuikBrcKvops695uPxiwi9WswoGJycWsAyhTiWBdkpmAkzAH"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board-a#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:19:52.336Z",
-            "proofValue": "z3svyrKdbisnUxMyiKSxjrRMPGeUnjz8pnJrWV5FmHNdhuVUFnKSqcrxWXQVvsHdKMqtirxTyaDiJRubMyiB7QU8q"
+            "created": "2026-11-22T03:45:34.301Z",
+            "proofValue": "z5YCVf3A17QWeeF3hdAJK6rDRgY2rP3wRWbvoWbgYp1Cb5aWKW6MSXcShXMM43yoP33ag9bN3cj5xNPZoa8kyVHij"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:19:52.336Z",
-            "proofValue": "z3AXTaDv7K8Q8JXG13jisrAitd3Ti9GieDG1qgaCYQx38akCVetkZrTPzi6G7WEbMSeFgpjHdZFBiZBmJa7dketfg"
+            "created": "2026-11-22T03:45:34.301Z",
+            "proofValue": "z5HUzNMshBagSj2NS9icC31UgVWtKw1vw2aEq95oUw2sbJ49TUKdfhrRZCtAHvMaV7kXSHmUvNMaypLDtRaKbsLKD"
           }
         ]
       }

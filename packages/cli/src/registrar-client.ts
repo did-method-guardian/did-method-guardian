@@ -56,7 +56,7 @@ export async function fetchLog(did: Did): Promise<LogEntry[]> {
 
 /**
  * `cid`, when the registrar returns one (currently only for a genesis
- * submission, v0.3 REQ-8-2): the accepted operation's final cid, computed
+ * submission, REQ-8-2): the accepted operation's final cid, computed
  * server-side over the content the registrar actually stored.
  *
  * WS-3.7 (audit): per REQ-6-4, this is identical to what computing it
@@ -100,7 +100,7 @@ export async function login(registrarDomain: string, name: string, loginSecret: 
 }
 
 /**
- * `keyProof`, v0.4 (REQ-7.2-12): a Data Integrity proof that the caller
+ * `keyProof` (REQ-7.2-12): a Data Integrity proof that the caller
  * holds `publicKey`'s private half, signed locally before this call (see
  * key.ts's take-custody command) -- this registrar never holds that key,
  * so it can't produce that proof the way it does for a server-generated

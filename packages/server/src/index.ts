@@ -150,7 +150,7 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         }
         if (suffix === "/operations" && request.method === "POST") {
           const op = (await request.json()) as { type?: string };
-          // v0.3, REQ-8-2: a custodial_create here is a brand-new identity
+          // REQ-8-2: a custodial_create here is a brand-new identity
           // claiming this name -- anonymous self-service by construction
           // (there's no session or bearer token for a DID that doesn't
           // exist yet), so it gets exactly /register's gate: rate-
