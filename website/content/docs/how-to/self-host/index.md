@@ -47,7 +47,7 @@ That's a working registrar: anyone can `POST /register` and create an identity, 
 
 ## The bare-domain root identity
 
-Every deployment auto-provisions one identity with no name at all -- `did:guardian:<your-domain>` -- the first time anything resolves it. It attests every other ward's genesis operation and, once given a login credential, is a fully usable identity like any other.
+Every deployment has one identity with no name at all -- `did:guardian:<your-domain>`, created the first time anything else registers (never by a resolution, which only ever reads). It attests every other identity's own create operation and, once given a login credential, is a fully usable identity like any other.
 
 ```bash {linenos=false}
 npx wrangler secret put ROOT_WARD_LOGIN_SECRET

@@ -1,14 +1,14 @@
 ---
 layout: docs-sidebar
 title: "Recover after a lost key"
-description: "A guardian-initiated custodial_rotate replaces a ward's lost operational key -- signed by enough guardians to meet recovery_threshold, never by the ward's now-inaccessible key."
+description: "A guardian-initiated update replaces a ward's lost key -- approved under its policy's own recovery setting, never by the ward's now-inaccessible key."
 ---
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "Recover after a lost key",
-  "description": "A guardian-initiated custodial_rotate replaces a ward's lost operational key -- signed by enough guardians to meet recovery_threshold, never by the ward's now-inaccessible key.",
+  "description": "A guardian-initiated update replaces a ward's lost key -- approved under its policy's own recovery setting, never by the ward's now-inaccessible key.",
   "url": "https://guardianspec.org/docs/how-to/recover-lost-key/",
   "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
 }
@@ -16,13 +16,13 @@ description: "A guardian-initiated custodial_rotate replaces a ward's lost opera
 
 # Recover after a lost key
 
-If a ward's operational key is lost, enough of its guardians (meeting whatever `recovery_threshold` its policy sets, `any` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.
+If a ward's key is lost, enough of its guardians (meeting whatever `policy.recovery` sets, `majority` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.
 
 This assumes the ward already has at least one guardian, and that its key is actually lost -- held by no one, not even the registrar. If both are true, there's nothing that can help: without a guardian, there is no recovery path, full stop -- a self-held key, with no guardian, that's actually gone, is unrecoverable by anyone, ever. did:guardian deliberately works this way instead of `did:plc`'s ordered recovery-key list: a guardian can be a person, a committee, or another identity entirely, not just a second key you happen to hold.
 
-A registrar-held ward is a different case: the registrar still custodies the key behind it, so what's actually "lost" is usually just your own login credential, not the key itself -- that's an account-recovery problem (see the registrar API doc's own login/account-recovery flows), separate from this page's own guardian-signed `custodial_rotate`.
+A held ward is a different case: the registrar still custodies the key behind it, so what's actually "lost" is usually just your own login credential, not the key itself -- that's an account-recovery problem (see [self-host](/docs/how-to/self-host/)'s own login flow), separate from this page's own guardian-signed `update`.
 
-A did:guardian guardian doesn't have to be a separate person at all -- it can be another identity you yourself control instead, which is the usual answer when there's genuinely no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s own guardian covers exactly this case, with no second party involved at all. Set one up while `alice` still has the chance to get a guardian -- the [AI-agent walkthrough](/docs/how-to/ai-agent-identity/) is written around an agent specifically, but registering a plain identity to hold the cold-storage key works exactly the same way for a human's own ward. Either the ordinary way afterward (`guardian add`/`adopt`), or directly at genesis with `create --guardian <cold-storage-did> --guardian-key <label>` if you're creating `alice` for the first time and already hold both keys.
+A did:guardian guardian doesn't have to be a separate person at all -- it can be another identity you yourself control instead, which is the usual answer when there's genuinely no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s own guardian covers exactly this case, with no second party involved at all. Set one up while `alice` still has the chance to get a guardian -- registering a plain identity to hold the cold-storage key, then adding it as a guardian ([`guardian add`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli), if both keys are self-held), covers this.
 
 ## The recovery itself
 
@@ -30,20 +30,14 @@ A did:guardian guardian doesn't have to be a separate person at all -- it can be
 did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --submit
 ```
 
-This `guardian recover` command needs `bob` (the guardian) to hold a key [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) can sign with directly -- if bob is still registrar-held, run `did-guardian key take-custody did:guardian:example.com:bob` first, or use the registrar's own [asynchronous signature collection](/docs/registrar/#3-asynchronous-signature-collection-pending_operations) instead (`.../propose` then `.../pending/<id>/sign-as-self`, logged in as bob). Without `--submit`, the command prints the signed operation and stops there -- useful for checking it before it goes live, or for collecting more signatures by hand if `recovery_threshold` needs more than just bob.
+This `guardian recover` command needs `bob` (the guardian) to hold a key [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) can sign with directly -- if bob is still held by a registrar, run `did-guardian key take-custody did:guardian:example.com:bob` first. With `--submit`, it sends the operation immediately and reports whether `alice`'s own `policy.recovery` was satisfied by bob's approval alone; without it, the command only prints what it built. If it needs more than one guardian, use `did-guardian operation propose`/`did-guardian operation sign` instead, with every required guardian signing in turn against the same pending id.
 
-A fresh operational key is generated and saved automatically (as `<ward-did>-recovered`); pass `--new-key <label>` to install one you already hold instead.
+A fresh key is generated and saved automatically (as `<ward-did>-recovered`); pass `--new-key <label>` to install one you already hold instead.
 
 ## If the lost key was already used by whoever took it
 
-A key that's lost to theft, not just misplaced, might already have been used to rotate the identity before a guardian ever gets involved. The same guardian-signed `custodial_rotate` above still works -- but within 72 hours of that fraudulent rotation (the nullification window), `--prev <cid>` can point it at the cid immediately *before* the fraudulent rotation instead of the current head, specifically undoing it and rolling back to the state just before, rather than just adding another rotation on top of a compromised one:
-
-```text {linenos=false}
-did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --prev <cid-before-the-fraudulent-rotation> --submit
-```
-
-Naming an earlier `prev` this way is what the formal spec calls nullification -- the registrar's own replay logic ([REQ-6-8](/docs/did-guardian-spec-v0.2.0/#req-6-8)/[REQ-6-9](/docs/did-guardian-spec-v0.2.0/#req-6-9)) recognizes it and excludes the fraudulent rotation from the identity's current state automatically; nothing else needs to be told about it by hand. Past 72 hours, that specific undo is no longer available -- only an ordinary forward rotation is, which still replaces the compromised key, just without erasing it from the log's history.
+A key that's lost to theft, not just misplaced, might already have been used to rotate the identity before a guardian ever gets involved. There's no way to undo that rotation -- an accepted operation is permanent, by design, so there's nothing for a guardian to point at and roll back. The same guardian-signed `update` above still works, and still replaces the compromised key; it just adds a new operation on top of the compromised one rather than erasing it. The compromised rotation stays visible in the identity's own history, for anyone who resolves it to see.
 
 ## After recovering
 
-The ward's guardian set is untouched by this -- `custodial_rotate` only ever replaces keys, never guardianship (REQ-7.2-2). Nothing else needs to change.
+The ward's guardian set is untouched by this -- `update` only ever replaces keys, never guardianship. Nothing else needs to change.

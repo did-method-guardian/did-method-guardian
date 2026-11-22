@@ -5,7 +5,7 @@ layout: docs-sidebar
 title: 'did:guardian'
 description: >-
   A distributed identity built around guardianship: a group of other identities
-  with the power to recover, revoke, transfer, or act on behalf of an identity,
+  with the power to recover, deactivate, or act on behalf of an identity,
   under rules its owner sets in advance.
 stage: published
 updated_at: '2026-11-22T00:00:00.000Z'
@@ -15,7 +15,7 @@ updated_at: '2026-11-22T00:00:00.000Z'
   "@context": "https://schema.org",
   "@type": "TechArticle",
   "headline": "did:guardian",
-  "description": "A distributed identity built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance.",
+  "description": "A distributed identity built around guardianship: a group of other identities with the power to recover, deactivate, or act on behalf of an identity, under rules its owner sets in advance.",
   "url": "https://guardianspec.org/docs/",
   "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
 }
@@ -23,7 +23,7 @@ updated_at: '2026-11-22T00:00:00.000Z'
 
 # did:guardian
 
-**did:guardian is a distributed identity built around the concept of guardianship.** In most identity systems, control lives in a single keypair, and losing it means losing the identity for good. A did:guardian identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.
+**did:guardian is a distributed identity built around the concept of guardianship.** In most identity systems, control lives in a single keypair, and losing it means losing the identity for good. A did:guardian identity can have a group of guardians, which are other identities that have the power to recover it or deactivate it. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.
 
 ## Why this exists
 
@@ -38,13 +38,13 @@ Three situations come up often enough to need a standard answer:
 
 
 
-**Responsibility for an identity needs to change hands.** A board member's term ends. A shared agent gets reassigned to a new team, or the team membership changes. did:guardian treats this as an ordinary, signed, auditable operation.
+**Responsibility for an identity needs to change hands.** A board member's term ends. A shared agent gets reassigned to a new team, or the team membership changes. did:guardian treats adding and removing a guardian as its own signed, auditable operation.
 
 
 ## How it works
 
 
-By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover, revoke, or transfer it, and to act on its behalf, under a policy that any verifier checks by replaying the log. \
+By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover it, deactivate it, or act on its behalf, under a policy that any verifier checks by replaying the log. \
 \
 A simple example of this is a human that manages an agent. The agent has a fully functional id, and the human has a separate id, but the human can be assigned as the agent's *guardian*.
 
@@ -67,7 +67,7 @@ See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise defi
 
 
 
-**From [did:plc](https://github.com/did-method-plc/did-method-plc):** the *operation log*. An identity's history is an append-only, signed log of changes instead of a single mutable record. This is the same design Bluesky's `did:plc` runs for tens of millions of identities. This is also where *key rotation* and the *recovery window* come from. If a key is stolen and used to rotate an identity, that rotation can be undone within 72 hours.
+**From [did:plc](https://github.com/did-method-plc/did-method-plc):** the *operation log*. An identity's history is an append-only, signed log of changes instead of a single mutable record. This is the same design Bluesky's `did:plc` runs for tens of millions of identities. This is also where *key rotation* comes from -- a guardian replaces a lost or compromised key by rotating forward to a new one.
 
 
 
@@ -92,11 +92,11 @@ did:guardian:acme.com
 
 
 
-A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's root organizational identity, auto-provisioned for the domain.
+A `did:guardian` identifier is the domain that issued it, optionally followed by a name. `did:guardian:acme.com:alice` is Alice's identity at Acme's registrar. `did:guardian:acme.com` (no name at all) is Acme's own root organizational identity -- one per registrar, created the first time its registrar accepts any other identity.
 
 
 
-Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §2](/docs/did-guardian-spec-v0.2.0/#2-identifier-syntax).
+Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §4](/docs/did-guardian-spec-v0.2.0/#4-identifier).
 
 
 
@@ -109,10 +109,10 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 **Set up a group-governed identity for a team or an AI agent.** A company can issue an identity for an agent it runs, name itself (or a specific set of people) as guardian, and set a threshold matching how much oversight the situation needs. The guardians can authorize actions the agent isn't allowed to approve on its own, recover it if its key is lost or compromised, or deactivate it once it's retired.
 
 
-**Recover an identity after losing access to it.** If a ward's key is lost, a group of its guardians (meeting the threshold configured in its policy) can issue it a fresh key. If a key was stolen and already used, the same guardians can undo that specific change within the 72-hour recovery window, exactly as `did:plc` already supports. Without a guardian, there's no recovery -- a deliberate difference from `did:plc`'s ordered recovery-key list, not a gap: `did:guardian` uses guardianship for this instead of a second key, and a guardian doesn't have to be a separate person. Naming a cold-storage identity (a key generated once and kept offline) as its guardian covers the same need with nobody else involved.
+**Recover an identity after losing access to it.** If a ward's key is lost, a group of its guardians (meeting the threshold configured in its policy) can issue it a fresh key. Without a guardian, there's no recovery -- a deliberate difference from `did:plc`'s ordered recovery-key list, not a gap: `did:guardian` uses guardianship for this instead of a second key, and a guardian doesn't have to be a separate person. Naming a cold-storage identity (a key generated once and kept offline) as its guardian covers the same need with nobody else involved.
 
 
-**Hand off responsibility cleanly.** Moving guardianship from one party to another, adding a second guardian, or dissolving guardianship entirely are each a single signed operation, recorded permanently in the identity's history.
+**Hand off responsibility cleanly.** Adding a guardian, removing one, or dissolving guardianship entirely is each its own signed operation, recorded permanently in the identity's history.
 
 ## The parts of this project
 
