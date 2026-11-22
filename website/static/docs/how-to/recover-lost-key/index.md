@@ -7,7 +7,9 @@ description: "A guardian-initiated custodial_rotate replaces a ward's lost opera
 
 If a ward's operational key is lost, enough of its guardians (meeting whatever `recovery_threshold` its policy sets, `any` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.
 
-This assumes the ward already has at least one guardian. If it doesn't, there's nothing that can help -- [set one up](/docs/how-to/ai-agent-identity/) while you still have the chance.
+This assumes the ward already has at least one guardian. If it doesn't, there's nothing that can help: without a guardian, there is no recovery path, full stop -- a lost key with no guardian is unrecoverable by anyone, ever. did:guardian deliberately works this way instead of `did:plc`'s ordered recovery-key list: a guardian can be a person, a committee, or another identity entirely, not just a second key you happen to hold.
+
+That last option -- a guardian that is another identity you control, rather than a separate person -- is the usual answer when there's no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s guardian covers exactly this case, with no second party involved at all. [Set one up](/docs/how-to/ai-agent-identity/) while you still have the chance -- either the ordinary way afterward (`guardian add`/`adopt`), or directly at genesis with `create --guardian <cold-storage-did> --guardian-key <label>` if you're creating `alice` for the first time and already hold both keys.
 
 ## The recovery itself
 

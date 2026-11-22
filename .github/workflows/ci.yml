@@ -32,3 +32,21 @@ jobs:
       - run: npx tsc --noEmit
         working-directory: packages/server
       - run: npm test --workspace=packages/server
+
+  website-sync:
+    name: website (derived files stay in sync with their source)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate every derived file (md twins, schema copies, llms-full.txt)
+        working-directory: website
+        run: |
+          python3 scripts/sync-md-twins.py
+          python3 scripts/sync-schemas.py
+          python3 scripts/gen-llms-full.py
+      - name: Fail if regenerating any of them produced a diff
+        run: |
+          git diff --exit-code -- website/static/docs website/static/schemas website/static/llms-full.txt || {
+            echo "::error::website/static/docs, website/static/schemas, or website/static/llms-full.txt is stale -- rerun the scripts in website/scripts/ and commit the result."
+            exit 1
+          }

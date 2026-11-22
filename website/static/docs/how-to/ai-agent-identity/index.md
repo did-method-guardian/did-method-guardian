@@ -22,7 +22,7 @@ Login secret (shown once -- store it with the agent, not with the human guardian
 
 ## Make a human its guardian
 
-Guardianship can't be set at registration (genesis never names a guardian directly -- that's REQ-7.1-1). It's a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
+A guardian can also be established directly at registration now (REQ-7.1-1, v0.3), via `create --guardian <did> --guardian-key <label>` -- but that needs the agent's key held locally, which `register` (above) deliberately avoids. The ordinary path below works regardless of who holds what, and is the one `register`-based setups need: a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
 
 ```text {linenos=false}
 did-guardian register priya --registrar guardianspec.org
@@ -52,3 +52,9 @@ did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7
 - **Guardian still registrar-held**: use the asynchronous proposal flow (`.../propose` then `.../pending/<id>/sign-as-self`, logged in as the guardian) -- see the [registrar API doc](/docs/registrar/)'s §3. `tombstone_threshold`'s default of `any` means this reaches `satisfied`, and finalizes, the moment the guardian signs.
 
 Either way this deactivates the agent's identity permanently -- its log stays public and readable, but no further operation on it is accepted. If you want the agent's authority limited more narrowly than "the guardian can shut the whole thing down," set a `GuardianPolicy` with a higher `tombstone_threshold` (requiring more than one guardian to agree) at registration, or with a later `policy_update`.
+
+## Short-lived agents
+
+A long-lived guardian managing a fleet of agents that come and go doesn't need a human name for each one -- a generated name like `"agent-$(openssl rand -hex 3)"` (or any generator producing a valid one, REQ-2-1) works fine. Naming the fleet's guardian directly at creation, in the same call, needs `create --registrar <domain> --guardian <guardian-did> --guardian-key <label>` (above) instead of `register` -- the guardian's key has to be held locally to co-sign genesis, which `register`'s server-generated keys deliberately avoid. Either way, this replaces a separate `guardian_add` per agent with one call.
+
+Retiring one is the same `custodial_tombstone` described above, signed by the guardian -- there's no bulk-retirement operation, each agent is tombstoned individually. Names and logs are permanent by design (REQ-9-1/9-2): a retired agent's name is never freed for reuse, and its full history stays resolvable forever, even deactivated. This isn't optional cleanup debt -- a guardian's historical keys have to stay verifiable for as long as anything it ever signed might need checking, which means nothing it guarded can be deleted out from under that either. Running many short-lived agents through one registrar does mean that registrar's storage grows without bound; that's the cost of this design, not a bug to work around.
