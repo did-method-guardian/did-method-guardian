@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeypair, spkiToMultikey, multikeyToSpki, signPayload, verifyPayload, assertJCSSafe, contentRef } from "../src/crypto.js";
+import { generateKeypair, spkiToMultikey, multikeyToSpki, signPayload, verifyPayload, assertJCSSafe, contentRef, canonicalize } from "../src/crypto.js";
 
 // Known-answer test: this exact base64url SPKI key (the live root identity's
 // own key on guardianspec.org, at the time this test was written) was
@@ -90,6 +90,42 @@ test("assertJCSSafe rejects a non-integer number, -0, and a lone surrogate, but 
 test("signPayload refuses to sign JCS-unsafe content rather than producing a signature nobody else can reproduce the hash of", async () => {
   const { privateKey } = await generateKeypair();
   await assert.rejects(() => signPayload({ x: 1.5 }, privateKey));
+});
+
+// --- WS-3.1 (audit): RFC 8785 key ordering --------------------------------
+
+test("audit WS-3.1: object keys are sorted by UTF-16 code unit, NOT by native JS integer-like-key enumeration order", () => {
+  // ECMAScript's own OwnPropertyKeys order would enumerate these as
+  // "2", "10", "a" (integer-like keys ascending numerically, THEN other
+  // string keys) -- RFC 8785 requires lexicographic order by UTF-16 code
+  // unit instead, which is "10", "2", "a" (the character '1' < '2' < 'a').
+  // A canonicalizer that builds a plain object and hands it to
+  // JSON.stringify can never produce the second ordering, because a JS
+  // object's own key enumeration can't be overridden -- this test fails
+  // against that implementation and passes against one that emits the
+  // sorted entries directly into the output string instead.
+  const value = { "2": "two", "10": "ten", a: "letter" };
+  assert.equal(canonicalize(value), '{"10":"ten","2":"two","a":"letter"}');
+});
+
+test("audit WS-3.1: integer-like key ordering holds at every nesting depth, inside arrays and nested objects alike", () => {
+  const value = { outer: [{ "2": "two", "10": "ten" }], "20": "twenty", "3": "three" };
+  assert.equal(canonicalize(value), '{"20":"twenty","3":"three","outer":[{"10":"ten","2":"two"}]}');
+});
+
+test("audit WS-3.1: canonicalize matches plain JSON.stringify whenever key order doesn't matter (sanity)", () => {
+  const value = { a: 1, b: [true, false, null], c: "hello" };
+  assert.equal(canonicalize(value), JSON.stringify(value));
+});
+
+test("audit WS-3.1: canonicalize rejects JCS-unsafe content itself, without a separate assertJCSSafe call", () => {
+  assert.throws(() => canonicalize({ x: 1.5 }));
+  assert.throws(() => canonicalize({ x: -0 }));
+  assert.throws(() => canonicalize({ "\uD800": "lone surrogate in a KEY, not just a value" }));
+});
+
+test("audit WS-3.1: a lone surrogate in an object KEY is rejected, not just in a value", () => {
+  assert.throws(() => assertJCSSafe({ "\uD800": "ok value" }));
 });
 
 // --- Fix 3: multihash anchor format ---------------------------------------

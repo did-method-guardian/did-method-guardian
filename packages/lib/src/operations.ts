@@ -1,4 +1,4 @@
-import { canonicalize, assertJCSSafe, sha256Bytes, signRawBytes, verifyRawBytes, contentRef, signPayload, verifyPayload } from "./crypto.js";
+import { canonicalize, sha256Bytes, signRawBytes, verifyRawBytes, contentRef, signPayload, verifyPayload } from "./crypto.js";
 import { meetsThreshold, requiredTransferSigners } from "./quorum.js";
 import { parseDid } from "./resolve.js";
 import { DEFAULT_GUARDIAN_POLICY, validatePolicy } from "./types.js";
@@ -75,7 +75,7 @@ const PROOF_CONFIG_PURPOSE = "assertionMethod" as const;
  * deeper). Verified directly against the W3C spec text, not assumed.
  */
 export async function createProof(unsecuredDoc: unknown, verificationMethod: string, privateKeyB64url: string, created: string = new Date().toISOString()): Promise<DataIntegrityProof> {
-  assertJCSSafe(unsecuredDoc);
+  // WS-3.1 (audit): canonicalize now checks JCS-safety itself (crypto.ts), on everything it's given -- no separate call needed here.
   const proofConfig = { type: "DataIntegrityProof" as const, cryptosuite: "ecdsa-jcs-2019" as const, verificationMethod, proofPurpose: PROOF_CONFIG_PURPOSE, created };
   const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
   const documentHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));
@@ -129,7 +129,10 @@ export function validateProofShape(proof: DataIntegrityProof): { valid: boolean;
 async function verifyProof(unsecuredDoc: unknown, proof: DataIntegrityProof, publicKeyMultikey: string): Promise<boolean> {
   try {
     if (!validateProofShape(proof).valid) return false;
-    assertJCSSafe(unsecuredDoc);
+    // WS-3.1 (audit): canonicalize checks JCS-safety itself now, on
+    // proofConfig too (destructured straight from the wire-supplied
+    // `proof`, fully attacker-controlled) -- not just on unsecuredDoc as
+    // a previous version of this function only ever did.
     const { proofValue, ...proofConfig } = proof;
     const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
     const documentHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));

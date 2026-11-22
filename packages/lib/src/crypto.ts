@@ -7,26 +7,64 @@
 /**
  * RFC 8785 (JSON Canonicalization Scheme): sorted object keys (by UTF-16
  * code unit -- exactly what JS's `<`/`>` string comparison already does,
- * so no special-cased comparator is needed), `JSON.stringify` otherwise.
- * `assertJCSSafe` (below) rules out the input shapes where JCS's own
- * number-serialization rules would otherwise matter (this method never
- * needs a float in signed content, so the simplest fix is to forbid one
- * outright rather than implement ECMA-262 `Number::toString` faithfully).
+ * so no special-cased comparator is needed), `JSON.stringify` otherwise
+ * for every leaf value. `assertJCSSafe` (below) rules out the input
+ * shapes where JCS's own number-serialization rules would otherwise
+ * matter (this method never needs a float in signed content, so the
+ * simplest fix is to forbid one outright rather than implement ECMA-262
+ * `Number::toString` faithfully).
+ *
+ * WS-3.1 (audit): emits the sorted entries directly into the output
+ * string, rather than building a sorted plain object and handing THAT to
+ * `JSON.stringify` (a previous version of this function did exactly
+ * that). ECMAScript's own OwnPropertyKeys ordering enumerates
+ * integer-like string keys ("0", "1", ..., "2", "10") in ascending
+ * NUMERIC order before any other string key, unconditionally -- a plain
+ * object can never be MADE to iterate (and therefore stringify) in a
+ * different order no matter what order its properties were inserted in,
+ * which silently discarded this function's own `.sort()` for any object
+ * with such a key (e.g. a `services` map with keys like "2" and "10")
+ * and fell back to JS's own numeric-first order instead of RFC 8785's
+ * required lexicographic one -- exactly the kind of divergence that
+ * makes two conformant JCS implementations disagree on the SAME input's
+ * canonical form, and therefore on its cid.
+ */
+/**
+ * WS-3.1 (audit): `canonicalize` now checks JCS-safety itself, once, on
+ * the full input, before producing any output -- previously every
+ * caller had to remember to call `assertJCSSafe` separately first (both
+ * current call sites, createProof/verifyProof in operations.ts, did,
+ * but nothing enforced that a future one would), and the one case that
+ * actually mattered -- `verifyProof` canonicalizing a wire-supplied
+ * proof's own proofConfig, fully attacker-controlled content -- only
+ * ever ran assertJCSSafe against unsecuredDoc, never against
+ * proofConfig itself. WS-1.9's validateProofShape closes that one
+ * specific gap already (created is checked against a strict regex,
+ * every other field against an exact expected value), but a function
+ * this foundational shouldn't depend on every caller, present and
+ * future, remembering to pre-check its input correctly.
  */
 export function canonicalize(value: unknown): string {
-  return JSON.stringify(sortKeysDeep(value));
+  assertJCSSafe(value);
+  return canonicalizeUnchecked(value);
 }
 
-function sortKeysDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeysDeep);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([k, v]) => [k, sortKeysDeep(v)]),
-    );
+function canonicalizeUnchecked(value: unknown): string {
+  if (value === null || typeof value === "number" || typeof value === "boolean" || typeof value === "string") {
+    return JSON.stringify(value);
   }
-  return value;
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => (v === undefined ? "null" : canonicalizeUnchecked(v))).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record)
+      .filter((k) => record[k] !== undefined)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const parts = keys.map((k) => `${JSON.stringify(k)}:${canonicalizeUnchecked(record[k])}`);
+    return `{${parts.join(",")}}`;
+  }
+  return JSON.stringify(value); // undefined at the top level, matching JSON.stringify's own behavior there
 }
 
 const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
@@ -60,7 +98,14 @@ export function assertJCSSafe(value: unknown): void {
     return;
   }
   if (value && typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) assertJCSSafe(v);
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      // WS-3.1 (audit): a lone surrogate in a KEY is checked too, not
+      // just in values -- RFC 8785 canonicalizes a key string with the
+      // exact same escaping rules as any other string, so a key is
+      // exactly as capable of carrying one.
+      if (LONE_SURROGATE_RE.test(k)) throw new Error("JCS: lone surrogate in object key");
+      assertJCSSafe(v);
+    }
   }
 }
 
