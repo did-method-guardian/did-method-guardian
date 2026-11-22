@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { callerMayAutoSignAsGuardian } from "../src/registrar.js";
+import { callerMayAutoSignAsGuardian, findWard } from "../src/registrar.js";
+import type { Env } from "../src/env.js";
 
 // Audit WS-1.11: an admin console (or any other future caller of
 // registerWard) must never be able to establish some OTHER account as
@@ -25,4 +26,23 @@ test("audit WS-1.11: the caller naming a DIFFERENT account, even one this regist
 test("audit WS-1.11: no caller identity at all (e.g. the Managed Identity API with no bearer token) never auto-signs", () => {
   assert.equal(callerMayAutoSignAsGuardian("did:guardian:example.com:guardian", null), false);
   assert.equal(callerMayAutoSignAsGuardian("did:guardian:example.com:guardian", undefined), false);
+});
+
+test("audit WS-1.15: findWard(env, null) (the bare-domain root identity) never writes -- a GET must stay safe, never silently provisioning a keypair and a genesis entry", async () => {
+  let prepareCalls = 0;
+  const db = {
+    prepare(sql: string) {
+      prepareCalls++;
+      if (/^\s*INSERT/i.test(sql)) throw new Error(`findWard must never INSERT -- it ran: ${sql}`);
+      return {
+        bind(..._args: unknown[]) {
+          return { async first() { return null; } };
+        },
+      };
+    },
+  };
+  const env = { DB: db } as unknown as Env;
+  const result = await findWard(env, null);
+  assert.equal(result, null, "an unprovisioned root identity must resolve to null, not be silently created");
+  assert.ok(prepareCalls > 0, "sanity: findWard did query something");
 });

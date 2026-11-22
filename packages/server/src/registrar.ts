@@ -809,7 +809,15 @@ export async function getLogHead(env: Env, name: string | null): Promise<LogHead
   const anchor = log[0]?.cid;
   const headCid = log[log.length - 1]?.cid;
   if (!anchor || !headCid) throw new RegistrarError(`"${name}" has no genesis operation yet`, 500);
-  const rootWard = await getOrCreateRootWard(env);
+  // WS-1.15 (audit): read-only lookup, never provisioning -- a GET must
+  // stay safe. Every ward that reaches this point already has a real
+  // log, which could only have been accepted by acceptGenesis/
+  // registerWard, and both of those already call getOrCreateRootWard
+  // themselves before a genesis is ever accepted -- so root is
+  // guaranteed to already exist by the time `ward` resolves at all; this
+  // never actually needs to create it.
+  const rootWard = await getWardByName(env, ROOT_WARD_NAME);
+  if (!rootWard) throw new RegistrarError("this registrar's root identity has not been provisioned yet", 500);
   const rootPrivateKey = await decryptWardPrivateKey(env, rootWard);
   const logHash = await logHashFor(log); // Fix 5: commits to every entry's full proof set, not just the latest entryHash -- see LogHeadStatement's own comment
   return signLogHeadStatement(
@@ -818,9 +826,20 @@ export async function getLogHead(env: Env, name: string | null): Promise<LogHead
   );
 }
 
-/** `name: null` auto-provisions the bare-domain root identity (never missing); a real name that isn't registered yet stays a plain miss. */
+/**
+ * `name: null` resolves the bare-domain root identity -- WS-1.15
+ * (audit): read-only, never provisioning. A GET (document/log/log-head
+ * resolution, every caller of this function) has to stay safe; silently
+ * creating the root identity -- a real keypair, a real genesis entry --
+ * as a side effect of a plain lookup is exactly the "write on read" bug
+ * this closes. getOrCreateRootWard's own lazy provisioning still exists,
+ * just restricted to the WRITE paths that actually need the root
+ * identity to produce a signature with (acceptGenesis, registerWard,
+ * submitOperation's own receipt) -- those already call it directly, not
+ * through this function.
+ */
 export async function findWard(env: Env, name: string | null): Promise<WardRow | null> {
-  return name === null ? await getOrCreateRootWard(env) : await getWardByName(env, name);
+  return getWardByName(env, name ?? ROOT_WARD_NAME);
 }
 
 export async function resolveState(env: Env, name: string | null): Promise<{ did: string; state: ResolvedState } | null> {
