@@ -5,7 +5,6 @@ import { didFor } from "./env.js";
 import { getResourceDocument, getResourceLog, submitOperation } from "./registrar.js";
 import { registerIdentity, reissueLoginSecret, rotateHeldKey, takeCustody, deactivateSelf, removeGuardianSelf, removeGuardianWithEvidence, proposeAdopt, confirmAdopt } from "./profile.js";
 import { proposeOperation, contributeProof, cancelPendingOperation, getPendingOperationStatus, listPendingForDid, expirePendingOperations } from "./pendingProofs.js";
-import { getHeldKey } from "./db.js";
 import { RegistrarError } from "./registrarError.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
@@ -451,25 +450,17 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
 
       const result = await registerIdentity(env, body.name, { password: body.password });
 
-      // If the consenting guardian already has a key THIS registrar
-      // holds, complete the whole adopt flow server-side in this same
-      // request (both the guardian's own proof and the brand-new
-      // identity's own proof come from held keys here) -- an external
-      // guardian (hosted elsewhere) can't be completed this way; it's
-      // added afterward through the ordinary two-step adopt flow
-      // instead, once it can authenticate itself.
-      let adopted = false;
-      if (guardianDid && (await getHeldKey(env, guardianDid))) {
-        try {
-          const { pendingId } = await proposeAdopt(env, guardianDid, result.did as Did);
-          const confirmed = await confirmAdopt(env, result.did as Did, pendingId);
-          adopted = confirmed.accepted;
-        } catch (e) {
-          console.error("register: automatic adopt failed:", e);
-        }
-      }
-
-      return json({ did: result.did, login_secret: result.loginSecret, guardian_added: adopted }, 201);
+      // REQ-10-14: apart from the attestation, one request must not
+      // cause this registrar to create proofs for more than one
+      // identity. Completing the adopt flow here too (the guardian's
+      // own proof, then the new identity's own proof, both within this
+      // same POST /register) would do exactly that -- even when this
+      // registrar holds both keys. The consenting guardian (named by
+      // the Managed Identity API's access token, if any) is added
+      // afterward instead, through the ordinary two-step adopt flow, as
+      // its own separate requests -- echoed back here only as a DID to
+      // act on, never as a proof produced for it.
+      return json({ did: result.did, login_secret: result.loginSecret, guardian_pending: guardianDid }, 201);
     } catch (e) {
       return errorFrom(e, "register error");
     }

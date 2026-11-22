@@ -8,7 +8,8 @@ import type { DataIntegrityProof, Did, Log, LogResolver, Operation } from "@did-
 export interface RegisterResult {
   did: Did;
   login_secret?: string;
-  guardian_added?: boolean;
+  /** REQ-10-14: a consenting guardian named via a Managed Identity API access token is never auto-added in the same request that creates this identity -- echoed back here as a DID to complete the ordinary two-step adopt flow with, never as a proof already produced for it. */
+  guardian_pending?: Did;
 }
 
 export async function registerWard(registrarDomain: string, name: string): Promise<RegisterResult> {
