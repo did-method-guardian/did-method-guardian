@@ -1,161 +1,156 @@
+import type { Operation } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 
-export interface WardRow {
+export interface LogRow {
+  did: string;
+  seq: number;
+  prev: string;
+  operation: string; // JSON
+  created_at: string;
+}
+
+/** The full operation log for a DID, oldest first, parsed. `[]` means the DID has never been registered. */
+export async function getLog(env: Env, did: string): Promise<Operation[]> {
+  const result = await env.DB.prepare("SELECT operation FROM logs WHERE did = ? ORDER BY seq ASC").bind(did).all<{ operation: string }>();
+  return result.results.map((row) => JSON.parse(row.operation) as Operation);
+}
+
+/** The account dashboard's own activity feed: each operation with the time this registrar accepted it. */
+export async function getLogWithTimestamps(env: Env, did: string): Promise<Array<{ operation: Operation; acceptedAt: string }>> {
+  const result = await env.DB.prepare("SELECT operation, created_at FROM logs WHERE did = ? ORDER BY seq ASC").bind(did).all<{ operation: string; created_at: string }>();
+  return result.results.map((row) => ({ operation: JSON.parse(row.operation) as Operation, acceptedAt: row.created_at }));
+}
+
+/**
+ * Appends one operation. `prev` is the operation hash the op's own
+ * `prev` member names, or `""` for the first (a create has no `prev`
+ * member). The unique index on (did, prev) makes this REQ-10-8's own
+ * enforcement: a concurrent append naming the same (did, prev) fails
+ * here with a constraint violation (caught and reported as a conflict),
+ * never as two operations both landing.
+ */
+export async function appendOperation(env: Env, did: string, seq: number, prev: string, operation: Operation, createdAt: string): Promise<boolean> {
+  try {
+    await env.DB.prepare("INSERT INTO logs (did, seq, prev, operation, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(did, seq, prev, JSON.stringify(operation), createdAt)
+      .run();
+    return true;
+  } catch (e) {
+    if (e instanceof Error && /UNIQUE constraint failed/.test(e.message)) return false;
+    throw e;
+  }
+}
+
+export interface NameRow {
+  domain: string;
   name: string;
+  did: string;
+  created_at: string;
+}
+
+export async function getNameEntry(env: Env, domain: string, name: string): Promise<NameRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM names WHERE domain = ? AND name = ?").bind(domain, name).first<NameRow>();
+  return row ?? null;
+}
+
+/** The reverse lookup -- a did's own display name, e.g. for OIDC userinfo. */
+export async function getNameEntryByDid(env: Env, did: string): Promise<NameRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM names WHERE did = ?").bind(did).first<NameRow>();
+  return row ?? null;
+}
+
+/** REQ-10-12: a name, once used, is never used again. Returns false if the (domain, name) pair is already taken -- the caller's own race-free check, same pattern as appendOperation. */
+export async function insertNameEntry(env: Env, domain: string, name: string, did: string, createdAt: string): Promise<boolean> {
+  try {
+    await env.DB.prepare("INSERT INTO names (domain, name, did, created_at) VALUES (?, ?, ?, ?)").bind(domain, name, did, createdAt).run();
+    return true;
+  } catch (e) {
+    if (e instanceof Error && /UNIQUE constraint failed/.test(e.message)) return false;
+    throw e;
+  }
+}
+
+/** For the admin console -- every name registered on this domain, newest first. */
+export async function listNames(env: Env, domain: string): Promise<NameRow[]> {
+  const result = await env.DB.prepare("SELECT * FROM names WHERE domain = ? ORDER BY created_at DESC").bind(domain).all<NameRow>();
+  return result.results;
+}
+
+export interface HeldKeyRow {
   did: string;
   public_key: string;
-  private_key_enc: string; // a non-ciphertext sentinel ("") once custody_mode is "self" -- see getWardCustodyMode/clearWardPrivateKey below
-  created_at: string;
+  private_key_enc: string;
   login_secret_hash: string | null;
-}
-
-export interface OperationRow {
-  cid: string;
-  did: string;
-  prev_cid: string | null;
-  op_type: string;
-  payload: string;
   created_at: string;
 }
 
-export async function getWardByName(env: Env, name: string): Promise<WardRow | null> {
-  const row = await env.DB.prepare("SELECT * FROM wards WHERE name = ?").bind(name).first<WardRow>();
+/** Presence of a row is "this registrar holds a key for this identity" (REQ-10-13/REQ-10-14). */
+export async function getHeldKey(env: Env, did: string): Promise<HeldKeyRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM held_keys WHERE did = ?").bind(did).first<HeldKeyRow>();
   return row ?? null;
 }
 
-export async function getWardByDid(env: Env, did: string): Promise<WardRow | null> {
-  const row = await env.DB.prepare("SELECT * FROM wards WHERE did = ?").bind(did).first<WardRow>();
-  return row ?? null;
-}
-
-export async function insertWard(env: Env, ward: WardRow): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO wards (name, did, public_key, private_key_enc, created_at, login_secret_hash) VALUES (?, ?, ?, ?, ?, ?)",
-  )
-    .bind(ward.name, ward.did, ward.public_key, ward.private_key_enc, ward.created_at, ward.login_secret_hash)
+export async function insertHeldKey(env: Env, row: HeldKeyRow): Promise<void> {
+  await env.DB.prepare("INSERT INTO held_keys (did, public_key, private_key_enc, login_secret_hash, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(row.did, row.public_key, row.private_key_enc, row.login_secret_hash, row.created_at)
     .run();
 }
 
-export interface WardSummary {
-  name: string;
+export async function setHeldKeyLoginSecretHash(env: Env, did: string, hash: string): Promise<void> {
+  await env.DB.prepare("UPDATE held_keys SET login_secret_hash = ? WHERE did = ?").bind(hash, did).run();
+}
+
+/** Take-custody: once the caller's own `update` op naming their supplied key is durable in the log, this registrar's held key for them is gone for good -- not merely marked unused. */
+export async function deleteHeldKey(env: Env, did: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM held_keys WHERE did = ?").bind(did).run();
+}
+
+/** Rotation: replaces the key this registrar holds for a did that already has one, keeping its existing login_secret_hash. */
+export async function replaceHeldKey(env: Env, did: string, publicKey: string, privateKeyEnc: string): Promise<void> {
+  await env.DB.prepare("UPDATE held_keys SET public_key = ?, private_key_enc = ? WHERE did = ?").bind(publicKey, privateKeyEnc, did).run();
+}
+
+export interface PendingProofRow {
+  id: string;
   did: string;
+  operation: string; // JSON, without `proof`
+  proofs: string; // JSON array of DataIntegrityProof
   created_at: string;
+  expires_at: string;
 }
 
-/** For the admin console (adminPage.ts) -- every ward on this registrar, newest first. Projects out public_key/private_key_enc/login_secret_hash deliberately; nothing calling this needs them. */
-export async function listWards(env: Env): Promise<WardSummary[]> {
-  const result = await env.DB.prepare("SELECT name, did, created_at FROM wards ORDER BY created_at DESC").all<WardSummary>();
+export async function insertPendingProof(env: Env, row: PendingProofRow): Promise<void> {
+  await env.DB.prepare("INSERT INTO pending_proofs (id, did, operation, proofs, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(row.id, row.did, row.operation, row.proofs, row.created_at, row.expires_at)
+    .run();
+}
+
+export async function getPendingProof(env: Env, id: string): Promise<PendingProofRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM pending_proofs WHERE id = ?").bind(id).first<PendingProofRow>();
+  return row ?? null;
+}
+
+/** Every signer adds only its own proof (handoff #9): an atomic JSON array append via SQLite's own json_insert, never a read-modify-write -- two signers submitting at nearly the same instant both land. */
+export async function appendPendingProof(env: Env, id: string, proof: unknown): Promise<void> {
+  await env.DB.prepare("UPDATE pending_proofs SET proofs = json_insert(proofs, '$[#]', json(?)) WHERE id = ?")
+    .bind(JSON.stringify(proof), id)
+    .run();
+}
+
+/** Every still-live proposal naming `did` -- the account dashboard's own "needs your signature" list, filtered further by the caller against the operation's own permitted signers. */
+export async function listPendingProofsForDid(env: Env, did: string): Promise<PendingProofRow[]> {
+  const result = await env.DB.prepare("SELECT * FROM pending_proofs WHERE did = ? ORDER BY created_at ASC").bind(did).all<PendingProofRow>();
   return result.results;
 }
 
-export async function appendOperation(env: Env, op: OperationRow): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO operations (cid, did, prev_cid, op_type, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-  )
-    .bind(op.cid, op.did, op.prev_cid, op.op_type, op.payload, op.created_at)
-    .run();
-}
-
-/**
- * WS-1.12 (audit): appends `op`, but only if the number of existing rows
- * for its exact (did, prev_cid) pair still equals `expectedExistingCount`
- * at the instant of insert -- one atomic statement, not a separate
- * read-then-write, closing the race between submitOperation's own
- * verification (which read the log some time earlier in the request)
- * and this insert actually landing. Two concurrent requests both
- * extending the same then-current head would otherwise both pass
- * verification and both insert, forking the log by accident rather than
- * through a deliberate, policy-checked nullification. Returns whether
- * the insert actually happened; `false` means some other operation won
- * this exact (did, prev_cid) slot in between -- the caller must treat
- * that as a conflict to retry against the now-current log, never as a
- * silent success.
- *
- * `expectedExistingCount` is 0 for an ordinary append (nobody has used
- * this prev_cid yet) and 1 for a nullification (exactly the one original
- * entry being superseded, and only that one -- checkNullification
- * already enforced "one level only" before this is ever called, so a
- * count of 1 here is never itself someone else's nullification race;
- * it's either the ordinary original entry, or this call has already
- * lost the race and sees 1 where it expected 0).
- */
-export async function appendOperationIfCountMatches(env: Env, op: OperationRow, expectedExistingCount: number): Promise<boolean> {
-  const result = await env.DB.prepare(
-    `INSERT INTO operations (cid, did, prev_cid, op_type, payload, created_at)
-     SELECT ?, ?, ?, ?, ?, ?
-     WHERE (SELECT COUNT(*) FROM operations WHERE did = ? AND prev_cid IS ?) = ?`,
-  )
-    .bind(op.cid, op.did, op.prev_cid, op.op_type, op.payload, op.created_at, op.did, op.prev_cid, expectedExistingCount)
-    .run();
-  return (result.meta.rows_written ?? 0) > 0;
-}
-
-/**
- * Full operation log for a DID, oldest first -- the real resolution
- * path, never a cache. Ordered by SQLite's own implicit `rowid` (this
- * table has no `WITHOUT ROWID` clause and no INTEGER PRIMARY KEY, so one
- * exists and is assigned in strict insertion order), not `created_at` --
- * WS-1.12 (audit): a TEXT millisecond timestamp has no tiebreaker for
- * two operations accepted in the same millisecond, and reconstructChain
- * (document.ts) requires its input in true causal order or it throws.
- * rowid gives that order unconditionally, with no new column needed.
- */
-export async function getOperationLog(env: Env, did: string): Promise<OperationRow[]> {
-  const result = await env.DB.prepare("SELECT * FROM operations WHERE did = ? ORDER BY rowid ASC").bind(did).all<OperationRow>();
+/** Every pending proposal on this registrar, regardless of did -- the daily expiry sweep's own candidate set. */
+export async function listAllPendingProofs(env: Env): Promise<PendingProofRow[]> {
+  const result = await env.DB.prepare("SELECT * FROM pending_proofs ORDER BY created_at ASC").all<PendingProofRow>();
   return result.results;
 }
 
-export async function setLoginSecretHash(env: Env, name: string, hash: string): Promise<void> {
-  await env.DB.prepare("UPDATE wards SET login_secret_hash = ? WHERE name = ?").bind(hash, name).run();
-}
-
-/** Only ever called after a custodial_rotate op this registrar itself just signed and appended has been accepted (registrar.ts's own rotateWard) -- the stored key material this registrar custodies for a ward moves to the new keypair only once the operation it's meant to back is already durable in the log, never before. */
-export async function updateWardKeys(env: Env, did: string, publicKey: string, privateKeyEnc: string): Promise<void> {
-  await env.DB.prepare("UPDATE wards SET public_key = ?, private_key_enc = ? WHERE did = ?").bind(publicKey, privateKeyEnc, did).run();
-}
-
-/**
- * Which of a ward's keys is live where (0011_take_custody.sql): no row in
- * ward_custody means "registrar", the default and by far the common case
- * -- a row only ever gets written once a ward actually takes custody, and
- * custody_mode only ever moves one direction (registrar -> self; there's
- * no code path that writes it back).
- */
-export async function getWardCustodyMode(env: Env, did: string): Promise<"registrar" | "self"> {
-  const row = await env.DB.prepare("SELECT custody_mode FROM ward_custody WHERE did = ?").bind(did).first<{ custody_mode: "registrar" | "self" }>();
-  return row?.custody_mode ?? "registrar";
-}
-
-/**
- * Take-custody (registrar.ts's takeCustody): the caller's supplied public key
- * replaces this registrar's, and private_key_enc is overwritten with ""
- * -- not a real ciphertext, so even a KEY_ENCRYPTION_KEY compromise can't
- * recover a key this registrar no longer holds. Called only after the
- * custodial_rotate op backing this is already durable in the log, same
- * ordering updateWardKeys relies on. Two statements, not a transaction --
- * D1's batch() would be the right tool if this registrar needs
- * atomicity here beyond what it already has (a half-applied write just
- * leaves custody_mode as "registrar" until retried, never the reverse).
- */
-export async function takeCustodyOfWardKey(env: Env, did: string, publicKey: string): Promise<void> {
-  const now = new Date().toISOString();
-  await env.DB.prepare("UPDATE wards SET public_key = ?, private_key_enc = '' WHERE did = ?").bind(publicKey, did).run();
-  await env.DB.prepare(
-    "INSERT INTO ward_custody (did, custody_mode, taken_custody_at) VALUES (?, 'self', ?) ON CONFLICT(did) DO UPDATE SET custody_mode = 'self', taken_custody_at = ?",
-  )
-    .bind(did, now, now)
-    .run();
-}
-
-/**
- * For a ward that's self-held from birth (a client-submitted
- * genesis accepted by registrar.ts's acceptGenesis) -- unlike
- * takeCustodyOfWardKey above, there's no prior "registrar" row to
- * transition from and no wards.public_key to overwrite (insertWard
- * already wrote the ward's key and an empty private_key_enc).
- */
-export async function insertWardCustody(env: Env, did: string, custodyMode: "registrar" | "self", at: string): Promise<void> {
-  await env.DB.prepare("INSERT INTO ward_custody (did, custody_mode, taken_custody_at) VALUES (?, ?, ?)").bind(did, custodyMode, at).run();
+export async function deletePendingProof(env: Env, id: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM pending_proofs WHERE id = ?").bind(id).run();
 }
 
 export interface OidcClientRow {

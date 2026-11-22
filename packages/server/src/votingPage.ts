@@ -22,11 +22,11 @@ import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
 import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
 import { readCookie, resolveSession, verifyLogin, createLoginSession, endSession } from "./login.js";
-import { getPendingOperationStatus, contributeToOperation, type PendingOperationStatus } from "./pendingOps.js";
-import { getPendingOperation, getWardByDid } from "./db.js";
+import { getPendingOperationStatus, contributeProof, cancelPendingOperation } from "./pendingProofs.js";
 import { checkRateLimit, clientIp } from "./rateLimit.js";
-import { decryptWardPrivateKey, RegistrarError } from "./registrar.js";
-import { createProof, unsecuredDocument } from "@did-guardian/lib";
+import { signAs } from "./signing.js";
+import { RegistrarError } from "./registrarError.js";
+import type { Did } from "@did-guardian/lib";
 
 const SESSION_COOKIE = "gw_session";
 
@@ -35,107 +35,83 @@ export function isSafeReturnTo(path: string): boolean {
   return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\");
 }
 
-function statusLabel(state: string): string {
-  const labels: Record<string, string> = {
-    collecting: "Collecting signatures",
-    satisfied: "Satisfied -- finalizing",
-    finalized: "Finalized",
-    declined: "Declined (vetoed)",
-    expired: "Expired",
-  };
-  return labels[state] ?? state;
-}
-
-function signersList(status: PendingOperationStatus): string {
-  const signed = new Set(status.signed);
-  return `<ul class="signers">${status.required_signers
-    .map((did) => `<li>${escapeHtml(did)} <span class="badge ${signed.has(did) ? "yes" : "no"}">${signed.has(did) ? "signed" : "waiting"}</span></li>`)
-    .join("")}</ul>`;
-}
-
 /**
- * Renders the status page. `token` (if the viewer arrived via an email
- * link) and `sessionWardDid` (if logged in) are both optional and
- * independent -- either, both, or neither may be present, and the page
- * adapts: decline/withdraw need the token, sign needs the session.
+ * Renders the status page. `sessionWardDid` (if logged in) is the only
+ * thing that changes what's offered: signing needs a session (this
+ * registrar signs server-side with whatever held key that session's
+ * own identity has); withdrawing needs the session to belong to the
+ * proposal's own did (nothing else can withdraw someone else's proposal).
  */
-export async function renderPendingOpPage(env: Env, wardName: string, id: string, token: string | null, sessionWardDid: string | null): Promise<Response> {
-  const wardDid = didFor(wardName === "_" ? null : wardName, env.REGISTRAR_DOMAIN);
-  let status: PendingOperationStatus;
+export async function renderPendingOpPage(env: Env, wardName: string, id: string, sessionWardDid: Did | null): Promise<Response> {
+  const wardDid = didFor(wardName === "_" ? null : wardName, env.REGISTRAR_DOMAIN) as Did;
+  let status: Awaited<ReturnType<typeof getPendingOperationStatus>>;
   try {
-    status = await getPendingOperationStatus(env, wardDid, id);
+    status = await getPendingOperationStatus(env, id);
+  } catch (e) {
+    if (e instanceof RegistrarError) return html(pageShell("Not found", `<h1>Not found</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
+    throw e;
+  }
+  if (status.did !== wardDid) return html(pageShell("Not found", `<h1>Not found</h1><p class="error">No such pending operation for this identity.</p>`), 404);
+  const opType = (status.operation as { type: string }).type;
+
+  let actions = "";
+  if (sessionWardDid) {
+    actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/sign-as-self"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}</button></form>`;
+    if (sessionWardDid === wardDid) {
+      actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/withdraw"><button type="submit" class="danger">Withdraw this proposal</button></form>`;
+    }
+  } else {
+    const selfUrl = `/.well-known/guardian/${wardName}/pending/${id}`;
+    actions += `<p><a href="/guardian-login?return_to=${encodeURIComponent(selfUrl)}">Log in to sign</a></p>`;
+  }
+
+  const body = `
+    <h1>${escapeHtml(opType)}</h1>
+    <p class="hint">for ${escapeHtml(wardDid)}</p>
+    <dl>
+      <dt>Proofs collected so far</dt><dd>${status.proofs.length}</dd>
+      <dt>Expires</dt><dd>${escapeHtml(status.expiresAt)}</dd>
+    </dl>
+    ${actions}
+  `;
+  return html(pageShell(`${opType} -- did:guardian`, body));
+}
+
+/** POST .../pending/<id>/sign-as-self -- gw_session-gated. Signs server-side with the key this registrar already custodies for the logged-in identity, same model as /rotate; never for an identity hosted elsewhere, which this registrar has no key for. */
+export async function signAsSelf(request: Request, env: Env, wardName: string, id: string): Promise<Response> {
+  const sessionId = readCookie(request, SESSION_COOKIE);
+  const signerDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
+  if (!signerDid) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
+
+  let status: { operation: object };
+  try {
+    status = await getPendingOperationStatus(env, id);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Not found", `<h1>Not found</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;
   }
 
-  const selfUrl = `/.well-known/guardian/${wardName}/pending/${id}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-  const isCollecting = status.state === "collecting";
-  const alreadySigned = sessionWardDid ? status.signed.includes(sessionWardDid) : false;
-  const sessionIsRequired = sessionWardDid ? status.required_signers.includes(sessionWardDid) : false;
-
-  let actions = "";
-  if (isCollecting) {
-    if (sessionWardDid && sessionIsRequired && !alreadySigned) {
-      actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/sign-as-self"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}</button></form>`;
-    } else if (!sessionWardDid) {
-      actions += `<p><a href="/guardian-login?return_to=${encodeURIComponent(selfUrl)}">Log in to sign</a></p>`;
-    } else if (!sessionIsRequired) {
-      actions += `<p class="hint">Signed in as ${escapeHtml(sessionWardDid)}, which isn't a required signer for this proposal.</p>`;
-    } else {
-      actions += `<p class="hint">Your signature as ${escapeHtml(sessionWardDid)} has already been recorded.</p>`;
-    }
-    if (token) {
-      actions += `
-        <form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/decline"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit" class="danger">Veto (decline)</button></form>
-        <form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/withdraw"><input type="hidden" name="token" value="${escapeHtml(token)}"><button type="submit" class="neutral">Withdraw (opt out, doesn't block)</button></form>
-      `;
-    }
-  }
-
-  const body = `
-    <h1>${escapeHtml(status.op_type)}</h1>
-    <p class="hint">for ${escapeHtml(wardDid)}</p>
-    <dl>
-      <dt>Status</dt><dd><span class="state">${escapeHtml(statusLabel(status.state))}</span></dd>
-      <dt>Required signers</dt><dd>${signersList(status)}</dd>
-      <dt>Expires</dt><dd>${escapeHtml(status.expires_at)}</dd>
-    </dl>
-    ${actions}
-  `;
-  return html(pageShell(`${status.op_type} -- did:guardian`, body));
-}
-
-/** POST .../pending/<id>/sign-as-self -- gw_session-gated. Signs server-side with the key this registrar already custodies for the logged-in identity, same model as /adopt and /rotate; never for an identity hosted elsewhere, which this registrar has no key for. */
-export async function signAsSelf(request: Request, env: Env, id: string): Promise<Response> {
-  const sessionId = readCookie(request, SESSION_COOKIE);
-  const wardDid = sessionId ? await resolveSession(env, sessionId) : null;
-  if (!wardDid) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
-
-  const row = await getPendingOperation(env, id);
-  if (!row) return html(pageShell("Not found", `<h1>Not found</h1><p class="error">No such pending operation.</p>`), 404);
-  const ward = await getWardByDid(env, wardDid);
-  if (!ward) return html(pageShell("Error", `<h1>Error</h1><p class="error">Your own identity isn't custodied by this registrar.</p>`), 500);
-
-  const op = JSON.parse(row.partial_op);
-  const unsecuredDoc = unsecuredDocument(op);
-  const privateKey = await decryptWardPrivateKey(env, ward);
-  const myProof = await createProof(unsecuredDoc, `${wardDid}#key-0`, privateKey);
-
+  let proof;
   try {
-    await contributeToOperation(env, id, wardDid, myProof);
+    proof = await signAs(env, signerDid, signerDid, status.operation);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;
   }
 
-  const name = await nameForUrl(env, row.ward_did);
-  return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/${name}/pending/${id}` } });
+  try {
+    await contributeProof(env, id, proof);
+  } catch (e) {
+    if (e instanceof RegistrarError) return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
+    throw e;
+  }
+
+  return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/${wardName}/pending/${id}` } });
 }
 
-async function nameForUrl(env: Env, wardDid: string): Promise<string> {
-  const ward = await getWardByDid(env, wardDid);
-  return ward && ward.name !== "" ? ward.name : "_";
+/** POST .../pending/<id>/withdraw -- gw_session-gated, and only the proposal's own did may withdraw it (checked by the caller before this is reached). */
+export async function withdrawAsSelf(env: Env, id: string): Promise<void> {
+  await cancelPendingOperation(env, id);
 }
 
 /** GET/POST /guardian-login?return_to=<path> -- this registrar's own first-party login, distinct from the OIDC /authorize relying-party flow (oidc.ts): no client_id/redirect_uri registration, just "I am this identity, take me back to the page I came from." Same credential (login_secret) and session cookie either way. */

@@ -12,40 +12,42 @@ import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell, secretBox } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
-import { registerWard, RegistrarError } from "./registrar.js";
+import { registerIdentity } from "./profile.js";
+import { RegistrarError } from "./registrarError.js";
 import { registerOidcClient } from "./oidc.js";
-import { getWardByDid, listWards, listOidcClients, deleteOidcClient, type WardRow } from "./db.js";
+import { getNameEntryByDid, listNames, listOidcClients, deleteOidcClient } from "./db.js";
+import type { Did } from "@did-guardian/lib";
 
 const SESSION_COOKIE = "gw_session";
 const MIN_PASSWORD_LENGTH = 12;
 
-async function requireRootSession(request: Request, env: Env): Promise<WardRow | Response> {
+async function requireRootSession(request: Request, env: Env): Promise<Did | Response> {
   const sessionId = readCookie(request, SESSION_COOKIE);
-  const wardDid = sessionId ? await resolveSession(env, sessionId) : null;
+  const wardDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
   if (!wardDid) {
     return new Response(null, { status: 302, headers: { location: `/guardian-login?return_to=${encodeURIComponent("/admin")}` } });
   }
-  const ward = await getWardByDid(env, wardDid);
-  if (!ward || ward.name !== "") {
+  const nameEntry = await getNameEntryByDid(env, wardDid);
+  if (!nameEntry || nameEntry.name !== "") {
     return html(pageShell("Not available", `<h1>Not available</h1><p class="error">This page is only available to this registrar's own root identity.</p>`), 403);
   }
-  return ward;
+  return wardDid;
 }
 
 export async function handleAdminPage(request: Request, env: Env): Promise<Response> {
   const session = await requireRootSession(request, env);
   if (session instanceof Response) return session;
 
-  const wards = await listWards(env);
-  const rows = wards.length
-    ? `<ul class="signers">${wards
-        .map((w) => `<li>${escapeHtml(w.name || "_ (root)")} -- ${escapeHtml(w.did)} <span class="hint">(created ${escapeHtml(w.created_at)})</span></li>`)
+  const names = await listNames(env, env.REGISTRAR_DOMAIN);
+  const rows = names.length
+    ? `<ul class="signers">${names
+        .map((n) => `<li>${escapeHtml(n.name || "_ (root)")} -- ${escapeHtml(n.did)} <span class="hint">(created ${escapeHtml(n.created_at)})</span></li>`)
         .join("")}</ul>`
     : `<p class="hint">No accounts yet.</p>`;
 
   const body = `
     <h1>Admin console</h1>
-    <p class="hint">Accounts on this registrar -- ${wards.length} total.</p>
+    <p class="hint">Accounts on this registrar -- ${names.length} total.</p>
     ${rows}
     <p><a href="/admin/create-account">Create a new account</a></p>
     <p><a href="/admin/apps">Manage OAuth apps</a> <span class="hint">(for third-party sign-in integrations like Tailscale, Vercel, etc.)</span></p>
@@ -62,7 +64,7 @@ function createAccountFormBody(opts: { nameValue?: string; error?: string; crede
     ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
     <form method="post" action="/admin/create-account" id="admin-create-form">
       <label>Name <input name="name" value="${escapeHtml(opts.nameValue ?? "")}" autocomplete="username" autofocus required pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]"></label>
-      <label>Guardian DID <small>(optional -- e.g. your own, to oversee this account)</small> <input name="guardian_did" placeholder="did:guardian:..."></label>
+      <p class="hint">A guardian can be added afterward through the adopt flow -- a guardian's own cooperation can't be assumed at creation time.</p>
       <fieldset style="border:0; padding:0; margin:1rem 0 0;">
         <label style="display:flex; align-items:center; gap:.4rem; font-weight:400;"><input type="radio" name="credential_mode" value="generate" ${mode === "generate" ? "checked" : ""} style="display:inline; width:auto; min-height:0;"> Generate a secure login secret</label>
         <label style="display:flex; align-items:center; gap:.4rem; font-weight:400; margin-top:.4rem;"><input type="radio" name="credential_mode" value="password" ${mode === "password" ? "checked" : ""} style="display:inline; width:auto; min-height:0;"> Set an initial password myself</label>
@@ -105,8 +107,6 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
 
   const form = await safeFormData(request);
   const name = String(form.get("name") ?? "");
-  const guardianDidRaw = String(form.get("guardian_did") ?? "").trim();
-  const guardianDid = guardianDidRaw || null;
   const credentialMode = form.get("credential_mode") === "password" ? "password" : "generate";
 
   let password: string | undefined;
@@ -122,16 +122,9 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
     password = pw;
   }
 
-  let result: { did: string; document: unknown; login_secret?: string; pending_guardian_add?: { id: string } };
+  let result: { did: string; loginSecret?: string };
   try {
-    // WS-1.11 (audit): callerDid = this admin's own session DID, never
-    // the named guardian itself -- registerWard only takes the
-    // synchronous, auto-signed path when guardianDid === callerDid (the
-    // admin naming itself), so naming any OTHER account here, even one
-    // this registrar custodies, always goes through the pending,
-    // guardian-signs-it-themselves flow instead of being silently
-    // signed on that other account's behalf.
-    result = await registerWard(env, name, guardianDid, password, session.did);
+    result = await registerIdentity(env, name, { password });
   } catch (e) {
     if (e instanceof RegistrarError) {
       return html(pageShell("Create account", createAccountFormBody({ nameValue: name, credentialMode, error: e.message })), e.status);
@@ -143,12 +136,11 @@ export async function handleAdminCreateAccountForm(request: Request, env: Env): 
     <h1>Account created</h1>
     <p class="hint">${escapeHtml(result.did)}</p>
     ${
-      result.login_secret
+      result.loginSecret
         ? `<p class="hint">Login secret -- shown once, right now. Relay it to whoever this account is for; there's no other way to see it again (though they can always issue a new one, or set their own password, from their own account dashboard).</p>
-           <dl><dt>Login secret</dt><dd>${secretBox(result.login_secret)}</dd></dl>`
+           <dl><dt>Login secret</dt><dd>${secretBox(result.loginSecret)}</dd></dl>`
         : `<p class="hint">The password you set is ready to use -- share it with whoever this account is for; they can change it any time from their own account dashboard.</p>`
     }
-    ${result.pending_guardian_add ? `<p class="hint">The named guardian hasn't consented yet -- waiting on their own signature, under their own session, before this guardianship takes effect (pending operation <code>${escapeHtml(result.pending_guardian_add.id)}</code>).</p>` : ""}
     <p><a href="/admin/create-account">Create another</a> -- <a href="/admin">Back to admin console</a></p>
   `;
   return html(pageShell("Account created", body), 201);

@@ -1,26 +1,21 @@
-// Regression test for WS-1.12 (audit): appendOperationIfCountMatches must
-// bind the (did, prev_cid, expectedExistingCount) guard correctly and read
-// the insert's actual rows_written back honestly, so a caller can tell a
-// real insert apart from one the WHERE clause silently turned into a no-op
-// (the race-closing mechanism this function exists for). Verified
-// end-to-end against a real D1 (wrangler dev, scratch database, torn down
-// afterward) separately -- see docs-internal/audit-2026-11-21/checklist.md,
-// WS-1.12 -- this test pins down the query shape and the meta.rows_written
-// contract in isolation, the same minimal-fake-D1 pattern clientAuth.test.ts
-// already uses for db.ts-adjacent logic.
+// REQ-10-8 (at most one accepted operation per prev): appendOperation must
+// read a UNIQUE constraint violation on (did, prev) as "lost the race,"
+// returning false rather than throwing, and any other D1 error must still
+// propagate. Same minimal-fake-D1 pattern clientAuth.test.ts already uses
+// for db.ts-adjacent logic.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendOperationIfCountMatches } from "../src/db.js";
-import type { OperationRow } from "../src/db.js";
+import { appendOperation, insertNameEntry } from "../src/db.js";
 import type { Env } from "../src/env.js";
+import type { CreateOp } from "@did-guardian/lib";
 
 interface Capture {
   lastSql?: string;
   lastBind?: unknown[];
 }
 
-function fakeEnv(rowsWritten: number, capture: Capture): Env {
+function fakeEnv(behavior: "ok" | "conflict" | "other-error", capture: Capture): Env {
   const db = {
     prepare(sql: string) {
       capture.lastSql = sql;
@@ -29,7 +24,9 @@ function fakeEnv(rowsWritten: number, capture: Capture): Env {
           capture.lastBind = args;
           return {
             async run() {
-              return { success: true, meta: { rows_written: rowsWritten } } as any;
+              if (behavior === "conflict") throw new Error("D1_ERROR: UNIQUE constraint failed: logs.did, logs.prev");
+              if (behavior === "other-error") throw new Error("D1_ERROR: some other failure");
+              return { success: true, meta: { rows_written: 1 } } as any;
             },
           };
         },
@@ -39,36 +36,38 @@ function fakeEnv(rowsWritten: number, capture: Capture): Env {
   return { DB: db } as unknown as Env;
 }
 
-const sampleOp: OperationRow = {
-  cid: "zCid1",
+const sampleOp: CreateOp = {
+  type: "create",
   did: "did:guardian:example.com:alice",
-  prev_cid: "zCid0",
-  op_type: "custodial_rotate",
-  payload: "{}",
-  created_at: "2026-01-01T00:00:00.000Z",
+  keys: ["zAlice"],
+  guardians: [],
+  successor: null,
+  policy: {},
+  services: [],
+  alsoKnownAs: [],
+  prev: null,
+  proof: [],
 };
 
-test("audit WS-1.12: appendOperationIfCountMatches returns true when the insert actually wrote a row", async () => {
+test("appendOperation returns true on an ordinary successful insert", async () => {
   const capture: Capture = {};
-  const inserted = await appendOperationIfCountMatches(fakeEnv(1, capture), sampleOp, 0);
-  assert.equal(inserted, true);
+  const ok = await appendOperation(fakeEnv("ok", capture), sampleOp.did, 0, "", sampleOp, "2026-01-01T00:00:00.000Z");
+  assert.equal(ok, true);
 });
 
-test("audit WS-1.12: appendOperationIfCountMatches returns false when the WHERE clause matched nothing -- the race case, not an error", async () => {
+test("appendOperation returns false (not a throw) when the (did, prev) slot was already taken -- the race case REQ-10-8 guards against", async () => {
   const capture: Capture = {};
-  const inserted = await appendOperationIfCountMatches(fakeEnv(0, capture), sampleOp, 0);
-  assert.equal(inserted, false);
+  const ok = await appendOperation(fakeEnv("conflict", capture), sampleOp.did, 0, "", sampleOp, "2026-01-01T00:00:00.000Z");
+  assert.equal(ok, false);
 });
 
-test("audit WS-1.12: the guard binds did/prev_cid/expectedExistingCount in addition to the row's own values, in the order the SQL text expects them", async () => {
+test("appendOperation still throws on a D1 error that isn't the unique-constraint race", async () => {
   const capture: Capture = {};
-  await appendOperationIfCountMatches(fakeEnv(1, capture), sampleOp, 0);
-  assert.match(capture.lastSql ?? "", /WHERE \(SELECT COUNT\(\*\) FROM operations WHERE did = \? AND prev_cid IS \?\) = \?/);
-  assert.deepEqual(capture.lastBind, [sampleOp.cid, sampleOp.did, sampleOp.prev_cid, sampleOp.op_type, sampleOp.payload, sampleOp.created_at, sampleOp.did, sampleOp.prev_cid, 0]);
+  await assert.rejects(() => appendOperation(fakeEnv("other-error", capture), sampleOp.did, 0, "", sampleOp, "2026-01-01T00:00:00.000Z"));
 });
 
-test("audit WS-1.12: a nullification's expected count (1) is passed through distinctly from an ordinary append's (0)", async () => {
+test("insertNameEntry returns false (not a throw) when the (domain, name) pair is already taken -- REQ-10-12's own race-free check", async () => {
   const capture: Capture = {};
-  await appendOperationIfCountMatches(fakeEnv(1, capture), sampleOp, 1);
-  assert.equal(capture.lastBind?.[capture.lastBind.length - 1], 1);
+  const ok = await insertNameEntry(fakeEnv("conflict", capture), "example.com", "alice", sampleOp.did, "2026-01-01T00:00:00.000Z");
+  assert.equal(ok, false);
 });

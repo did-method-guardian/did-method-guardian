@@ -32,7 +32,7 @@ function makeMockEnv(overrides: Partial<{ ward: { name: string; did: string } | 
             return this;
           },
           async first() {
-            if (sql.includes("FROM wards WHERE name")) return ward ? { name: ward.name, did: ward.did } : null;
+            if (sql.includes("FROM names WHERE domain")) return ward ? { name: ward.name, did: ward.did } : null;
             if (sql.includes("FROM email_forwarding WHERE did") && sql.includes("verified = 1")) return forwarding ?? null;
             return null;
           },

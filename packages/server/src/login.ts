@@ -1,5 +1,5 @@
 import type { Env } from "./env.js";
-import { getWardByName, getLoginSession, insertLoginSession, deleteLoginSession } from "./db.js";
+import { getHeldKey, getNameEntry, getLoginSession, insertLoginSession, deleteLoginSession } from "./db.js";
 import { verifyCredential, randomSecret } from "./secretBox.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
@@ -64,10 +64,12 @@ export function normalizeLoginIdentifier(env: Env, input: string): string {
 
 export async function verifyLogin(env: Env, name: string, loginSecret: string): Promise<string | null> {
   const normalized = normalizeLoginIdentifier(env, name);
-  const ward = await getWardByName(env, normalized);
-  if (!ward || !ward.login_secret_hash) return null;
-  if (!(await verifyCredential(loginSecret, ward.login_secret_hash))) return null;
-  return ward.did;
+  const nameEntry = await getNameEntry(env, env.REGISTRAR_DOMAIN, normalized);
+  if (!nameEntry) return null;
+  const held = await getHeldKey(env, nameEntry.did);
+  if (!held || !held.login_secret_hash) return null;
+  if (!(await verifyCredential(loginSecret, held.login_secret_hash))) return null;
+  return held.did;
 }
 
 export async function createLoginSession(env: Env, wardDid: string): Promise<string> {

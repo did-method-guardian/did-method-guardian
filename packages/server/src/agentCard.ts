@@ -27,8 +27,8 @@
 // something this pass needs to block on.
 
 import type { Env } from "./env.js";
-import { resolveState } from "./registrar.js";
-import { getWardByName } from "./db.js";
+import { didForSegment } from "./registrar.js";
+import { getLog, getNameEntry } from "./db.js";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -50,10 +50,11 @@ function buildAgentCard(did: string, name: string, env: Env): unknown {
 
 /** GET /.well-known/guardian/<name>/agent-card.json, and GET /.well-known/agent-card.json for the bare-domain root (A2A's own fixed-path convention, which this registrar satisfies for that one identity specifically). */
 export async function handleAgentCard(env: Env, name: string | null): Promise<Response> {
-  const resolved = await resolveState(env, name);
-  if (!resolved) return json({ error: "not found" }, 404);
+  const did = didForSegment(env, name ?? "_");
+  const log = await getLog(env, did);
+  if (log.length === 0) return json({ error: "not found" }, 404);
   const displayName = name ?? env.REGISTRAR_DOMAIN;
-  return json(buildAgentCard(resolved.did, displayName, env));
+  return json(buildAgentCard(did, displayName, env));
 }
 
 const OIDC_ISSUER_REL = "http://openid.net/specs/connect/1.0/issuer";
@@ -96,7 +97,7 @@ export async function handleWebfinger(env: Env, url: URL): Promise<Response> {
   // that same translation, so acct:_@domain silently 404'd instead of
   // resolving root. The stored name for root is "", never the literal "_".
   const name = rawName === "_" ? "" : rawName;
-  const ward = await getWardByName(env, name);
+  const ward = await getNameEntry(env, env.REGISTRAR_DOMAIN, name);
   if (!ward) return json({ error: "not found" }, 404);
 
   const requestedRels = url.searchParams.getAll("rel");

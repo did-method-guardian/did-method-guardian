@@ -1,14 +1,17 @@
 import type { Env } from "./env.js";
-import type { DataIntegrityProof, Did } from "@did-guardian/lib";
+import type { DataIntegrityProof, Did, Operation, RemoveGuardianOp, UpdateOp } from "@did-guardian/lib";
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
-import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, getLogHead, rotateWard, takeCustody, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
-import { proposeOperation, contributeToOperation, declineOperation, withdrawFromOperation, getPendingOperationStatus, listPendingForSigner, sendDailyReminders, handleRelayNotify } from "./pendingOps.js";
+import { getResourceDocument, getResourceLog, submitOperation } from "./registrar.js";
+import { registerIdentity, reissueLoginSecret, rotateHeldKey, takeCustody, deactivateSelf, removeGuardianSelf, removeGuardianWithEvidence, proposeAdopt, confirmAdopt } from "./profile.js";
+import { proposeOperation, contributeProof, cancelPendingOperation, getPendingOperationStatus, listPendingForDid, expirePendingOperations } from "./pendingProofs.js";
+import { getHeldKey } from "./db.js";
+import { RegistrarError } from "./registrarError.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
 import { readCookie, resolveSession } from "./login.js";
 import { authenticateOidcClient } from "./clientAuth.js";
-import { renderPendingOpPage, signAsSelf, handleDirectLogin, handleLogout } from "./votingPage.js";
+import { renderPendingOpPage, signAsSelf, withdrawAsSelf, handleDirectLogin, handleLogout } from "./votingPage.js";
 import { handleRelaySignPage, handleRelaySignSubmit } from "./relaySign.js";
 import { handleRegisterPage, handleRegisterForm } from "./registerPage.js";
 import { handleAdminPage, handleAdminCreateAccountPage, handleAdminCreateAccountForm, handleAdminAppsPage, handleAdminAppsNewPage, handleAdminAppsNewForm, handleAdminAppsDelete } from "./adminPage.js";
@@ -32,15 +35,6 @@ function error(message: string, status: number): Response {
   return json({ error: message }, status);
 }
 
-/**
- * WS-1.13 (audit): the shared tail of every route's own try/catch --
- * RegistrarError already carried the right status (unchanged); anything
- * else fell straight through to a bare 500 "internal error," which is
- * exactly wrong for a SyntaxError from `request.json()` on a malformed
- * body -- that's the CALLER's mistake (400), not this registrar's own
- * failure. Still logs and 500s for anything that genuinely isn't one of
- * these two recognized, client-caused shapes.
- */
 function errorFrom(e: unknown, logLabel: string): Response {
   if (e instanceof RegistrarError) return error(e.message, e.status);
   if (e instanceof SyntaxError) return error("malformed JSON in request body", 400);
@@ -52,6 +46,26 @@ function html(body: string, status = 200): Response {
   return new Response(`<!doctype html><meta charset="utf-8"><title>did:guardian</title>${body}`, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
+/** The caller authenticated as `did` on this request -- a gw_session for that exact identity, or a trusted OIDC client. Never trusts a route parameter alone. */
+async function authenticatedAs(request: Request, env: Env, did: Did): Promise<boolean> {
+  const sessionId = readCookie(request, "gw_session");
+  const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+  if (sessionDid === did) return true;
+  if (sessionDid) return false; // signed in as someone else -- a trusted client never overrides an existing session's own identity
+  const trustedClient = await authenticateOidcClient(request, env);
+  return trustedClient !== null;
+}
+
+/** The caller's own identity, from a session or (if named explicitly, for a trusted client with no identity of its own) the `did`/`guardian_did` field named in `body`. */
+async function callerIdentity(request: Request, env: Env, body: { guardian_did?: string }): Promise<Did | null> {
+  const sessionId = readCookie(request, "gw_session");
+  const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+  if (sessionDid) return sessionDid as Did;
+  const trustedClient = await authenticateOidcClient(request, env);
+  if (!trustedClient) return null;
+  return (body.guardian_did as Did) ?? null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -59,21 +73,6 @@ export default {
     try {
       return await route(request, env, url, path);
     } catch (e) {
-      // WS-1.13 (audit): fetch() itself had no catch at all -- every page
-      // handler below (accountPage.ts, adminPage.ts, registerPage.ts,
-      // relaySign.ts, votingPage.ts) re-throws anything that isn't its
-      // own RegistrarError rather than swallowing it, on the reasonable
-      // assumption that SOMETHING upstream would turn it into a clean
-      // response. Nothing did: an uncaught SyntaxError from a malformed
-      // request body (or any other unexpected error) propagated straight
-      // out of this Worker's own fetch handler, to whatever raw, platform-
-      // level 500 Cloudflare's own runtime produces for an unhandled
-      // exception -- never this registrar's own error shape, HTML or
-      // JSON. This is the one backstop everything else funnels through;
-      // it does not replace catching errors closer to where they're
-      // actually meaningful to explain (e.g. RegistrarError's own
-      // messages), it only guarantees SOME clean response when nothing
-      // closer already produced one.
       if (e instanceof SyntaxError) {
         const accept = request.headers.get("accept") ?? "";
         if (accept.includes("text/html")) return html(`<h1>Bad request</h1><p class="error">The request body isn't valid JSON.</p>`, 400);
@@ -91,571 +90,403 @@ export default {
     await handleEmail(message, env);
   },
 
-  /** Daily reminder sweep for still-collecting proposals -- see pendingOps.ts's own sendDailyReminders. Cron schedule set in each deployment's own wrangler config (triggers.crons). */
+  /** Daily sweep for expired multi-signer proposals. Cron schedule set in each deployment's own wrangler config (triggers.crons). */
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    await sendDailyReminders(env);
+    await expirePendingOperations(env);
   },
 };
 
 async function route(request: Request, env: Env, url: URL, path: string): Promise<Response> {
-    // Cross-registrar signature relay (registrar API spec §13): the
-    // receiving half of pendingOps.ts's pushRelayNotify, called by a WARD's
-    // own registrar to tell THIS registrar one of its own wards is a
-    // required signer on a pending operation that lives elsewhere. Must be
-    // checked before wellKnownMatch below -- that regex's own ward-name
-    // capture group is generic enough to match "relay-notify" as if it were
-    // a ward name and return its own 404 first, since "relay-notify" isn't
-    // one of its explicitly listed suffixes. Never trusted blindly -- see
-    // handleRelayNotify's own doc comment for the independent re-fetch this
-    // does before acting. Always 200s (never leaks whether signer_did is
-    // actually one of this registrar's own wards).
-    if (path === "/.well-known/guardian/relay-notify" && request.method === "POST") {
-      try {
-        const body = (await request.json()) as { ward_did?: string; pending_operation_id?: string; signer_did?: string };
-        await handleRelayNotify(env, body);
-      } catch (e) {
-        console.error("relay-notify error:", e);
+  // REQ-10-1's three resources, plus the profile's own convenience
+  // endpoints, all under the one path segment.
+  const wellKnownMatch = path.match(
+    /^\/\.well-known\/guardian\/([^/]+)(\/log|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/take-custody|\/remove-self|\/remove|\/adopt|\/adopt\/confirm|\/agent-card\.json)?$/,
+  );
+  if (wellKnownMatch) {
+    const [, rawName, suffix] = wellKnownMatch;
+    const name = rawName === "_" ? null : rawName;
+    const did = didFor(name, env.REGISTRAR_DOMAIN) as Did;
+    try {
+      // REQ-10-2: every branch below this point, up to /operations, is a
+      // plain read.
+      if (!suffix && request.method === "GET") {
+        const doc = await getResourceDocument(env, rawName);
+        return doc ? json(doc) : error("not found", 404);
       }
-      return json({ ok: true });
-    }
-
-    const wellKnownMatch = path.match(
-      /^\/\.well-known\/guardian\/([^/]+)(\/log|\/log-head|\/operations|\/propose|\/email|\/login-secret|\/rotate|\/take-custody|\/relinquish|\/tombstone|\/remove-self|\/remove|\/adopt|\/agent-card\.json)?$/,
-    );
-    if (wellKnownMatch) {
-      // "_" is the bare-domain root identity's own reserved path segment
-      // (spec §2.1/§5) -- never a real registration (assertValidName's own
-      // regex already rejects "_", so /register can never produce one).
-      const [, rawName, suffix] = wellKnownMatch;
-      const name = rawName === "_" ? null : rawName;
-      try {
-        if (!suffix && request.method === "GET") {
-          const doc = await resolveDocument(env, name);
-          return doc ? json(doc) : error("not found", 404);
-        }
-        if (suffix === "/log" && request.method === "GET") {
-          const log = await resolveLog(env, name);
-          return log ? json(log) : error("not found", 404);
-        }
-        if (suffix === "/log-head" && request.method === "GET") {
-          // Public, like /log and the bare document -- a signed statement
-          // about where the log currently stands is exactly as safe to
-          // hand to anyone as the log itself (spec §12.2, REQ-12-1's L2).
-          const statement = await getLogHead(env, name);
-          return json(statement);
-        }
-        if (suffix === "/agent-card.json" && request.method === "GET") {
-          return handleAgentCard(env, name);
-        }
-        if (suffix === "/operations" && request.method === "POST") {
-          const op = (await request.json()) as { type?: string };
-          // REQ-8-2: a custodial_create here is a brand-new identity
-          // claiming this name -- anonymous self-service by construction
-          // (there's no session or bearer token for a DID that doesn't
-          // exist yet), so it gets exactly /register's gate: rate-
-          // limited per IP, and blocked outright when this deployment has
-          // closed public registration (REGISTRATION_MODE, env.ts).
-          if (op.type === "custodial_create") {
-            if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
-              return error("too many registration attempts from this address -- try again in a few minutes", 429);
-            }
-            if (env.REGISTRATION_MODE === "closed") {
-              return error("this registrar doesn't accept public registration", 403);
-            }
-          }
-          const result = await submitOperation(env, name, op as any);
-          return result.accepted ? json({ accepted: true, cid: result.cid, document: result.document }) : error(result.reason, 400);
-        }
-        if (suffix === "/propose" && request.method === "POST") {
-          // No session/trusted-client gate, deliberately -- same trust model
-          // as plain /operations: the operation's own attached signature is
-          // the authorization, not a cookie, since a required signer (an
-          // external guardian with no account here at all) must be able to
-          // propose or contribute without ever logging in to this registrar.
-          const op = await request.json();
-          const result = await proposeOperation(env, name, op as any);
-          return json(result, 201);
-        }
-        if (suffix === "/email" && request.method === "POST") {
-          // The one deliberate exception to the root identity now working
-          // like any other ward (rotate/tombstone/relinquish/remove-self/
-          // remove/adopt/login-secret reissue all do) -- a real, not just
-          // cautious, blocker: inbound mail routing (handleEmail, email.ts)
-          // is name-keyed at the local-part level (message.to.split("@")[0]
-          // -> getWardByName), and the bare-domain identity has no local
-          // part to receive at in the first place ("@acme.com" with
-          // nothing before the "@" isn't a deliverable address).
-          if (name === null) return error("email forwarding is not available for the bare-domain identity", 400);
-          // Either the ward itself (an active gw_session for its own DID)
-          // or a trusted OIDC client (clientAuth.ts) may set up forwarding
-          // for this address -- the latter is what lets zz's own name-
-          // picker wire a contact email in the same request that creates
-          // the ward, before any interactive session with this registrar
-          // exists. A trusted client still only ever acts on the ward
-          // named in the URL path itself, never an arbitrary other one.
-          const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to set up its mail forwarding", 403);
-          }
-          const body = (await request.json()) as { forward_to?: string };
-          if (!body.forward_to) return error("forward_to is required", 400);
-          const result = await requestEmailForwarding(env, name, body.forward_to);
-          return result.ok ? json({ ok: true, message: "verification email sent" }) : error(result.reason, 400);
-        }
-        if (suffix === "/login-secret" && request.method === "POST") {
-          // Same two-way trust as /email, same reason: either the ward
-          // itself (an active gw_session for its own DID) or a trusted
-          // OIDC client acting on an already-authenticated session of its
-          // own may reissue this -- never an arbitrary caller for a DID
-          // that isn't theirs. Works for the bare-domain root identity
-          // too, now that it can have a login secret at all (env.ts's own
-          // ROOT_WARD_LOGIN_SECRET) -- targetName below ("" for root,
-          // same as reissueLoginSecret's own name param expects).
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to reissue its login secret", 403);
-          }
-          const body = (await request.json().catch(() => ({}))) as { password?: string };
-          const loginSecret = await reissueLoginSecret(env, targetName, body.password);
-          return json({ ok: true, login_secret: loginSecret });
-        }
-        if (suffix === "/rotate" && request.method === "POST") {
-          // Same two-way trust as /email and /login-secret, same
-          // reason: either the ward itself (self-rotation, an active
-          // gw_session for its own DID) or a trusted OIDC client acting
-          // on an already-authenticated decision of its own (zz
-          // rotating a managed agent's key on behalf of whoever created
-          // it, say) -- never an arbitrary caller for a DID that isn't
-          // theirs. Rotating the custodied operational key, not the
-          // guardian relationship itself (full relinquishment has its
-          // own convenience endpoint, /relinquish, below -- swapping
-          // in a NEW guardian, guardian_transfer, is reached only
-          // through /operations, pre-signed, since that hands new
-          // authority to a party who never consented here).
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
-          }
-          const result = await rotateWard(env, targetName);
-          return json({ ok: true, did: result.did, document: result.document });
-        }
-        if (suffix === "/take-custody" && request.method === "POST") {
-          // Same two-way trust as /rotate -- this IS a rotation, just to a
-          // key the caller supplies instead of one this registrar
-          // generates. Irreversible from this registrar's side: once it
-          // succeeds, every endpoint above that needs to sign on this
-          // ward's behalf (rotate, tombstone, relinquish, remove-self,
-          // adopt) starts refusing, by design (takeCustody's comment).
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
-          }
-          const body = (await request.json().catch(() => ({}))) as { public_key?: string; key_proof?: DataIntegrityProof; force?: boolean };
-          if (!body.public_key) return error("public_key is required", 400);
-          if (!body.key_proof) return error("key_proof is required -- a Data Integrity proof that the caller holds public_key's private half, over the rotation payload (see the registrar API doc)", 400);
-          const result = await takeCustody(env, targetName, body.public_key, body.key_proof, body.force);
-          return json({ ok: true, did: result.did, document: result.document, warnings: result.warnings });
-        }
-        if (suffix === "/relinquish" && request.method === "POST") {
-          // R2-0.2 hotfix (round-2 audit): this used to authenticate the
-          // WARD's own session and let relinquishWard sign with every
-          // registrar-held guardian's own stored key unasked -- `name` in
-          // the URL is the ward being left, never a required signer for
-          // guardian_relinquish (REQ-7.2-7a), so the ward's session was
-          // never the right thing to check. Same auth split as
-          // /remove-self now: the caller is the GUARDIAN relinquishing,
-          // named by their own session, or explicitly via guardian_did
-          // for a trusted client acting on an already-authenticated
-          // decision of its own.
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
-          let callerDid = sessionDid;
-          if (!callerDid) {
-            const trustedClient = await authenticateOidcClient(request, env);
-            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to relinquish a guardian's standing", 403);
-            const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
-            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
-            callerDid = body.guardian_did;
-          }
-          const result = await relinquishWard(env, targetName, callerDid as Did);
-          if (result.ok) return json({ ok: true, did: result.did, document: result.document });
-          const proposed = await proposeOperation(env, name, result.pendingOp);
-          return json({ ok: true, pending: true, id: proposed.id, state: proposed.state, message: "this guardian's signature alone doesn't meet removal_threshold -- proposed for the ward's other guardians to countersign (see the registrar API doc §3)" }, 202);
-        }
-        if (suffix === "/tombstone" && request.method === "POST") {
-          // Same two-way trust as /rotate -- self-destruct needs only
-          // the ward's own operational key (tombstone_threshold's
-          // default is "any", the lowest bar), so this is exactly as
-          // self-contained as rotation.
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to tombstone it", 403);
-          }
-          const result = await tombstoneWard(env, targetName);
-          return json({ ok: true, did: result.did, document: result.document });
-        }
-        if (suffix === "/remove-self" && request.method === "POST") {
-          // Unlike every endpoint above, the "target identity" for auth
-          // purposes is the CALLER (the departing guardian), never `name`
-          // (the ward being left) -- the ward's own session has no say in
-          // whether one of its guardians steps down. A session identifies
-          // the caller directly; a trusted client must name one explicitly
-          // via guardian_did in the body, same split /api/me/pending-
-          // signatures uses for the same underlying reason.
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
-          let callerDid = sessionDid;
-          if (!callerDid) {
-            const trustedClient = await authenticateOidcClient(request, env);
-            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to remove yourself as a guardian", 403);
-            const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
-            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
-            callerDid = body.guardian_did;
-          }
-          const result = await removeSelfAsGuardian(env, targetName, callerDid);
-          return json({ ok: true, did: result.did, document: result.document });
-        }
-        if (suffix === "/remove" && request.method === "POST") {
-          // R2-0.2 hotfix (round-2 audit): same fix as /relinquish --
-          // the real authority for a forced removal is the ward's OTHER
-          // current guardians (REQ-7.2-7b), never the ward's own
-          // session, which this used to accept alone. The caller is one
-          // of those other guardians, named by their own session or
-          // (for a trusted client) guardian_did in the body.
-          const targetName = name ?? "";
-          const body = (await request.json().catch(() => ({}))) as { outgoing_did?: string; guardian_did?: string };
-          if (!body.outgoing_did) return error("outgoing_did is required", 400);
-          const sessionId = readCookie(request, "gw_session");
-          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
-          let callerDid = sessionDid;
-          if (!callerDid) {
-            const trustedClient = await authenticateOidcClient(request, env);
-            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to force-remove a guardian", 403);
-            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
-            callerDid = body.guardian_did;
-          }
-          const result = await forceRemoveGuardian(env, targetName, body.outgoing_did as Did, callerDid as Did);
-          if (result.ok) return json({ ok: true, did: result.did, document: result.document });
-          const proposed = await proposeOperation(env, name, result.pendingOp);
-          return json({ ok: true, pending: true, id: proposed.id, state: proposed.state, message: "this guardian's signature alone doesn't meet removal_threshold -- proposed for the ward's other guardians to countersign (see the registrar API doc §3)" }, 202);
-        }
-        if (suffix === "/adopt" && request.method === "POST") {
-          // R2-0.1 hotfix (round-2 audit): this used to authenticate the
-          // INCOMING guardian's own session and take the ward's consent
-          // for granted -- which meant any registered caller could name
-          // ANY guardianless ward (including the bare-domain root, both
-          // live roots had no guardian at all) and have this registrar
-          // sign a guardian_add with that ward's own stored key, no
-          // consent from the ward asked or given. The ward being adopted
-          // is the party whose consent this can't do without, so the
-          // auth gate is now the same two-way trust as /relinquish and
-          // /remove: a session (or trusted client) for `name` itself,
-          // with the incoming guardian's DID named explicitly in the
-          // body instead of implied by who's logged in.
-          if (name === null) return error("the bare-domain root identity can't be adopted through this endpoint", 403);
-          const targetName = name;
-          const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to adopt a guardian", 403);
-          }
-          const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
-          if (!body.guardian_did) return error("guardian_did is required", 400);
-          const result = await adoptWard(env, targetName, body.guardian_did);
-          return json({ ok: true, did: result.did, document: result.document });
-        }
-      } catch (e) {
-        return errorFrom(e, "well-known guardian route error");
+      if (suffix === "/log" && request.method === "GET") {
+        const log = await getResourceLog(env, rawName);
+        return log ? json(log) : error("not found", 404);
       }
-      return error("not found", 404);
-    }
+      if (suffix === "/agent-card.json" && request.method === "GET") {
+        return handleAgentCard(env, name);
+      }
 
-    // A2A interop (registrar API spec §11): the fixed path is A2A's own
-    // convention for a single-agent origin -- satisfied here for this
-    // domain's own bare-domain root identity specifically, the same "_"
-    // convention did:guardian already uses everywhere else.
-    if (path === "/.well-known/agent-card.json" && request.method === "GET") {
-      return handleAgentCard(env, null);
-    }
-    if (path === "/.well-known/webfinger" && request.method === "GET") {
-      return handleWebfinger(env, url);
-    }
-
-    // Ward-scoped, per the registrar API spec's own §3 table -- the ward's
-    // name is just a routing namespace here (consistent with every other
-    // .well-known path), not a claim about who's involved; the pending
-    // operation's own id is what actually identifies it. No session/
-    // trusted-client gate on /sign or /decline, same reasoning as /propose:
-    // the attached signature is the authorization, and a required signer
-    // may be an external guardian with no account on this registrar at all.
-    const pendingMatch = path.match(/^\/\.well-known\/guardian\/([^/]+)\/pending\/([^/]+)(\/sign|\/sign-as-self|\/decline|\/withdraw)?$/);
-    if (pendingMatch) {
-      const [, rawName, id, pendingSuffix] = pendingMatch;
-      const name = rawName === "_" ? null : rawName;
-      try {
-        if (!pendingSuffix && request.method === "GET") {
-          // Content-negotiated: a browser (clicking an email link, or
-          // navigating here directly) gets the real voting page; an API
-          // caller gets the same JSON this has always returned. Never
-          // GET-triggers-an-action here, deliberately -- see votingPage.ts's
-          // own header comment for why (email link prefetching/scanning).
-          const accept = request.headers.get("accept") ?? "";
-          if (accept.includes("text/html")) {
-            const token = url.searchParams.get("token");
-            const sessionId = readCookie(request, "gw_session");
-            const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-            return await renderPendingOpPage(env, rawName, id, token, sessionWardDid);
+      if (suffix === "/operations" && request.method === "POST") {
+        const op = (await request.json()) as Operation;
+        // A create here is a brand-new identity claiming this name --
+        // anonymous self-service by construction, so it gets exactly
+        // /register's gate: rate-limited per IP, and blocked outright
+        // when this deployment has closed public registration.
+        if (op.type === "create") {
+          if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
+            return error("too many registration attempts from this address -- try again in a few minutes", 429);
           }
-          const wardDid = didFor(name, env.REGISTRAR_DOMAIN);
-          const status = await getPendingOperationStatus(env, wardDid, id);
-          return json(status);
-        }
-        if (pendingSuffix === "/sign" && request.method === "POST") {
-          const body = (await request.json()) as { signer_did?: string; proof?: DataIntegrityProof };
-          if (!body.signer_did || !body.proof) return error("signer_did and proof are required", 400);
-          const result = await contributeToOperation(env, id, body.signer_did, body.proof);
-          return json(result);
-        }
-        if (pendingSuffix === "/sign-as-self" && request.method === "POST") {
-          // gw_session-gated, server signs with the key it already custodies -- see votingPage.ts.
-          return await signAsSelf(request, env, id);
-        }
-        // /decline and /withdraw each accept either a signed body
-        // (signer_did + sig -- works for anyone who can produce a
-        // signature) or a token (?token=... in a JSON body, or a form
-        // field from the voting page's own buttons) -- proof by verified-
-        // email possession rather than a signature; see email.ts's own
-        // header comment on why that's an equally valid proof for this
-        // specific action. A form submission (the voting page's own
-        // buttons) redirects back to the status page; a JSON request gets
-        // JSON back.
-        if ((pendingSuffix === "/decline" || pendingSuffix === "/withdraw") && request.method === "POST") {
-          const contentType = request.headers.get("content-type") ?? "";
-          const isForm = contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data");
-          const auth = isForm
-            ? { token: String((await safeFormData(request)).get("token") ?? "") }
-            : await (async () => {
-                const body = (await request.json()) as { signer_did?: string; sig?: string; token?: string };
-                return body.token ? { token: body.token } : { signerDid: body.signer_did ?? "", sig: body.sig ?? "" };
-              })();
-          const act = pendingSuffix === "/decline" ? declineOperation : withdrawFromOperation;
-          try {
-            const result = await act(env, id, auth as any);
-            if (isForm) return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/${rawName}/pending/${id}` } });
-            return json(result);
-          } catch (e) {
-            if (e instanceof RegistrarError) {
-              if (isForm) return html(`<p>${e.message}</p>`, e.status);
-              return error(e.message, e.status);
-            }
-            throw e;
+          if (env.REGISTRATION_MODE === "closed") {
+            return error("this registrar doesn't accept public registration", 403);
           }
         }
-      } catch (e) {
-        return errorFrom(e, "pending operation error");
+        try {
+          const accepted = await submitOperation(env, did, op);
+          return json({ accepted: true, operation: accepted }, 201);
+        } catch (e) {
+          if (e instanceof RegistrarError) return error(e.message, e.status);
+          throw e;
+        }
       }
-      return error("not found", 404);
-    }
 
-    if (path === "/api/me/pending-signatures" && request.method === "GET") {
-      // "me" resolves from an active gw_session; a trusted OIDC client has
-      // no single identity of its own, so it must name one explicitly via
-      // ?did=, asserting it's authorized to act for that DID -- same split
-      // as every ward-name-scoped endpoint above, just without a name in
-      // the URL to carry that role here.
-      const sessionId = readCookie(request, "gw_session");
-      const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-      let did = sessionWardDid;
-      if (!did) {
-        const trustedClient = await authenticateOidcClient(request, env);
-        if (!trustedClient) return error("must be signed in, or a trusted client naming ?did=, to list pending signatures", 403);
-        did = url.searchParams.get("did");
-        if (!did) return error("did query parameter is required for a trusted client", 400);
+      if (suffix === "/propose" && request.method === "POST") {
+        // No session/trusted-client gate, deliberately -- same trust
+        // model as /operations: the operation's own attached proof is
+        // the authorization. A required signer with no account here at
+        // all must be able to propose or contribute without logging in.
+        const body = (await request.json()) as { operation?: Omit<Operation, "proof">; proof?: DataIntegrityProof };
+        if (!body.operation || !body.proof) return error("operation and proof are required", 400);
+        const outcome = await proposeOperation(env, did, body.operation, body.proof);
+        return json(outcome, outcome.status === "finalized" ? 201 : 202);
       }
-      const rows = await listPendingForSigner(env, did);
-      return json({ pending: rows.map((r) => ({ id: r.id, ward_did: r.ward_did, op_type: r.op_type, state: r.state, created_at: r.created_at, expires_at: r.expires_at })) });
-    }
 
-    if (path === "/guardian-login" && (request.method === "GET" || request.method === "POST")) {
-      // This registrar's own first-party login (votingPage.ts) -- distinct
-      // from the OIDC relying-party flow (/authorize, oidc.ts): no
-      // client_id/redirect_uri registration, just "sign in, then take me
-      // back to whatever first-party page sent me here" (the voting page,
-      // today; any future first-party HTML page this registrar grows).
-      return handleDirectLogin(request, env, url);
-    }
+      if (suffix === "/email" && request.method === "POST") {
+        if (name === null) return error("email forwarding is not available for the bare-domain identity", 400);
+        if (!(await authenticatedAs(request, env, did))) {
+          return error("must be signed in as this identity (or a trusted client acting on its behalf) to set up its mail forwarding", 403);
+        }
+        const body = (await request.json()) as { forward_to?: string };
+        if (!body.forward_to) return error("forward_to is required", 400);
+        const result = await requestEmailForwarding(env, name, body.forward_to);
+        return result.ok ? json({ ok: true, message: "verification email sent" }) : error(result.reason, 400);
+      }
 
-    if (path === "/guardian-logout" && request.method === "POST") {
-      // Named "-logout" not "/logout" for the same reason the login page
-      // above is "/guardian-login" not "/login" -- zz-maintainer's own
-      // catch-all already serves a bare "/logout" of its own on zzmq.dev,
-      // confirmed by reading its route table directly, not assumed.
-      return handleLogout(request, env, url);
-    }
+      if (suffix === "/login-secret" && request.method === "POST") {
+        if (!(await authenticatedAs(request, env, did))) {
+          return error("must be signed in as this identity (or a trusted client acting on its behalf) to reissue its login secret", 403);
+        }
+        const body = (await request.json().catch(() => ({}))) as { password?: string };
+        const loginSecret = await reissueLoginSecret(env, did, body.password);
+        return json({ ok: true, login_secret: loginSecret });
+      }
 
-    if (path === "/relay-sign" && request.method === "GET") {
-      return handleRelaySignPage(request, env, url);
-    }
-    if (path === "/relay-sign" && request.method === "POST") {
-      return handleRelaySignSubmit(request, env);
-    }
+      if (suffix === "/rotate" && request.method === "POST") {
+        if (!(await authenticatedAs(request, env, did))) {
+          return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
+        }
+        await rotateHeldKey(env, did);
+        return json({ ok: true, did });
+      }
 
-    if (path === "/account" && request.method === "GET") {
-      return handleAccountPage(request, env);
-    }
-    if (path === "/account/rotate" && request.method === "POST") {
-      return handleAccountRotate(request, env);
-    }
-    if (path === "/account/login-secret/reissue" && request.method === "POST") {
-      return handleAccountReissueLoginSecret(request, env);
-    }
-    if (path === "/account/email" && request.method === "POST") {
-      return handleAccountEmail(request, env);
-    }
-    if (path === "/account/tombstone" && request.method === "GET") {
-      return handleAccountTombstoneConfirm(request, env);
-    }
-    if (path === "/account/tombstone" && request.method === "POST") {
-      return handleAccountTombstone(request, env);
-    }
-    if (path === "/account/consents/revoke" && request.method === "POST") {
-      return handleAccountRevokeConsent(request, env);
-    }
+      if (suffix === "/take-custody" && request.method === "POST") {
+        // Irreversible from this registrar's side: once it succeeds,
+        // every endpoint above that signs on this identity's own behalf
+        // (rotate, login-secret, tombstone, remove-self) starts
+        // refusing (this registrar no longer holds a key for it).
+        if (!(await authenticatedAs(request, env, did))) {
+          return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
+        }
+        const body = (await request.json()) as { operation?: Omit<UpdateOp, "proof">; proof?: DataIntegrityProof };
+        if (!body.operation || !body.proof) return error("operation (an update naming the new keys) and proof are required", 400);
+        await takeCustody(env, did, body.operation, body.proof);
+        return json({ ok: true, did });
+      }
 
-    // Admin console (adminPage.ts) -- root-identity-only, available
-    // regardless of REGISTRATION_MODE (see that gating above).
-    if (path === "/admin" && request.method === "GET") {
-      return handleAdminPage(request, env);
-    }
-    if (path === "/admin/create-account" && request.method === "GET") {
-      return handleAdminCreateAccountPage(request, env);
-    }
-    if (path === "/admin/create-account" && request.method === "POST") {
-      return handleAdminCreateAccountForm(request, env);
-    }
-    if (path === "/admin/apps" && request.method === "GET") {
-      return handleAdminAppsPage(request, env);
-    }
-    if (path === "/admin/apps/new" && request.method === "GET") {
-      return handleAdminAppsNewPage(request, env);
-    }
-    if (path === "/admin/apps/new" && request.method === "POST") {
-      return handleAdminAppsNewForm(request, env);
-    }
-    const adminAppDeleteMatch = path.match(/^\/admin\/apps\/([^/]+)\/delete$/);
-    if (adminAppDeleteMatch && request.method === "POST") {
-      return handleAdminAppsDelete(request, env, decodeURIComponent(adminAppDeleteMatch[1]));
-    }
+      if (suffix === "/remove-self" && request.method === "POST") {
+        // The "target identity" for auth purposes is the CALLER (the
+        // departing guardian), never `name` (the ward being left).
+        const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
+        const callerDid = await callerIdentity(request, env, body);
+        if (!callerDid) return error("must be signed in, or a trusted client naming guardian_did, to remove yourself as a guardian", 403);
+        await removeGuardianSelf(env, did, callerDid);
+        return json({ ok: true, did });
+      }
 
-    if (path === "/verify-email" && request.method === "GET") {
-      const token = url.searchParams.get("token");
-      if (!token) return error("token is required", 400);
-      const result = await confirmEmailForwarding(env, token);
-      return result.ok
-        ? new Response(`Mail forwarding confirmed for ${result.did}.`, { headers: { "content-type": "text/plain" } })
-        : error(result.reason, 400);
+      if (suffix === "/remove" && request.method === "POST") {
+        // The ward's own current key, naming evidence (REQ-7-6/REQ-10-7)
+        // that the guardian being removed already lost standing. A
+        // forced removal by vote of the OTHER guardians, with no
+        // evidence, goes through /propose instead -- it needs more than
+        // one signature.
+        if (!(await authenticatedAs(request, env, did))) {
+          return error("must be signed in as this identity (or a trusted client acting on its behalf) to remove a guardian with evidence", 403);
+        }
+        const body = (await request.json().catch(() => ({}))) as { guardian_did?: string; evidence?: string };
+        if (!body.guardian_did || !body.evidence) return error("guardian_did and evidence (an operation hash in that guardian's own log) are required", 400);
+        await removeGuardianWithEvidence(env, did, body.guardian_did as Did, body.evidence);
+        return json({ ok: true, did });
+      }
+
+      if (suffix === "/adopt" && request.method === "POST") {
+        // Step 1 of adopt: authenticated as the GUARDIAN, naming `name`
+        // as the ward it's accepting. `name` here is the ward -- the
+        // guardian's own identity comes from the session/trusted client
+        // itself, never a free-text field, so this can't be used to
+        // claim consent on the ward's behalf.
+        const sessionId = readCookie(request, "gw_session");
+        const guardianDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
+        if (!guardianDid) return error("must be signed in as the guardian accepting this ward", 401);
+        const { pendingId } = await proposeAdopt(env, guardianDid, did);
+        return json({ ok: true, pendingId, message: "accepted on the guardian's own log; waiting on the ward's own approval to finish adding it (adopt/confirm)" }, 202);
+      }
+
+      if (suffix === "/adopt/confirm" && request.method === "POST") {
+        // Step 2 of adopt: authenticated as the WARD.
+        if (!(await authenticatedAs(request, env, did))) {
+          return error("must be signed in as this identity (or a trusted client acting on its behalf) to confirm a guardian", 403);
+        }
+        const body = (await request.json()) as { pending_id?: string };
+        if (!body.pending_id) return error("pending_id is required", 400);
+        const result = await confirmAdopt(env, did, body.pending_id);
+        return result.accepted ? json({ ok: true, did }) : error(result.reason ?? "not accepted yet", 400);
+      }
+    } catch (e) {
+      return errorFrom(e, "well-known guardian route error");
     }
+    return error("not found", 404);
+  }
 
-    // REGISTRATION_MODE (env.ts): "closed" blocks only anonymous
-    // self-service -- a bare name, no prior authorization. A Managed
-    // Identity API bearer token still works either way (already gated by
-    // real authentication); a closed deployment's own root identity
-    // creates accounts instead through the admin console (adminPage.ts).
-    const registrationClosed = env.REGISTRATION_MODE === "closed";
+  // A2A interop: the fixed path is A2A's own convention for a
+  // single-agent origin -- satisfied here for this domain's own
+  // bare-domain root identity, the same "_" convention did:guardian uses
+  // everywhere else.
+  if (path === "/.well-known/agent-card.json" && request.method === "GET") {
+    return handleAgentCard(env, null);
+  }
+  if (path === "/.well-known/webfinger" && request.method === "GET") {
+    return handleWebfinger(env, url);
+  }
 
-    if (path === "/register" && request.method === "GET") {
+  // Multi-signer proposals are identified by their own id, not nested
+  // under any one identity's path segment -- a proposal's own `did`
+  // member says which log it targets.
+  const pendingMatch = path.match(/^\/\.well-known\/guardian\/pending\/([^/]+)(\/sign|\/sign-as-self|\/withdraw)?$/);
+  if (pendingMatch) {
+    const [, id, pendingSuffix] = pendingMatch;
+    try {
+      if (!pendingSuffix && request.method === "GET") {
+        // Content-negotiated: a browser gets the real voting page; an
+        // API caller gets the same JSON this has always returned.
+        const accept = request.headers.get("accept") ?? "";
+        const status = await getPendingOperationStatus(env, id);
+        const name = (() => {
+          const m = /^did:guardian:[^:]+:(.+)$/.exec(status.did);
+          return m ? m[1] : "_";
+        })();
+        if (accept.includes("text/html")) {
+          const sessionId = readCookie(request, "gw_session");
+          const sessionWardDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
+          return await renderPendingOpPage(env, name, id, sessionWardDid);
+        }
+        return json(status);
+      }
+      if (pendingSuffix === "/sign" && request.method === "POST") {
+        // No session gate, deliberately -- same trust model as
+        // /propose: the proof itself is the authorization.
+        const body = (await request.json()) as { proof?: DataIntegrityProof };
+        if (!body.proof) return error("proof is required", 400);
+        const outcome = await contributeProof(env, id, body.proof);
+        return json(outcome, outcome.status === "finalized" ? 200 : 202);
+      }
+      if (pendingSuffix === "/sign-as-self" && request.method === "POST") {
+        const status = await getPendingOperationStatus(env, id);
+        const name = (() => {
+          const m = /^did:guardian:[^:]+:(.+)$/.exec(status.did);
+          return m ? m[1] : "_";
+        })();
+        return await signAsSelf(request, env, name, id);
+      }
+      if (pendingSuffix === "/withdraw" && request.method === "POST") {
+        const status = await getPendingOperationStatus(env, id);
+        const sessionId = readCookie(request, "gw_session");
+        const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+        if (sessionDid !== status.did) return error("only the identity this proposal targets may withdraw it", 403);
+        const contentType = request.headers.get("content-type") ?? "";
+        const isForm = contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data");
+        await withdrawAsSelf(env, id);
+        if (isForm) return new Response(null, { status: 302, headers: { location: "/account" } });
+        return json({ ok: true });
+      }
+    } catch (e) {
+      return errorFrom(e, "pending operation error");
+    }
+    return error("not found", 404);
+  }
+
+  if (path === "/api/me/pending-signatures" && request.method === "GET") {
+    const sessionId = readCookie(request, "gw_session");
+    const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
+    let did = sessionWardDid;
+    if (!did) {
+      const trustedClient = await authenticateOidcClient(request, env);
+      if (!trustedClient) return error("must be signed in, or a trusted client naming ?did=, to list pending signatures", 403);
+      did = url.searchParams.get("did");
+      if (!did) return error("did query parameter is required for a trusted client", 400);
+    }
+    const rows = await listPendingForDid(env, did as Did);
+    return json({ pending: rows });
+  }
+
+  if (path === "/guardian-login" && (request.method === "GET" || request.method === "POST")) {
+    return handleDirectLogin(request, env, url);
+  }
+  if (path === "/guardian-logout" && request.method === "POST") {
+    return handleLogout(request, env, url);
+  }
+  if (path === "/relay-sign" && request.method === "GET") {
+    return handleRelaySignPage(request, env, url);
+  }
+  if (path === "/relay-sign" && request.method === "POST") {
+    return handleRelaySignSubmit(request, env);
+  }
+
+  if (path === "/account" && request.method === "GET") {
+    return handleAccountPage(request, env);
+  }
+  if (path === "/account/rotate" && request.method === "POST") {
+    return handleAccountRotate(request, env);
+  }
+  if (path === "/account/login-secret/reissue" && request.method === "POST") {
+    return handleAccountReissueLoginSecret(request, env);
+  }
+  if (path === "/account/email" && request.method === "POST") {
+    return handleAccountEmail(request, env);
+  }
+  if (path === "/account/tombstone" && request.method === "GET") {
+    return handleAccountTombstoneConfirm(request, env);
+  }
+  if (path === "/account/tombstone" && request.method === "POST") {
+    return handleAccountTombstone(request, env);
+  }
+  if (path === "/account/consents/revoke" && request.method === "POST") {
+    return handleAccountRevokeConsent(request, env);
+  }
+
+  // Admin console (adminPage.ts) -- root-identity-only, available
+  // regardless of REGISTRATION_MODE (see that gating below).
+  if (path === "/admin" && request.method === "GET") {
+    return handleAdminPage(request, env);
+  }
+  if (path === "/admin/create-account" && request.method === "GET") {
+    return handleAdminCreateAccountPage(request, env);
+  }
+  if (path === "/admin/create-account" && request.method === "POST") {
+    return handleAdminCreateAccountForm(request, env);
+  }
+  if (path === "/admin/apps" && request.method === "GET") {
+    return handleAdminAppsPage(request, env);
+  }
+  if (path === "/admin/apps/new" && request.method === "GET") {
+    return handleAdminAppsNewPage(request, env);
+  }
+  if (path === "/admin/apps/new" && request.method === "POST") {
+    return handleAdminAppsNewForm(request, env);
+  }
+  const adminAppDeleteMatch = path.match(/^\/admin\/apps\/([^/]+)\/delete$/);
+  if (adminAppDeleteMatch && request.method === "POST") {
+    return handleAdminAppsDelete(request, env, decodeURIComponent(adminAppDeleteMatch[1]));
+  }
+
+  if (path === "/verify-email" && request.method === "GET") {
+    const token = url.searchParams.get("token");
+    if (!token) return error("token is required", 400);
+    const result = await confirmEmailForwarding(env, token);
+    return result.ok
+      ? new Response(`Mail forwarding confirmed for ${result.did}.`, { headers: { "content-type": "text/plain" } })
+      : error(result.reason, 400);
+  }
+
+  // REGISTRATION_MODE (env.ts): "closed" blocks only anonymous
+  // self-service -- a bare name, no prior authorization. A Managed
+  // Identity API bearer token still works either way; a closed
+  // deployment's own root identity creates accounts instead through the
+  // admin console (adminPage.ts).
+  const registrationClosed = env.REGISTRATION_MODE === "closed";
+
+  if (path === "/register" && request.method === "GET") {
+    if (registrationClosed) {
+      return html(`<h1>Registration is closed</h1><p class="error">This registrar doesn't accept public registration. If you were given an account, <a href="/guardian-login">sign in</a> instead.</p>`, 403);
+    }
+    return handleRegisterPage(url);
+  }
+
+  if (path === "/register" && request.method === "POST") {
+    if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
+      return error("too many registration attempts from this address -- try again in a few minutes", 429);
+    }
+    const contentType = request.headers.get("content-type") ?? "";
+    if (contentType.includes("application/x-www-form-urlencoded")) {
       if (registrationClosed) {
         return html(`<h1>Registration is closed</h1><p class="error">This registrar doesn't accept public registration. If you were given an account, <a href="/guardian-login">sign in</a> instead.</p>`, 403);
       }
-      return handleRegisterPage(url);
+      return handleRegisterForm(request, env);
     }
-
-    if (path === "/register" && request.method === "POST") {
-      // Public and CPU-bound (PBKDF2 password hashing) -- rate-limited per
-      // IP before any other work, regardless of which branch below handles
-      // it, since both ultimately call registerWard.
-      if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
-        return error("too many registration attempts from this address -- try again in a few minutes", 429);
-      }
-      const contentType = request.headers.get("content-type") ?? "";
-      if (contentType.includes("application/x-www-form-urlencoded")) {
-        // The browser path -- a real "create an account" page, same
-        // registerWard call the JSON API below already makes, never a
-        // separate code path. Found missing entirely: /guardian-login's
-        // own sign-in form had no way to get here at all.
-        if (registrationClosed) {
-          return html(`<h1>Registration is closed</h1><p class="error">This registrar doesn't accept public registration. If you were given an account, <a href="/guardian-login">sign in</a> instead.</p>`, 403);
+    try {
+      const body = (await request.json()) as { name?: string; password?: string };
+      if (!body.name) return error("name is required", 400);
+      // The Managed Identity API (§9): a new identity's guardian is
+      // never a free-text field -- it's derived from a real, scope-
+      // checked access token's own sub, the authenticated end user who
+      // consented (create:managed-identity) to becoming a guardian. A
+      // caller with no bearer token gets plain self-service
+      // registration, no guardian, unless registration is closed.
+      const auth = request.headers.get("authorization") ?? "";
+      const bearerToken = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+      let guardianDid: Did | null = null;
+      if (bearerToken) {
+        const verified = await verifyAccessToken(env, bearerToken);
+        if (!verified) return error("invalid, expired, or revoked access token", 401);
+        if (!verified.scope.includes("create:managed-identity")) {
+          return error('this access token was not granted the "create:managed-identity" scope', 403);
         }
-        return handleRegisterForm(request, env);
+        guardianDid = verified.sub as Did;
+      } else if (registrationClosed) {
+        return error("this registrar doesn't accept public registration -- a Managed Identity API access token is required", 403);
       }
-      try {
-        const body = (await request.json()) as { name?: string; password?: string };
-        if (!body.name) return error("name is required", 400);
-        // The Managed Identity API (registrar API spec's own §9): a new
-        // ward's guardian is never a free-text field a caller supplies --
-        // it's derived from a real, scope-checked access token's own sub,
-        // the authenticated end user who actually consented (on the
-        // ordinary /authorize consent screen, scope=create:managed-
-        // identity) to becoming a guardian, not an arbitrary string some
-        // client typed in. A caller with no bearer token at all still gets
-        // plain self-service registration, no guardian -- the ordinary,
-        // valid case this endpoint has always served, unless registration
-        // is closed (REGISTRATION_MODE), in which case a bearer token is
-        // required -- a name alone is anonymous self-service either way.
-        const auth = request.headers.get("authorization") ?? "";
-        const bearerToken = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-        let guardianDid: string | null = null;
-        if (bearerToken) {
-          const verified = await verifyAccessToken(env, bearerToken);
-          if (!verified) return error("invalid, expired, or revoked access token", 401);
-          if (!verified.scope.includes("create:managed-identity")) {
-            return error('this access token was not granted the "create:managed-identity" scope', 403);
-          }
-          guardianDid = verified.sub;
-        } else if (registrationClosed) {
-          return error("this registrar doesn't accept public registration -- a Managed Identity API access token is required", 403);
+
+      const result = await registerIdentity(env, body.name, { password: body.password });
+
+      // If the consenting guardian already has a key THIS registrar
+      // holds, complete the whole adopt flow server-side in this same
+      // request (both the guardian's own proof and the brand-new
+      // identity's own proof come from held keys here) -- an external
+      // guardian (hosted elsewhere) can't be completed this way; it's
+      // added afterward through the ordinary two-step adopt flow
+      // instead, once it can authenticate itself.
+      let adopted = false;
+      if (guardianDid && (await getHeldKey(env, guardianDid))) {
+        try {
+          const { pendingId } = await proposeAdopt(env, guardianDid, result.did as Did);
+          const confirmed = await confirmAdopt(env, result.did as Did, pendingId);
+          adopted = confirmed.accepted;
+        } catch (e) {
+          console.error("register: automatic adopt failed:", e);
         }
-        // guardianDid, when set, IS the consenting caller here (derived
-        // above from the access token's own sub) -- callerDid === it,
-        // always, so registerWard stays on its synchronous auto-sign
-        // path exactly as before WS-1.11's change (which only tightened
-        // the admin console's own, previously caller-independent, call).
-        const result = await registerWard(env, body.name, guardianDid, body.password, guardianDid);
-        return json(result, 201);
-      } catch (e) {
-        return errorFrom(e, "register error");
       }
-    }
 
-    if (
-      path.startsWith("/.well-known/openid-configuration") ||
-      path.startsWith("/.well-known/jwks.json") ||
-      path.startsWith("/.well-known/oauth-protected-resource") ||
-      path.startsWith("/authorize") ||
-      path.startsWith("/token") ||
-      path.startsWith("/userinfo") ||
-      path.startsWith("/revoke") ||
-      path.startsWith("/oauth/")
-    ) {
-      return handleOidcRequest(request, env);
+      return json({ did: result.did, login_secret: result.loginSecret, guardian_added: adopted }, 201);
+    } catch (e) {
+      return errorFrom(e, "register error");
     }
+  }
 
-    return error("not found", 404);
+  if (
+    path.startsWith("/.well-known/openid-configuration") ||
+    path.startsWith("/.well-known/jwks.json") ||
+    path.startsWith("/.well-known/oauth-protected-resource") ||
+    path.startsWith("/authorize") ||
+    path.startsWith("/token") ||
+    path.startsWith("/userinfo") ||
+    path.startsWith("/revoke") ||
+    path.startsWith("/oauth/")
+  ) {
+    return handleOidcRequest(request, env);
+  }
+
+  return error("not found", 404);
 }

@@ -1,85 +1,64 @@
-// The account dashboard -- the one piece "Login with Guardian" was
-// genuinely missing: a real page where a person can log in and actually
-// see and manage their own identity (activity, guardians, connected
-// apps, roll their key, deactivate the account), rather than only ever
-// being reachable through a relying party's own API calls. Same
-// first-party-HTML-page pattern votingPage.ts already established: a
-// dedicated handler file reusing htmlPage.ts's shell, calling the same
-// registrar.ts/pendingOps.ts/email.ts functions the JSON API already
-// uses, never a thin wrapper that bounces a browser form at a JSON
-// endpoint and shows the raw response back.
+// The account dashboard -- a real page where a person can log in and
+// actually see and manage their own identity (activity, guardians,
+// connected apps, roll their key, deactivate the account), rather than
+// only ever being reachable through a relying party's own API calls.
 //
-// Session-gated only (gw_session) -- no trusted-client bypass. Every
-// other self-contained convenience endpoint accepts a trusted OIDC
-// client acting on someone else's behalf (zz rotating a managed agent's
-// key, say); this page is deliberately simpler, since it's the human
-// looking at their own account directly, not a platform acting for them.
+// Session-gated only (gw_session) -- no trusted-client bypass. This page
+// is the human looking at their own account directly, not a platform
+// acting for them.
 
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
-import { html, escapeHtml, pageShell, secretBox, policyTable, formatThreshold } from "./htmlPage.js";
+import { html, escapeHtml, pageShell, secretBox, policyTable } from "./htmlPage.js";
 import type { PolicyField } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
-import {
-  resolveState,
-  loadLog,
-  rotateWard,
-  tombstoneWard,
-  reissueLoginSecret,
-  RegistrarError,
-} from "./registrar.js";
-import { listPendingForSigner } from "./pendingOps.js";
+import { rotateHeldKey, deactivateSelf, reissueLoginSecret } from "./profile.js";
+import { RegistrarError } from "./registrarError.js";
+import { listPendingForDid } from "./pendingProofs.js";
 import { requestEmailForwarding } from "./email.js";
-import {
-  getWardByDid,
-  getVerifiedForwardingByDid,
-  listOidcConsentsForWard,
-  deleteOidcConsent,
-  revokeRefreshTokensForWardAndClient,
-  listOpenRelayInboxForSigner,
-  type WardRow,
-} from "./db.js";
-import type { Did, LogEntry } from "@did-guardian/lib";
+import { getLogWithTimestamps, getNameEntryByDid, getVerifiedForwardingByDid, listOidcConsentsForWard, deleteOidcConsent, revokeRefreshTokensForWardAndClient } from "./db.js";
+import { verifyLog, DEFAULT_POLICY, type Did, type Entry, type Operation, type Policy, type Setting, type State } from "@did-guardian/lib";
+import { getLog } from "./db.js";
 
 const SESSION_COOKIE = "gw_session";
 
-async function requireSession(request: Request, env: Env): Promise<{ wardDid: Did; ward: WardRow } | Response> {
+async function requireSession(request: Request, env: Env): Promise<{ wardDid: Did; name: string } | Response> {
   const sessionId = readCookie(request, SESSION_COOKIE);
   const wardDid = sessionId ? await resolveSession(env, sessionId) : null;
   if (!wardDid) {
     return new Response(null, { status: 302, headers: { location: `/guardian-login?return_to=${encodeURIComponent("/account")}` } });
   }
-  const ward = await getWardByDid(env, wardDid);
-  if (!ward) return html(pageShell("Error", `<h1>Error</h1><p class="error">Your own identity isn't custodied by this registrar.</p>`), 500);
-  return { wardDid: wardDid as Did, ward };
+  const nameEntry = await getNameEntryByDid(env, wardDid);
+  return { wardDid: wardDid as Did, name: nameEntry?.name ?? "" };
 }
 
-/** `wards.name` uses `""` for the bare-domain root; every URL this page builds uses "_" instead, the same convention pendingOps.ts/votingPage.ts already follow. */
-function urlName(ward: WardRow): string {
-  return ward.name === "" ? "_" : ward.name;
+/** names' own "" sentinel for root; every URL this page builds uses "_" instead, the same convention the rest of this registrar follows. */
+function urlName(name: string): string {
+  return name === "" ? "_" : name;
 }
 
-function opSummary(entry: LogEntry): string {
-  const op = entry.op as { type: string; incoming?: string; outgoing?: string };
+function opSummary(op: Operation): string {
   switch (op.type) {
-    case "custodial_create":
+    case "create":
       return "Identity created";
-    case "custodial_rotate":
-      return "Operational key rotated";
-    case "guardian_add":
-      return `Guardian added: ${escapeHtml(op.incoming ?? "")}`;
-    case "guardian_remove":
-      return `Guardian removed: ${escapeHtml(op.outgoing ?? "")}`;
-    case "guardian_relinquish":
-      return "All guardians relinquished";
-    case "guardian_transfer":
-      return "Guardian transferred (legacy)";
-    case "policy_update":
-      return "Guardian policy updated";
-    case "custodial_tombstone":
+    case "update":
+      return "Key rotated or profile updated";
+    case "addGuardian":
+      return `Guardian added: ${escapeHtml(op.entry.did)}`;
+    case "updateGuardian":
+      return `Guardian re-seated: ${escapeHtml(op.guardian)}`;
+    case "removeGuardian":
+      return `Guardian removed: ${escapeHtml(op.guardian)}`;
+    case "setPolicy":
+      return "Policy updated";
+    case "acceptWard":
+      return `Accepted ${escapeHtml(op.ward.did)} as a ward`;
+    case "releaseWard":
+      return `Released ${escapeHtml(op.ward)} as a ward`;
+    case "deactivate":
       return "Identity deactivated";
     default:
-      return escapeHtml(op.type);
+      return escapeHtml((op as { type: string }).type);
   }
 }
 
@@ -94,75 +73,58 @@ function banner(message: string | null, kind: "ok" | "error" = "ok"): string {
 // the one real copy.
 const FORMAL_SPEC_URL = "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/";
 
-function formatOnOrphan(value: string | { transfer_to: string }): string {
-  if (typeof value === "string") return value;
-  return `transfer to ${value.transfer_to}`;
+function formatSetting(value: Setting): string {
+  if (typeof value === "number") return `exactly ${value}`;
+  if (value === "any") return "any one guardian";
+  return value;
 }
 
-/** REQ-5: a structured table instead of a bare JSON dump, each row linking to the exact requirement it governs so a person can actually learn what the setting means, not just read its raw value. */
-function policySection(policy: {
-  recovery_threshold: Parameters<typeof formatThreshold>[0];
-  tombstone_threshold: Parameters<typeof formatThreshold>[0];
-  removal_threshold: Parameters<typeof formatThreshold>[0];
-  addition_threshold: Parameters<typeof formatThreshold>[0];
-  policy_threshold: Parameters<typeof formatThreshold>[0];
-  min_guardian_count: number;
-  on_orphan: string | { transfer_to: string };
-}): string {
+/** §6.11: a structured table instead of a bare JSON dump, each row linking to the exact requirement it governs. */
+function policySection(policy: Policy): string {
+  const effective = { ...DEFAULT_POLICY, ...policy };
   const fields: PolicyField[] = [
-    { label: "Recovery (lost-key rotation)", value: formatThreshold(policy.recovery_threshold), reqAnchor: "req-5-2" },
-    { label: "Deactivation", value: formatThreshold(policy.tombstone_threshold), reqAnchor: "req-5-3" },
-    { label: "Removing a guardian", value: formatThreshold(policy.removal_threshold), reqAnchor: "req-5-4" },
-    { label: "Adding a guardian", value: formatThreshold(policy.addition_threshold), reqAnchor: "req-5-5" },
-    { label: "Changing this policy", value: formatThreshold(policy.policy_threshold), reqAnchor: "req-5-6" },
-    { label: "Minimum guardian count", value: policy.min_guardian_count === 0 ? "none" : String(policy.min_guardian_count), reqAnchor: "req-5-7" },
-    { label: "If orphaned", value: formatOnOrphan(policy.on_orphan), reqAnchor: "req-5-8" },
+    { label: "Recovery (lost-key rotation)", value: formatSetting(effective.recovery), reqAnchor: "req-6-12" },
+    { label: "Adding a guardian", value: formatSetting(effective.membership), reqAnchor: "req-6-12" },
+    { label: "Removing a guardian", value: formatSetting(effective.removal), reqAnchor: "req-6-12" },
+    { label: "Deactivation", value: `${effective.deactivation.by}, ${formatSetting(effective.deactivation.threshold)}`, reqAnchor: "req-6-13" },
+    { label: "If orphaned", value: effective.orphan, reqAnchor: "req-6-14" },
+    { label: "Maximum wards", value: policy.maxWards === undefined ? "none" : String(policy.maxWards), reqAnchor: "req-6-15" },
   ];
   return policyTable(fields, FORMAL_SPEC_URL);
+}
+
+function guardiansList(state: State): string {
+  const entries: Array<{ did: string; role: string }> = [...state.guardians.map((g: Entry) => ({ did: g.did, role: "guardian" }))];
+  if (state.successor) entries.push({ did: state.successor.did, role: "successor" });
+  if (entries.length === 0) return `<p class="hint">No guardians -- fully self-governing.</p>`;
+  return `<ul class="signers">${entries.map((e) => `<li>${escapeHtml(e.did)} <span class="hint">(${e.role})</span></li>`).join("")}</ul>`;
 }
 
 export async function handleAccountPage(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const { wardDid, ward } = session;
-  const name = urlName(ward);
+  const { wardDid, name } = session;
+  const urlSegment = urlName(name);
   const url = new URL(request.url);
   const message = url.searchParams.get("message");
   const messageKind = url.searchParams.get("kind") === "error" ? "error" : "ok";
 
-  const resolved = await resolveState(env, ward.name === "" ? null : ward.name);
-  if (!resolved) return html(pageShell("Error", `<h1>Error</h1><p class="error">Could not resolve this identity's own state.</p>`), 500);
-  const { state } = resolved;
+  const log = await getLog(env, wardDid);
+  if (log.length === 0) return html(pageShell("Error", `<h1>Error</h1><p class="error">Could not find this identity's own log.</p>`), 500);
+  const verified = await verifyLog(wardDid, log);
+  if (verified.result !== "valid") return html(pageShell("Error", `<h1>Error</h1><p class="error">Could not resolve this identity's own state.</p>`), 500);
+  const state = verified.state!;
 
-  const log = await loadLog(env, wardDid);
+  const logWithTimestamps = await getLogWithTimestamps(env, wardDid);
   const forwarding = await getVerifiedForwardingByDid(env, wardDid);
-  const pending = await listPendingForSigner(env, wardDid);
-  const relayInbox = await listOpenRelayInboxForSigner(env, wardDid);
+  const pending = await listPendingForDid(env, wardDid);
   const consents = await listOidcConsentsForWard(env, wardDid);
-
-  const guardiansList = state.guardians.length
-    ? `<ul class="signers">${state.guardians.map((g) => `<li>${escapeHtml(g)}</li>`).join("")}</ul>`
-    : `<p class="hint">No guardians -- fully self-governing.</p>`;
 
   const pendingList = pending.length
     ? `<ul class="signers">${pending
-        .map((p) => `<li>${escapeHtml(p.op_type)} -- <a href="/.well-known/guardian/${encodeURIComponent(name)}/pending/${p.id}">review and sign</a></li>`)
+        .map((p) => `<li>${escapeHtml((p.operation as { type: string }).type)} -- <a href="/.well-known/guardian/pending/${p.id}">review and sign</a></li>`)
         .join("")}</ul>`
     : `<p class="hint">Nothing waiting on your own signature right now.</p>`;
-
-  // Durable discovery for cross-registrar requests (registrar API spec
-  // §13) -- independent of whether relay-notify's own email ever landed.
-  // Each entry always re-fetches the real, live status from the ward's own
-  // registrar when opened; this list is only ever an index, never a cache
-  // of truth.
-  const relayInboxList = relayInbox.length
-    ? `<ul class="signers">${relayInbox
-        .map(
-          (r) =>
-            `<li>${escapeHtml(r.op_type)} on ${escapeHtml(r.ward_did)} (another registrar) -- <a href="/relay-sign?ward=${encodeURIComponent(r.ward_did)}&op=${encodeURIComponent(r.pending_operation_id)}">review</a></li>`,
-        )
-        .join("")}</ul>`
-    : `<p class="hint">Nothing waiting on your signature on another registrar right now.</p>`;
 
   const consentsList = consents.length
     ? `<ul class="signers">${consents
@@ -174,9 +136,9 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
         .join("")}</ul>`
     : `<p class="hint">No connected apps.</p>`;
 
-  const activityList = [...log]
+  const activityList = [...logWithTimestamps]
     .reverse()
-    .map((entry) => `<li>${opSummary(entry)} <span class="hint">${escapeHtml(entry.acceptedAt ?? "")}</span></li>`)
+    .map((entry) => `<li>${opSummary(entry.operation)} <span class="hint">${escapeHtml(entry.acceptedAt)}</span></li>`)
     .join("");
 
   const body = `
@@ -186,10 +148,9 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
     ${banner(message ?? null, messageKind)}
     <dl>
       <dt>Status</dt><dd><span class="state">${state.deactivated ? "Deactivated" : "Active"}</span></dd>
-      <dt>Guardians</dt><dd>${guardiansList}</dd>
-      <dt>Policy</dt><dd>${policySection(state.guardianPolicy)}</dd>
+      <dt>Guardians</dt><dd>${guardiansList(state)}</dd>
+      <dt>Policy</dt><dd>${policySection(state.policy)}</dd>
       <dt>Needs your signature</dt><dd>${pendingList}</dd>
-      <dt>Needs your signature (another registrar)</dt><dd>${relayInboxList}</dd>
       <dt>Connected apps</dt><dd>${consentsList}</dd>
       <dt>Activity</dt><dd><ul class="signers">${activityList}</ul></dd>
     </dl>
@@ -208,35 +169,23 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
         : `<form method="post" action="/account/email">
              <label>Forwarding email <input name="forward_to" type="email" required></label>
              <button type="submit" class="neutral">Set up email forwarding</button>
-           </form>${ward.name === "" ? `<p class="hint">Mail for this identity routes through <code>_@${escapeHtml(env.REGISTRAR_DOMAIN)}</code>, the same reserved local part already used to log in as root.</p>` : ""}`
+           </form>${name === "" ? `<p class="hint">Mail for this identity routes through <code>_@${escapeHtml(env.REGISTRAR_DOMAIN)}</code>, the same reserved local part already used to log in as root.</p>` : ""}`
     }
     ${
-      // R2-0.2 hotfix (round-2 audit): this used to be a one-click
-      // "Relinquish all guardians" button right here, calling
-      // relinquishWard with nothing but this page's own ward session --
-      // which signed with every registrar-held GUARDIAN's own stored
-      // key, none of them ever asked. guardian_relinquish's required
-      // signers are the guardians themselves (REQ-7.2-7a), never the
-      // ward, so a ward dashboard is the wrong place for this action at
-      // all now that it actually needs the guardian's own say: there's
-      // no guardian session to offer here. Point at the real path
-      // instead -- a guardian relinquishes through their OWN dashboard
-      // or the API's /relinquish, authenticated as themselves.
       state.guardians.length
-        ? `<p class="hint">A guardian steps down under its own authority, not this account's -- see the registrar API's <code>.../remove-self</code> (one guardian, voluntary) or <code>.../relinquish</code> (signed in as a guardian) in the registrar API doc.</p>`
+        ? `<p class="hint">A guardian steps down under its own authority, not this account's -- see the registrar API's <code>.../remove-self</code> (one guardian, voluntary) in the registrar API doc. Removing a guardian without its own cooperation needs the others' approval, through the asynchronous multi-signer proposal flow.</p>`
         : ""
     }
     ${!state.deactivated ? `<p><a href="/account/tombstone">Deactivate this identity</a></p>` : ""}
   `;
-  return html(pageShell(`Account -- ${escapeHtml(name)}`, body));
+  return html(pageShell(`Account -- ${escapeHtml(urlSegment)}`, body));
 }
 
 export async function handleAccountRotate(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = session.ward.name;
   try {
-    await rotateWard(env, name);
+    await rotateHeldKey(env, session.wardDid);
   } catch (e) {
     if (e instanceof RegistrarError) return redirectToAccount(`Couldn't rotate: ${e.message}`, "error");
     throw e;
@@ -255,17 +204,16 @@ const MIN_PASSWORD_LENGTH = 12;
 export async function handleAccountReissueLoginSecret(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = session.ward.name;
   const form = await safeFormData(request);
   const password = form.get("password") ? String(form.get("password")) : undefined;
   if (password) {
     const confirm = String(form.get("password_confirm") ?? "");
     if (password.length < MIN_PASSWORD_LENGTH) return redirectToAccount(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`, "error");
     if (password !== confirm) return redirectToAccount("Passwords don't match.", "error");
-    await reissueLoginSecret(env, name, password);
+    await reissueLoginSecret(env, session.wardDid, password);
     return redirectToAccount("Password set -- sign in with it next time.");
   }
-  const loginSecret = await reissueLoginSecret(env, name);
+  const loginSecret = await reissueLoginSecret(env, session.wardDid);
   const body = `
     <h1>New login secret</h1>
     <p class="hint">Shown once, right now -- write it down. You'll need it (with your account's own name) to sign in again.</p>
@@ -278,11 +226,10 @@ export async function handleAccountReissueLoginSecret(request: Request, env: Env
 export async function handleAccountEmail(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = session.ward.name;
   const form = await safeFormData(request);
   const forwardTo = String(form.get("forward_to") ?? "");
   if (!forwardTo) return redirectToAccount("An email address is required.", "error");
-  const result = await requestEmailForwarding(env, name, forwardTo);
+  const result = await requestEmailForwarding(env, session.name, forwardTo);
   return result.ok
     ? redirectToAccount("Verification email sent -- check your inbox.")
     : redirectToAccount(`Couldn't set up forwarding: ${result.reason}`, "error");
@@ -294,10 +241,10 @@ export async function handleAccountTombstoneConfirm(request: Request, env: Env):
   // The confirm-by-typing value is the URL form ("_" for root), not the
   // raw storage name -- asking someone to type an empty string to confirm
   // would be meaningless for the bare-domain identity.
-  const confirmName = urlName(session.ward);
+  const confirmName = urlName(session.name);
   const body = `
     <h1>Deactivate this identity</h1>
-    <p class="hint">This is permanent. The full history stays publicly resolvable forever (it's never deleted), but no further operation will ever be accepted against it again${session.ward.name === "" ? "" : `, and "${escapeHtml(confirmName)}" can never be registered again by anyone, including you`}.</p>
+    <p class="hint">This is permanent. The full history stays publicly resolvable forever (it's never deleted), but no further operation will ever be accepted against it again${session.name === "" ? "" : `, and "${escapeHtml(confirmName)}" can never be registered again by anyone, including you`}.</p>
     <form method="post" action="/account/tombstone">
       <label>Type "${escapeHtml(confirmName)}" to confirm <input name="confirm" required></label>
       <button type="submit" class="danger">Permanently deactivate</button>
@@ -310,20 +257,19 @@ export async function handleAccountTombstoneConfirm(request: Request, env: Env):
 export async function handleAccountTombstone(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
-  const name = session.ward.name;
-  const confirmName = urlName(session.ward);
+  const confirmName = urlName(session.name);
   const form = await safeFormData(request);
   if (String(form.get("confirm") ?? "") !== confirmName) {
     return html(pageShell("Confirm deactivation", `<h1>Confirm deactivation</h1><p class="error">That didn't match "${escapeHtml(confirmName)}" -- nothing was changed.</p><p><a href="/account/tombstone">Try again</a></p>`), 400);
   }
   try {
-    await tombstoneWard(env, name);
+    await deactivateSelf(env, session.wardDid);
   } catch (e) {
     if (e instanceof RegistrarError) {
       return html(
         pageShell(
           "Couldn't deactivate",
-          `<h1>Couldn't deactivate</h1><p class="error">${escapeHtml(e.message)}</p><p class="hint">Your own policy may require more than just your own key for this -- propose a custodial_tombstone through the asynchronous signing flow instead.</p><p><a href="/account">Back to your account</a></p>`,
+          `<h1>Couldn't deactivate</h1><p class="error">${escapeHtml(e.message)}</p><p class="hint">Your own policy may require guardian cooperation too -- propose a deactivate through the asynchronous multi-signer proposal flow instead.</p><p><a href="/account">Back to your account</a></p>`,
         ),
         e.status,
       );

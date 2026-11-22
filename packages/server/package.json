@@ -13,8 +13,7 @@
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "@did-guardian/lib": "file:../lib",
-    "xstate": "^5.19.0"
+    "@did-guardian/lib": "file:../lib"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

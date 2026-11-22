@@ -1,7 +1,7 @@
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
 import {
-  getWardByName,
+  getNameEntry,
   upsertEmailForwarding,
   getEmailForwardingByToken,
   markEmailForwardingVerified,
@@ -27,7 +27,7 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env): P
   // never be found by looking up a ward literally named "_", since
   // assertValidName already forbids any real ward from ever being named
   // that.
-  const ward = await getWardByName(env, localPart === "_" ? "" : localPart);
+  const ward = await getNameEntry(env, env.REGISTRAR_DOMAIN, localPart === "_" ? "" : localPart);
   if (!ward) {
     message.setReject(`no such identity "${localPart}" at this registrar`);
     return;
@@ -46,7 +46,7 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env): P
  * destination address itself confirms it via the emailed link.
  */
 export async function requestEmailForwarding(env: Env, name: string, forwardTo: string): Promise<{ ok: true } | { ok: false; reason: string }> {
-  const ward = await getWardByName(env, name);
+  const ward = await getNameEntry(env, env.REGISTRAR_DOMAIN, name);
   if (!ward) return { ok: false, reason: `no such identity "${name}"` };
 
   const token = randomSecret();

@@ -1,14 +1,15 @@
-import { generateKeypair, liveGuardians, parseDid, type Did } from "@did-guardian/lib";
+import { generateKeypair, parseDid, verifyLog, type Did } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
-import { resolveState, makeGuardianLivenessResolver } from "./registrar.js";
 import {
   getOidcClient,
   getSigningKey,
   insertSigningKey,
   insertAuthCode,
   consumeAuthCode,
-  getWardByDid,
+  getHeldKey,
+  getNameEntryByDid,
+  getLog,
   insertOidcClient,
   getOidcConsent,
   upsertOidcConsent,
@@ -726,13 +727,15 @@ async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret:
   const actorDid = verified.sub;
   const targetDid = b.resource;
 
-  const targetWard = await getWardByDid(env, targetDid);
-  if (!targetWard) return err(`"${targetDid}" is not an identity this registrar custodies -- it has no key material to issue a token for`, 400);
+  const targetHeld = await getHeldKey(env, targetDid);
+  if (!targetHeld) return err(`"${targetDid}" is not an identity this registrar custodies -- it has no key material to issue a token for`, 400);
 
   if (actorDid !== targetDid) {
-    const resolved = await resolveState(env, targetWard.name === "" ? null : targetWard.name);
-    const live = resolved ? await liveGuardians(resolved.state, makeGuardianLivenessResolver(env)) : [];
-    if (!live.includes(actorDid)) {
+    const targetLog = await getLog(env, targetDid);
+    const verified = targetLog.length > 0 ? await verifyLog(targetDid as Did, targetLog) : undefined;
+    const state = verified?.result === "valid" ? verified.state : undefined;
+    const isCurrentGuardianOrSuccessor = state ? state.guardians.some((g) => g.did === actorDid) || state.successor?.did === actorDid : false;
+    if (!isCurrentGuardianOrSuccessor) {
       return err(`"${actorDid}" is neither "${targetDid}" itself, nor a current guardian of it`, 403);
     }
   }
@@ -864,14 +867,14 @@ async function handleUserinfo(request: Request, env: Env): Promise<Response> {
   const verified = await verifyAccessToken(env, token);
   if (!verified) return unauthorizedWithResourceMetadata(env, "invalid, expired, or revoked token");
 
-  const ward = await getWardByDid(env, verified.sub);
-  // The bare-domain root's own name is "" (wards.name's own sentinel, not
-  // a real display name) -- confirmed live this was a real problem, not
+  const nameEntry = await getNameEntryByDid(env, verified.sub);
+  // The root identity's own name is "" (names' own sentinel, not a real
+  // display name) -- confirmed live this was a real problem, not
   // theoretical: an empty-string name claim is exactly the kind of thing a
   // relying party's own validation can choke on. Same fallback agentCard.ts
   // already uses for this identity's display name elsewhere, not a new
   // convention invented here.
-  const name = ward?.name || env.REGISTRAR_DOMAIN;
+  const name = nameEntry?.name || env.REGISTRAR_DOMAIN;
   const claims: Record<string, unknown> = { sub: verified.sub, name, ...(await emailClaims(env, verified.sub as Did, verified.scope)) };
   return json(claims);
 }

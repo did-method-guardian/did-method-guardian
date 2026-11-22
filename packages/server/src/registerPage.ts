@@ -10,7 +10,8 @@ import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell, authPageShell, secretBox } from "./htmlPage.js";
 import { isSafeReturnTo } from "./votingPage.js";
-import { registerWard, RegistrarError } from "./registrar.js";
+import { registerIdentity } from "./profile.js";
+import { RegistrarError } from "./registrarError.js";
 import { createLoginSession } from "./login.js";
 
 const SESSION_COOKIE = "gw_session";
@@ -94,9 +95,9 @@ export async function handleRegisterForm(request: Request, env: Env): Promise<Re
     password = pw;
   }
 
-  let result: { did: string; document: unknown; login_secret?: string };
+  let result: { did: string; loginSecret?: string };
   try {
-    result = await registerWard(env, name, null, password);
+    result = await registerIdentity(env, name, { password });
   } catch (e) {
     if (e instanceof RegistrarError) {
       return html(authPageShell("Create account", registerFormBody(returnTo, { nameValue: name, credentialMode, error: e.message })), e.status);
@@ -109,9 +110,9 @@ export async function handleRegisterForm(request: Request, env: Env): Promise<Re
     <h1>Account created</h1>
     <p class="hint">${escapeHtml(result.did)}</p>
     ${
-      result.login_secret
+      result.loginSecret
         ? `<p class="hint">Your login secret -- shown once, right now. Write it down; there's no other way to see it again (though you can always issue a new one later from your account).</p>
-           <dl><dt>Login secret</dt><dd>${secretBox(result.login_secret)}</dd></dl>`
+           <dl><dt>Login secret</dt><dd>${secretBox(result.loginSecret)}</dd></dl>`
         : `<p class="hint">Your account is ready -- sign in any time with the name above and the password you set.</p>`
     }
     <p><a href="${escapeHtml(returnTo)}">Continue</a></p>
