@@ -37,7 +37,7 @@ export type LogResolver = (did: Did) => Log | undefined | Promise<Log | undefine
 
 export type Outcome = "valid" | "invalid" | "unsupported";
 
-async function findByHash(log: Log, hash: string): Promise<number> {
+export async function findByHash(log: Log, hash: string): Promise<number> {
   for (let i = 0; i < log.length; i++) {
     if ((await operationHash(log[i])) === hash) return i;
   }
@@ -103,7 +103,7 @@ export async function resolve(did: Did, log: Log, resolveLog: LogResolver): Prom
 }
 
 /** REQ-5-5: two lists of keys are equal if they contain the same keys, in any order. Each list is already known distinct (REQ-6-1), so same length plus full containment is set equality. */
-function sameKeys(a: Key[], b: Key[]): boolean {
+export function sameKeys(a: Key[], b: Key[]): boolean {
   if (a.length !== b.length) return false;
   const bSet = new Set(b);
   return a.every((k) => bSet.has(k));
@@ -111,8 +111,14 @@ function sameKeys(a: Key[], b: Key[]): boolean {
 
 export type MutualityResult = "unavailable" | "different identity" | "deactivated" | "withdrawn" | "keys out of date" | "mutual";
 
-/** REQ-11-5: one entry's own mutuality report. `wardDid`/`wardAnchor` identify the identity whose `guardians`/`successor` this entry came from. */
-export async function checkMutuality(wardDid: Did, wardAnchor: string, entry: Entry, resolveLog: LogResolver): Promise<MutualityResult> {
+/**
+ * REQ-11-5: one entry's own mutuality report. `wardDid`/`wardAnchor`
+ * identify the identity whose `guardians`/`successor` this entry came
+ * from. `skipKeysCheck` is REQ-10-7's own exception to REQ-10-6 item 3
+ * (standing, below) -- never used for REQ-11-5 itself, which has no
+ * such exception.
+ */
+export async function checkMutuality(wardDid: Did, wardAnchor: string, entry: Entry, resolveLog: LogResolver, skipKeysCheck = false): Promise<MutualityResult> {
   const log = await resolveLog(entry.did);
   if (!log) return "unavailable";
   const verified = await verifyLog(entry.did, log);
@@ -130,7 +136,7 @@ export async function checkMutuality(wardDid: Did, wardAnchor: string, entry: En
   const stillAWard = state.wards.some((w) => w.did === wardDid && w.anchor === wardAnchor);
   if (!consentNamesThisWard || !stillAWard) return "withdrawn";
 
-  if (!sameKeys(state.keys, entry.keys)) return "keys out of date";
+  if (!skipKeysCheck && !sameKeys(state.keys, entry.keys)) return "keys out of date";
   return "mutual";
 }
 
