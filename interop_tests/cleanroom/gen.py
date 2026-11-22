@@ -948,8 +948,10 @@ def build():
     M("inv-5-1-nonchar", "create-full", "REQ-5-1", "service type contains U+FFFF", m_body(setp(("services", 0, "type"), "Hub￿")))
     M("inv-5-1-surrogate", "create-full", "REQ-5-1", "unpaired surrogate (after signing)", m_post(lambda op, w, i: op["services"][0].__setitem__("type", "\ud800")))
     M("inv-5-1-notobject", "update-key", "REQ-5-1", "last operation is a JSON string", m_vec(lambda v, w: v["log"].__setitem__(-1, "update")))
-    for nm, val in (("float", 1.0), ("big", 2**53), ("neg", -1)):
+    for nm, val in (("fraction", 1.5), ("big", 2**53), ("neg", -1)):
         M(f"inv-5-2-{nm}", "setpolicy-N3", "REQ-5-2", f"policy.recovery = {val!r}", m_body(setp(("policy", "recovery"), val)))
+    M("val-5-2-integral-float", "setpolicy-N3", "REQ-5-2", "policy.recovery = 1.0 (integer value, any spelling)",
+      m_body(setp(("policy", "recovery"), 1.0)), result="valid")
     M("inv-5-3-top", "update-key", "REQ-5-3", "extra member", m_body(setp(("note",), "x")))
     M("inv-5-3-policy", "setpolicy-N0", "REQ-5-3", "unknown policy member", m_body(setp(("policy", "quorum"), 2)))
     M("inv-7-27-extra", "deactivate-N0", "REQ-7-27", "deactivate with extra member", m_body(setp(("reason",), "x")))

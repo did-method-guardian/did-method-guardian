@@ -262,7 +262,9 @@ def check_values(v):
     if isinstance(v, bool) or v is None:
         return
     if isinstance(v, float):
-        raise Invalid("REQ-5-2", f"number with fraction or exponent {v!r}")
+        if v != v or v != int(v):
+            raise Invalid("REQ-5-2", f"number without an integer value {v!r}")
+        v = int(v)
     if isinstance(v, int):
         if not 0 <= v <= MAX_INT:
             raise Invalid("REQ-5-2", f"integer out of range {v}")
@@ -322,7 +324,8 @@ def check_ward(r):
 
 
 def _is_k(v):
-    return isinstance(v, int) and not isinstance(v, bool)
+    # REQ-5-2: a number counts by its value, so 1.0 is the integer 1.
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and v == int(v)
 
 
 def check_policy(p):

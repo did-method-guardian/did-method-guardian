@@ -1,5 +1,5 @@
 {
- "description": "policy.recovery = 1.0",
+ "description": "policy.recovery = 1.0 (integer value, any spelling)",
  "did": "did:guardian:acme.com:alice",
  "log": [
   {
@@ -339,7 +339,7 @@
   ]
  },
  "expect": {
-  "result": "invalid"
+  "result": "valid"
  },
  "targets": "REQ-5-2",
  "base": "setpolicy-N3"

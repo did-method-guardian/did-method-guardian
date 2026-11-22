@@ -1,4 +1,7 @@
-import type { Did } from "./types.js";
+import { toDidDocument, toResolutionMetadata, type DidDocument, type ResolutionMetadata } from "./document.js";
+import { anchorOf, isSupportedCryptosuite, operationHash, parseGuardianDid, verifyProofSignature } from "./operations.js";
+import { verifyLog } from "./verifyLog.js";
+import type { CreateOp, Did, Entry, Key, Log, WardRecord } from "./types.js";
 
 /**
  * Splits an identifier into its registrar domain and (optional) name.
@@ -24,18 +27,127 @@ export function parseDid(did: Did): { name: string | null; domain: string } {
   return rest.length === 1 ? { name: null, domain } : { name: rest[1], domain };
 }
 
-/**
- * Live HTTP resolution (spec §5: `GET https://<domain>/.well-known/guardian/<name>`)
- * is intentionally not implemented in this reference library -- v1 scope is
- * operating on a log already in hand (see website spec, "What this plan builds").
- * This stub documents the intended transport shape for a future directory-server
- * package to implement against.
- */
-export interface Resolver {
-  resolveLog(did: Did): Promise<never>;
-}
-
 /** `name: null` resolves to the reserved `_` segment -- the bare-domain identity's own well-known path (spec §2.1/§5), never a real registration (the name ABNF forbids `_`). */
 export function wellKnownPath(name: string | null): string {
   return `/.well-known/guardian/${name ?? "_"}`;
+}
+
+/** Fetches the current log of `did` -- live resolution for REQ-5-14's cross-log checks (REQ-10-7), and for the resolution functions below. Returns `undefined` if the log cannot be retrieved. */
+export type LogResolver = (did: Did) => Log | undefined | Promise<Log | undefined>;
+
+export type Outcome = "valid" | "invalid" | "unsupported";
+
+async function findByHash(log: Log, hash: string): Promise<number> {
+  for (let i = 0; i < log.length; i++) {
+    if ((await operationHash(log[i])) === hash) return i;
+  }
+  return -1;
+}
+
+/**
+ * REQ-11-2: verifies a `create`'s attestation. Unsupported only for an
+ * unrecognized cryptosuite; every other failure (an unreachable root log,
+ * a version or key index that doesn't exist, a bad signature, a
+ * deactivated root) is invalid.
+ */
+export async function verifyAttestation(create: CreateOp, resolveLog: LogResolver): Promise<Outcome> {
+  const attestation = create.attestation;
+  if (!attestation) return "valid"; // the root identity's own create has none (REQ-7-7)
+  if (!isSupportedCryptosuite(attestation.cryptosuite)) return "unsupported";
+
+  const m = /^(did:guardian:[^?#]+)\?versionId=([^#]+)#key-(0|[1-9][0-9]*)$/.exec(attestation.verificationMethod);
+  if (!m) return "invalid";
+  const rootDid = m[1] as Did;
+  const version = m[2];
+  const index = Number(m[3]);
+
+  const rootLog = await resolveLog(rootDid);
+  if (!rootLog) return "invalid";
+  const opIndex = await findByHash(rootLog, version);
+  if (opIndex === -1) return "invalid";
+
+  const prefixResult = await verifyLog(rootDid, rootLog.slice(0, opIndex + 1));
+  if (prefixResult.result === "unsupported") return "unsupported";
+  if (prefixResult.result !== "valid") return "invalid";
+  const state = prefixResult.state!;
+  if (state.deactivated) return "invalid";
+  if (index >= state.keys.length) return "invalid";
+
+  const ok = await verifyProofSignature(create, attestation, state.keys[index]);
+  return ok ? "valid" : "invalid";
+}
+
+export interface ResolveResult {
+  result: Outcome;
+  reason?: string;
+  document?: DidDocument;
+  metadata?: ResolutionMetadata;
+}
+
+/** REQ-11-1: resolves a DID to its document. */
+export async function resolve(did: Did, log: Log, resolveLog: LogResolver): Promise<ResolveResult> {
+  const verified = await verifyLog(did, log);
+  if (verified.result !== "valid") return { result: verified.result, reason: verified.reason };
+
+  const domain = parseGuardianDid(did)!.domain;
+  const isRoot = did === `did:guardian:${domain}`;
+  if (!isRoot) {
+    const attestationResult = await verifyAttestation(log[0] as CreateOp, resolveLog);
+    if (attestationResult !== "valid") return { result: attestationResult };
+  }
+
+  const state = verified.state!;
+  const version = await operationHash(log[log.length - 1]);
+  const anchor = await anchorOf(log[0] as CreateOp);
+  return { result: "valid", document: toDidDocument(did, state), metadata: toResolutionMetadata(version, anchor, state) };
+}
+
+/** REQ-5-5: two lists of keys are equal if they contain the same keys, in any order. Each list is already known distinct (REQ-6-1), so same length plus full containment is set equality. */
+function sameKeys(a: Key[], b: Key[]): boolean {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((k) => bSet.has(k));
+}
+
+export type MutualityResult = "unavailable" | "different identity" | "deactivated" | "withdrawn" | "keys out of date" | "mutual";
+
+/** REQ-11-5: one entry's own mutuality report. `wardDid`/`wardAnchor` identify the identity whose `guardians`/`successor` this entry came from. */
+export async function checkMutuality(wardDid: Did, wardAnchor: string, entry: Entry, resolveLog: LogResolver): Promise<MutualityResult> {
+  const log = await resolveLog(entry.did);
+  if (!log) return "unavailable";
+  const verified = await verifyLog(entry.did, log);
+  if (verified.result !== "valid") return "unavailable";
+
+  const anchor = await anchorOf(log[0] as CreateOp);
+  if (anchor !== entry.anchor) return "different identity";
+
+  const state = verified.state!;
+  if (state.deactivated) return "deactivated";
+
+  const consentIndex = await findByHash(log, entry.consent);
+  const consentOp = consentIndex === -1 ? undefined : log[consentIndex];
+  const consentNamesThisWard = consentOp?.type === "acceptWard" && consentOp.ward.did === wardDid && consentOp.ward.anchor === wardAnchor;
+  const stillAWard = state.wards.some((w) => w.did === wardDid && w.anchor === wardAnchor);
+  if (!consentNamesThisWard || !stillAWard) return "withdrawn";
+
+  if (!sameKeys(state.keys, entry.keys)) return "keys out of date";
+  return "mutual";
+}
+
+export type WardReportResult = "unavailable" | "different identity" | "guardian" | "successor" | "not related";
+
+/** REQ-11-6: one ward record's own report, from the perspective of `thisDid` (the identity whose `wards` this record came from). */
+export async function checkWardReport(thisDid: Did, record: WardRecord, resolveLog: LogResolver): Promise<WardReportResult> {
+  const log = await resolveLog(record.did);
+  if (!log) return "unavailable";
+  const verified = await verifyLog(record.did, log);
+  if (verified.result !== "valid") return "unavailable";
+
+  const anchor = await anchorOf(log[0] as CreateOp);
+  if (anchor !== record.anchor) return "different identity";
+
+  const state = verified.state!;
+  if (state.guardians.some((g) => g.did === thisDid)) return "guardian";
+  if (state.successor?.did === thisDid) return "successor";
+  return "not related";
 }

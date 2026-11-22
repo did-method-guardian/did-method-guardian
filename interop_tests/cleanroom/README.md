@@ -2,7 +2,7 @@
 
 This folder holds a test suite for the did:guardian method spec (`did-guardian-spec.md`, final revision). It was written clean-room, from the spec text alone.
 
-- **`vectors-final/`** holds 333 JSON test vectors. Each one is a log plus an expected result. Every log is really signed: P-256, `ecdsa-jcs-2019`, low-S, with keys derived deterministically.
+- **`vectors-final/`** holds 334 JSON test vectors. Each one is a log plus an expected result. Every log is really signed: P-256, `ecdsa-jcs-2019`, low-S, with keys derived deterministically.
 - **`verifier.py`** is a reference implementation:
   - §8 verification;
   - §9 DID documents;

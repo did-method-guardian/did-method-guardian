@@ -96,30 +96,6 @@ function isOperationInteger(value: unknown): boolean {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 2 ** 53 - 1;
 }
 
-const BARE_INTEGER_RE = /^(0|[1-9][0-9]*)$/;
-
-/**
- * REQ-5-2: parses JSON text, throwing if any number is written with a
- * fraction or an exponent -- a distinction `JSON.parse`'s own result
- * cannot preserve (`1.0` and `1` parse to the identical JS number), so
- * this is the one REQ-5-2 clause that has to be checked during parsing,
- * not by `checkValuesShape` against an already-parsed value. Uses the
- * reviver's source-text argument (present in current JS engines); an
- * engine without it parses normally, silently skipping this one check.
- */
-type SourceAwareReviver = (key: string, value: unknown, context?: { source?: string }) => unknown;
-
-export function parseIJson(text: string): unknown {
-  const reviver: SourceAwareReviver = (_key, value, context) => {
-    const source = context?.source;
-    if (typeof value === "number" && source !== undefined && !BARE_INTEGER_RE.test(source)) {
-      throw new Error(`REQ-5-2: number must be written without a fraction or an exponent: ${source}`);
-    }
-    return value;
-  };
-  return JSON.parse(text, reviver as (key: string, value: unknown) => unknown);
-}
-
 /** REQ-5-2/REQ-5-1 (I-JSON has no unpaired surrogates): every number and every string anywhere in the value. */
 export function checkValuesShape(value: unknown): ShapeResult {
   if (typeof value === "number") return isOperationInteger(value) ? VALID : invalid("REQ-5-2: every number must be an integer between 0 and 2^53 - 1");

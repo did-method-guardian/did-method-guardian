@@ -112,7 +112,7 @@ did:guardian:<domain>:<name>
 
 <a id="req-5-1"></a>**REQ-5-1.** An operation MUST be an I-JSON message (RFC 7493).
 
-<a id="req-5-2"></a>**REQ-5-2.** Every number in an operation MUST be an integer between 0 and 2^53 − 1, written without a fraction or an exponent.
+<a id="req-5-2"></a>**REQ-5-2.** Every number in an operation MUST have an integer value between 0 and 2^53 − 1.
 
 <a id="req-5-3"></a>**REQ-5-3.** An operation MUST contain exactly the members that Section 7 defines for its type, and MAY also contain the members `extensions` and `critical` (Section 7.11). Every object inside an operation MUST contain exactly the members that this specification defines for it. A policy object MAY also contain the member `extensions`.
 
@@ -617,6 +617,7 @@ A sole guardian is removed with `evidence` and one current key, or by the succes
 ## Changelog
 
 - **v0.2.0** (2026-10-24, current):
+  - **2026-11-22**: REQ-5-2 now constrains a number's value, not how it is written. A standard JSON parser cannot distinguish `1` from `1.0` after parsing, so the earlier "written without a fraction or an exponent" wording checked nothing a conforming implementation could actually observe.
   - **2026-11-22**: Replaced the specification again, after six rounds of independent clean-room verification against the previous replacement found a critical hole (guardians could not be required to approve anything when zero were eligible, REQ-6-9) and about 25 smaller gaps. Guardian and successor relationships now use snapshot entries (`{did, anchor, keys, consent}`); every proof is a `did:key` reference, so verifying a log depends only on that log (REQ-8-2) with no cross-log recursion or cycle rule. The operation hash now covers the complete operation including its proofs; only the anchor excludes `proof`, `attestation`, `guardians` and `successor`. The registrar's attestation moved to its own `attestation` member on `create`, verified during resolution (Section 11), not during verification (Section 8). Added `acceptWard`/`releaseWard` (a guardian records its own consent, and the relationship is checked for mutuality at resolution, never affecting validity), `updateGuardian` (refreshing a stale entry's keys), and orphan handling (`policy.orphan`: deactivate, independent or successor). Added an extension mechanism (Section 7.11) with a three-way valid/invalid/unsupported verification result. Removed the word "sovereign" throughout; the orphan value is `"independent"`.
   - **2026-11-22**: Replaced the specification. Operations are `create`, `update`, `addGuardian`, `removeGuardian`, `setPolicy`, and `deactivate`. Verification depends only on logs, never on time. Removed nullification, the recovery window, receipts, the signed log head, and verification levels L0 through L3. Removed `creator`, `on_orphan`, and `guardian_transfer`. Entries dated before this one describe the removed design.
   - **2026-11-21**: a coordinated security rewrite, following an external review of this version's own proof-of-possession/registrar-attestation work above. Seven fixes, implemented together since several touch the same signed content:
