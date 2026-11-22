@@ -11,7 +11,7 @@ import {
   signCustodialCreate,
   signCustodialRotate,
   signGuardianAdd,
-  signGuardianTransfer,
+  signGuardianRemove,
   signGuardianRelinquish,
   signCustodialTombstone,
   signPolicyUpdate,
@@ -114,7 +114,12 @@ async function signGenesis(
   );
 }
 
-// --- valid: genesis -> rotate -> guardian_transfer (board-a steps down, board-c joins) ---
+// --- valid: genesis -> rotate -> guardian_remove (board-a steps down) -> guardian_add (board-c joins) ---
+// WS-3.3/3.6 (audit): replaces the old guardian_transfer-based version of
+// this fixture -- guardian_transfer is v0.1, superseded, kept only for
+// replaying ALREADY-accepted history (document.ts's own comment), never
+// produced for a new operation. board-a's own departure and board-c's own
+// arrival are now two separate, real v0.2 operations instead.
 {
   const boardC = await generateKeypair();
   const genesis = await signGenesis(
@@ -142,22 +147,33 @@ async function signGenesis(
   );
   const rotateCid = await cidFor(rotate);
 
-  const transfer = await signGuardianTransfer(
-    { type: "guardian_transfer", outgoing: ["did:guardian:example.com:board-a"], incoming: ["did:guardian:example.com:board-b", "did:guardian:example.com:board-c"], prev: rotateCid },
-    wardDid,
-    ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b"],
-    { "did:guardian:example.com:board-a": boardA.privateKey, "did:guardian:example.com:board-c": boardC.privateKey },
+  // REQ-7.2-7(a): board-a steps down voluntarily -- only its own signature is needed.
+  const removeBoardA = await signGuardianRemove(
+    { type: "guardian_remove", outgoing: "did:guardian:example.com:board-a", prev: rotateCid },
+    { "did:guardian:example.com:board-a": boardA.privateKey },
+    ["did:guardian:example.com:board-a"],
+  );
+  const removeCid = await cidFor(removeBoardA);
+
+  // REQ-7.2-4: board-c joins a non-empty guardian set -- needs its own
+  // signature plus enough of the CURRENT committee (now just board-b,
+  // whose majority is itself) to meet addition_threshold.
+  const addBoardC = await signGuardianAdd(
+    { type: "guardian_add", incoming: "did:guardian:example.com:board-c", prev: removeCid },
+    { "did:guardian:example.com:board-c": boardC.privateKey, "did:guardian:example.com:board-b": boardB.privateKey },
+    ["did:guardian:example.com:board-c", "did:guardian:example.com:board-b"],
   );
 
   write(
     "valid",
-    "rotate_then_guardian_transfer",
+    "rotate_then_guardian_add_remove",
     [
       { cid: genesisCid, op: genesis },
       { cid: rotateCid, op: rotate },
-      { cid: await cidFor(transfer), op: transfer },
+      { cid: removeCid, op: removeBoardA },
+      { cid: await cidFor(addBoardC), op: addBoardC },
     ],
-    "Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.",
+    "Genesis, an ordinary operational-key rotation, then board-a steps down (voluntary guardian_remove) and board-c joins (guardian_add, needing board-b's own continuing approval) -- board-b itself is never removed or re-added.",
     {
       "did:guardian:example.com:board-a": boardA.publicKey,
       "did:guardian:example.com:board-b": boardB.publicKey,
@@ -339,7 +355,10 @@ async function signGenesis(
   );
 }
 
-// --- invalid: guardian_transfer missing the removed guardian's own signature ---
+// --- invalid: guardian_remove forging the removed co-guardian's own signature ---
+// WS-3.3/3.6 (audit): replaces the old guardian_transfer-based version --
+// same narrative (troy forges a signature claimed as jane's own), via
+// guardian_remove instead.
 {
   const genesis = await signGenesis(
     {
@@ -356,17 +375,14 @@ async function signGenesis(
     { [ward.publicKey]: ward.privateKey },
   );
   const genesisCid = await cidFor(genesis);
-  const transfer = await signGuardianTransfer(
-    { type: "guardian_transfer", outgoing: ["did:guardian:example.com:jane"], incoming: ["did:guardian:example.com:troy"], prev: genesisCid },
-    wardDid,
-    ["did:guardian:example.com:troy", "did:guardian:example.com:jane"],
-    { "did:guardian:example.com:jane": boardA.privateKey }, // troy forges jane's own removal signature
-  );
+  const unsigned = { type: "guardian_remove" as const, outgoing: "did:guardian:example.com:jane", prev: genesisCid };
+  const forgedProof = await createProof(unsecuredDocument(unsigned as any), "did:guardian:example.com:jane#key-0", boardA.privateKey); // troy's key, claimed as jane's own
+  const removeOp = { ...unsigned, proof: [forgedProof] };
   write(
     "invalid",
     "unilateral_coguardian_removal",
-    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(transfer), op: transfer }],
-    "REJECT: troy attempts to remove jane from a two-guardian set, but the proof claimed as jane's was produced with troy's own key, not jane's.",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(removeOp), op: removeOp }],
+    "REJECT: troy attempts to remove jane from a two-guardian set, but the proof claimed as jane's own voluntary removal (REQ-7.2-7a) was produced with troy's key, not jane's -- and troy alone can never meet the forced-removal path either (REQ-7.2-7b is unreachable at exactly two guardians).",
     { "did:guardian:example.com:troy": boardA.publicKey, "did:guardian:example.com:jane": boardB.publicKey, ...registrarKnownKeys },
     "reject",
   );

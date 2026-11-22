@@ -2,18 +2,18 @@
   "note": "REJECT: genesis carries no registrar attestation at all -- REQ-7.1-5 requires one on every genesis, not only when a registrar happens to include it.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com": "zDnaeUUZMo7AE34FsqNY57UMNdJDn7hdhbpyKUpghi6qxQ8n4"
+    "did:guardian:example.com": "zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmQQXgKFjvJMEDqt6CHA4BunjBRq5K5UCMnRPHNKU7JqFq",
+      "cid": "zQmSh5KhU4GdaeTC483VBJ9cCQJnFrJEkMvHTs9LetA6swW",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr"
+          "zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh"
         ],
         "services": {},
         "outgoing": [],
@@ -24,10 +24,10 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr#zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
+            "verificationMethod": "did:key:zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh#zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T23:03:21.996Z",
-            "proofValue": "z5aJWLq67bBLwYZiACJdiF32EQZGGsidiCLVPWXy9QppCV4UPELTpSw9Dbzr7HnaGxyQvggmL4RaCjYCB2PsKwYQk"
+            "created": "2026-11-22T00:35:38.330Z",
+            "proofValue": "z4BBPN5VsJQ7MKZKCpG7kXg93JLHo6WkUaJGu62LY4Y9BWFgsNPiZQtrcfq4GYdhNdTdG7UWSuoNffHAD6rQftfGb"
           }
         ]
       }

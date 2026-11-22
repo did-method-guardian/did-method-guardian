@@ -280,7 +280,7 @@ A conformant implementation must replay and verify every fixture in [`interop_te
 
 - `genesis_two_guardians.json`: Genesis establishing a two-member guardian set, both consenting.
 - `guardian_relinquish_unanimous.json`: Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.
-- `rotate_then_guardian_transfer.json`: Genesis, an ordinary operational-key rotation, then board-a steps down and board-c joins -- board-b continues and does not re-sign.
+- `rotate_then_guardian_add_remove.json`: Genesis, an ordinary operational-key rotation, then board-a steps down (voluntary `guardian_remove`) and board-c joins (`guardian_add`, needing board-b's own continuing approval) -- board-b itself is never removed or re-added.
 - `tombstone_any_single_key.json`: Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.
 - `guardian_add_zero_to_one.json`: A standalone `guardian_add` establishing the first guardian for a previously guardian-less ward, with both the incoming guardian's and the ward's signatures present (REQ-7.2-5).
 - `root_genesis_self_attestation.json`: the bare-domain root identity's own genesis, attested only by its own proof of possession -- no separate registrar attestation exists or is needed (Fix 7, REQ-7.1-5).

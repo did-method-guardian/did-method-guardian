@@ -2,20 +2,20 @@
   "note": "REJECT: establishing a guardian from zero needs both the incoming guardian's and the ward's signature (REQ-7.2-5) -- here only the incoming guardian signed.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:puppet2": "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
-    "did:guardian:example.com:board": "zDnaee7EnivgAJFpNmXXDFo37kjkV5UEu2fo4UirwvFDro7eG",
-    "did:guardian:example.com": "zDnaeUUZMo7AE34FsqNY57UMNdJDn7hdhbpyKUpghi6qxQ8n4"
+    "did:guardian:example.com:puppet2": "zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh",
+    "did:guardian:example.com:board": "zDnaesZZKivQsdjPoC8358kDEszwHrsM6xneHD3yEHoTbGgEi",
+    "did:guardian:example.com": "zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmS2zskVGaGLPghHyxz1nXvGaYPKKiHLWKcwjGynMtR4k9",
+      "cid": "zQmTXjCq9mpgwMWjmBNGeE47diW4ufWk6GYXjt5VC2Gr3DZ",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:puppet2",
         "name": "puppet2",
         "operationalKeys": [
-          "zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr"
+          "zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh"
         ],
         "services": {},
         "outgoing": [],
@@ -26,36 +26,36 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr#zDnaezJ8cRQv5itzpLGzEW9frTtjDFyofYZiF4PJz7AmnAkHr",
+            "verificationMethod": "did:key:zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh#zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T23:03:21.993Z",
-            "proofValue": "z2MvRqZW1jxWVjXHt9SJfS7vKvio8RpRidECDAqXt66L7eHzLJ43MWnyfh6BcD2rx3TxYwFimTHx9RZTQcJC2BWRt"
+            "created": "2026-11-22T00:35:38.326Z",
+            "proofValue": "z4jqodAnBSegEyATTx95Jp6Lh9FHpKVkx1PtdG6LkCDYpFqnAwDQ2EVrt3XAwNAkjpiGwi2TXonv7S9Z5vNikxQyf"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T23:03:21.993Z",
-            "proofValue": "z4hwKFCQqGsaKquhMbo3PjZYWpkUBg1NzTDzCw22XC2uNUXuVaMfh39NrmfX5Vs31Sm48bHhXCoTjkhS6JZv9dWXW"
+            "created": "2026-11-22T00:35:38.326Z",
+            "proofValue": "z2cMZCuTuaFWbHRzKYmgc5wid2uWeohSb8w3LF6sCbPpecoQ2nqxWnvuHSW9YVAbZzJByRQ2Yn2hkrV6syFuXYRNo"
           }
         ]
       }
     },
     {
-      "cid": "zQmVKu2h85vAt2c8yKF9iBdipCjdufbWb5gor9ANZBX9aWs",
+      "cid": "zQmTbEWpwV7esShXvaKfyekjUccGq1Dm48fAQC5GRpBmEKy",
       "op": {
         "type": "guardian_add",
         "incoming": "did:guardian:example.com:board",
-        "prev": "zQmS2zskVGaGLPghHyxz1nXvGaYPKKiHLWKcwjGynMtR4k9",
+        "prev": "zQmTXjCq9mpgwMWjmBNGeE47diW4ufWk6GYXjt5VC2Gr3DZ",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-21T23:03:21.993Z",
-            "proofValue": "z2JreZ1N5L1RJqKu7XT135fQTzMUBkncn7MTpnN5BQ4mBpX4gEoAz8Xq9QnAdeAPPJKYPyc3jVypu29eQg2RiY31p"
+            "created": "2026-11-22T00:35:38.326Z",
+            "proofValue": "z3L4wzgJVhEtmm7cqq4aiTMdwReZNgBEFRsKC7az7Efkj6hYnWLshAEkMy37eoL6qUqcKHmGxirAxa8mfxvocUV7M"
           }
         ]
       }
