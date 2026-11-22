@@ -8,15 +8,15 @@ import {
   signGuardianAdd,
 } from "@did-guardian/lib";
 import type { Did, GuardianAddOp, CustodialRotateOp, CustodialTombstoneOp } from "@did-guardian/lib";
-import { adopt, fetchLog, submitOperation } from "../registrar-client.js";
+import { adopt, fetchLog, submitOperation, confirmKeyIsCurrent } from "../registrar-client.js";
 import { loadKey, saveKey, type StoredKey } from "../keystore.js";
 import { loadSession } from "../state.js";
 
-async function currentHead(did: Did): Promise<{ headCid: string; guardianCount: number }> {
+async function currentHead(did: Did): Promise<{ headCid: string; guardianCount: number; services: Record<string, { type: string; endpoint: string }> }> {
   const log = await fetchLog(did);
   if (log.length === 0) throw new Error(`no operations found for ${did} -- is it registered?`);
   const state = replay(did, log);
-  return { headCid: log[log.length - 1].cid, guardianCount: state.guardians.length };
+  return { headCid: log[log.length - 1].cid, guardianCount: state.guardians.length, services: state.services };
 }
 
 /** REQ-12-4: an incoming guardian's genesis CID, fetched live if resolvable. Never throws -- a guardian that's still a draft (created offline, not yet accepted anywhere) just doesn't get an anchor recorded, same as the spec's SHOULD rather than MUST. */
@@ -78,6 +78,12 @@ export function registerGuardianCommand(program: Command): void {
       }
       const wardKey = await loadKey(opts.wardKey, opts);
       const guardianKey = await loadKey(opts.guardianKey, opts);
+      // WS-2.5 (audit): a stale local key for either party signs
+      // successfully (nothing stops a client from producing a signature
+      // with any key it holds) but gets rejected by the registrar later,
+      // confusingly -- catch it here instead, with a clear reason.
+      await confirmKeyIsCurrent(wardDid, wardKey.publicKey);
+      await confirmKeyIsCurrent(guardianDid, guardianKey.publicKey);
       const anchor = opts.guardianAnchor ?? (await bestEffortAnchor(guardianDid));
       const op = await signGuardianAdd(
         { type: "guardian_add", incoming: guardianDid, prev: headCid, anchor },
@@ -96,8 +102,15 @@ export function registerGuardianCommand(program: Command): void {
     .option("--prev <cid>", "nullification (REQ-6-8) -- name a cid earlier than the current head to roll back a fraudulent rotation accepted less than 72h ago, instead of just rotating forward from it (default: the current head)")
     .option("--submit", "actually submit the signed operation to the registrar (default: print it only)")
     .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; newKey?: string; prev?: string; submit?: boolean }) => {
-      const prev = opts.prev ?? (await currentHead(wardDid)).headCid;
+      // WS-2.6 (audit): services must carry over from the ward's own
+      // current state -- custodialRotateOp's services field REPLACES the
+      // whole map (it's not a merge/patch), so a hardcoded {} here
+      // silently erased every service entry a ward had configured (e.g.
+      // email forwarding) the moment a guardian ever recovered its key.
+      const { headCid, services } = await currentHead(wardDid);
+      const prev = opts.prev ?? headCid;
       const guardianKey = await loadKey(opts.guardianKey, opts);
+      await confirmKeyIsCurrent(guardianDid, guardianKey.publicKey); // WS-2.5
       let newKey: StoredKey;
       if (opts.newKey) {
         newKey = await loadKey(opts.newKey, opts);
@@ -113,7 +126,7 @@ export function registerGuardianCommand(program: Command): void {
         {
           type: "custodial_rotate",
           operationalKeys: [newKey.publicKey],
-          services: {},
+          services,
           prev,
         },
         { [guardianDid]: guardianKey.privateKey },
@@ -133,6 +146,7 @@ export function registerGuardianCommand(program: Command): void {
     .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; submit?: boolean; yes?: boolean }) => {
       const { headCid } = await currentHead(wardDid);
       const guardianKey = await loadKey(opts.guardianKey, opts);
+      await confirmKeyIsCurrent(guardianDid, guardianKey.publicKey); // WS-2.5
       const op = await signCustodialTombstone(
         { type: "custodial_tombstone", prev: headCid },
         { [guardianDid]: guardianKey.privateKey },

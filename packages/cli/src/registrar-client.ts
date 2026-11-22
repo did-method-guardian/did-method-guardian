@@ -2,7 +2,7 @@
 // registrar API spec §1/§2) -- not part of @did-guardian/lib (that package
 // deliberately stops at "operate on a log already in hand," see resolve.ts's
 // note), so this CLI owns the live-HTTP half.
-import { wellKnownPath, parseDid } from "@did-guardian/lib";
+import { wellKnownPath, parseDid, replay } from "@did-guardian/lib";
 import type { DataIntegrityProof, Did, LogEntry, LogHeadStatement, Operation } from "@did-guardian/lib";
 
 export interface RegisterResult {
@@ -138,4 +138,33 @@ export async function adopt(wardDid: Did, sessionCookie: string): Promise<{ acce
   const body = (await res.json()) as { error?: string };
   if (!res.ok) return { accepted: false, reason: body.error ?? `HTTP ${res.status}` };
   return { accepted: true };
+}
+
+/**
+ * WS-2.5 (audit): before signing AS `did` with a locally-saved key, check
+ * that key is actually still `did`'s own current operational key --
+ * without this, a stale local key (the ward rotated away from it, on
+ * another device, or a guardian's own key was itself recovered elsewhere)
+ * silently signs anyway; nothing stops a client from PRODUCING a
+ * signature with any key it holds, so the only way to catch this before
+ * a confusing rejection from the registrar is to resolve and compare
+ * first. Throws with a clear, specific reason on an actual mismatch;
+ * resolves silently (never throws) when `did` can't be resolved at all --
+ * that's the ordinary case for an identity that's a still-unpublished
+ * draft, which this check has no business blocking.
+ */
+export async function confirmKeyIsCurrent(did: Did, publicKey: string): Promise<void> {
+  let log: LogEntry[];
+  try {
+    log = await fetchLog(did);
+  } catch {
+    return; // not resolvable -- most likely just not published yet; nothing to compare against
+  }
+  if (log.length === 0) return;
+  const state = replay(did, log);
+  if (!state.operationalKeys.includes(publicKey)) {
+    throw new Error(
+      `the local key you're about to sign as ${did} with is not that identity's current operational key -- it was probably rotated away from elsewhere. Resolve ${did} again to see its actual current key before retrying.`,
+    );
+  }
 }

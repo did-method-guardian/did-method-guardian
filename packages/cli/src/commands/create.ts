@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { generateKeypair, signCustodialCreate, cidFor } from "@did-guardian/lib";
 import { saveKey, loadKey } from "../keystore.js";
-import { submitOperation } from "../registrar-client.js";
+import { submitOperation, confirmKeyIsCurrent } from "../registrar-client.js";
 
 export function registerCreateCommand(program: Command): void {
   program
@@ -25,7 +25,17 @@ export function registerCreateCommand(program: Command): void {
 
       const did = `did:guardian:${domain}:${name}`;
       const incoming = opts.guardian ? [opts.guardian] : [];
-      const incomingKeys = opts.guardian && opts.guardianKey ? { [opts.guardian]: (await loadKey(opts.guardianKey, opts)).privateKey } : {};
+      let incomingKeys: Record<string, string> = {};
+      if (opts.guardian && opts.guardianKey) {
+        const guardianKey = await loadKey(opts.guardianKey, opts);
+        // WS-2.5 (audit): best-effort only (never throws if --guardian
+        // isn't resolvable at all -- the ordinary case for a guardian
+        // that's itself still an unpublished draft), but if it IS
+        // resolvable, a stale local key for it should be caught here
+        // rather than surfacing as a confusing rejection later.
+        await confirmKeyIsCurrent(opts.guardian, guardianKey.publicKey);
+        incomingKeys = { [opts.guardian]: guardianKey.privateKey };
+      }
       const genesis = await signCustodialCreate(
         {
           type: "custodial_create",

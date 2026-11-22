@@ -70,6 +70,15 @@ export function registerKeyCommand(program: Command): void {
       } else {
         label = `${wardDid}-self-held`;
         newKey = await generateKeypair();
+        // WS-2.7 (audit): saved BEFORE submitting, not after -- once the
+        // server accepts this, this registrar can no longer sign on
+        // wardDid's behalf at all (that's take-custody's entire point),
+        // so if the process died between a successful submission and
+        // saving the key, this identity would be permanently locked out
+        // with no copy of its own new key anywhere. An unused generated
+        // key left on disk because the submission below never happens or
+        // gets rejected is harmless by comparison.
+        await saveKey(label, newKey, opts);
       }
       // REQ-7.2-12: this registrar will never hold newKey's private half,
       // so it can't prove possession of it the way it does for a
@@ -92,7 +101,6 @@ export function registerKeyCommand(program: Command): void {
       const keyProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
       const result = await takeCustody(wardDid, session.cookie, newKey.publicKey, keyProof, opts.force);
       if (!result.accepted) throw new Error(result.reason);
-      if (!opts.newKey) await saveKey(label, newKey, opts);
       console.log(`${wardDid} now holds its key${opts.newKey ? "" : ` (saved as "${label}")`}. This registrar can no longer sign on its behalf.`);
       for (const warning of result.warnings) console.log(`Warning: ${warning}`);
     });
