@@ -15,6 +15,7 @@
     "prev": { "const": null, "description": "REQ-7.1-2: MUST be null." },
     "creator": { "type": "string", "description": "REQ-7.1-4: the DID of whichever party initiated this registration. Carries no signature requirement." },
     "policy": { "$ref": "../guardian-policy.schema.json", "description": "REQ-7.1-7: optional full or partial GuardianPolicy proposed at genesis." },
+    "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "WS-5.8: optional, declarative list of other identifiers this one claims a relationship with (spec §9's 'link, don't move' domain-migration story)." },
     "proof": {
       "type": "array",
       "items": { "$ref": "../data-integrity-proof.schema.json" },

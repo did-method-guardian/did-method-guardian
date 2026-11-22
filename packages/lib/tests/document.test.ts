@@ -43,6 +43,62 @@ test("replay resolves genesis correctly, guardians kept method-internal", () => 
   assert.equal((doc as any).guardians, undefined, "guardians must never appear in the presented DID Document");
 });
 
+test("audit WS-5.8: alsoKnownAs declared at genesis surfaces into the resolved document, not hardcoded to []", () => {
+  const genesis: CustodialCreateOp = {
+    type: "custodial_create",
+    did: "did:guardian:fred:example:com",
+    name: "fred",
+    operationalKeys: ["op1-pubkey"],
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    creator: "did:guardian:fred:example:com",
+    alsoKnownAs: ["did:web:fred.example.com"],
+    proof: [fakeProof("did:key:op1-pubkey#op1-pubkey")],
+  };
+
+  const state = replay("did:guardian:fred:example:com", [entry(genesis, "cid0")]);
+  assert.deepEqual(state.alsoKnownAs, ["did:web:fred.example.com"]);
+  assert.deepEqual(toDidDocument(state).alsoKnownAs, ["did:web:fred.example.com"]);
+});
+
+test("audit WS-5.8: a custodial_rotate that doesn't mention alsoKnownAs leaves the prior value untouched; one that does replaces it wholesale", () => {
+  const genesis: CustodialCreateOp = {
+    type: "custodial_create",
+    did: "did:guardian:fred:example:com",
+    name: "fred",
+    operationalKeys: ["op1-pubkey"],
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+    creator: "did:guardian:fred:example:com",
+    alsoKnownAs: ["did:web:fred.example.com"],
+    proof: [fakeProof("did:key:op1-pubkey#op1-pubkey")],
+  };
+  const silentRotate: CustodialRotateOp = {
+    type: "custodial_rotate",
+    operationalKeys: ["op2-pubkey"],
+    services: {},
+    prev: "cid0",
+    proof: [fakeProof("did:guardian:fred:example:com#key-0")],
+  };
+  const stateAfterSilentRotate = replay("did:guardian:fred:example:com", [entry(genesis, "cid0"), entry(silentRotate, "cid1")]);
+  assert.deepEqual(stateAfterSilentRotate.alsoKnownAs, ["did:web:fred.example.com"], "a rotate that never mentions alsoKnownAs must not silently clear it");
+
+  const explicitRotate: CustodialRotateOp = {
+    type: "custodial_rotate",
+    operationalKeys: ["op2-pubkey"],
+    services: {},
+    alsoKnownAs: [],
+    prev: "cid0",
+    proof: [fakeProof("did:guardian:fred:example:com#key-0")],
+  };
+  const stateAfterExplicitRotate = replay("did:guardian:fred:example:com", [entry(genesis, "cid0"), entry(explicitRotate, "cid1")]);
+  assert.deepEqual(stateAfterExplicitRotate.alsoKnownAs, [], "a rotate that explicitly sets alsoKnownAs must replace the prior value wholesale");
+});
+
 test("REQ-3-2: authentication, assertionMethod, and capabilityInvocation all reference every operational key's own verificationMethod", () => {
   const genesis: CustodialCreateOp = {
     type: "custodial_create",

@@ -177,6 +177,8 @@ export interface CustodialCreateOp {
   creator?: Did;
   /** v0.2, REQ-7.1-7. */
   policy?: Partial<GuardianPolicy>;
+  /** WS-5.8 (audit, DECIDED): the "link, don't move" domain-migration story (spec §9) names alsoKnownAs as its own mechanism, but nothing ever let a ward actually set it until now. Optional; omitted or absent means none declared yet. */
+  alsoKnownAs?: string[];
 }
 
 export interface CustodialRotateOp {
@@ -185,6 +187,8 @@ export interface CustodialRotateOp {
   services: Record<string, { type: string; endpoint: string }>;
   prev: string;
   proof: DataIntegrityProof[]; // REQ-7.2-12's proof of possession for each new key, plus either the ward's own current-key proof (REQ-7.2-1a) or enough guardians' (REQ-7.2-1b)
+  /** WS-5.8 (audit, DECIDED): same field as CustodialCreateOp's own. Optional and, unlike operationalKeys/services, NOT replaced wholesale when absent -- an ordinary rotation that has no reason to touch alsoKnownAs at all shouldn't have to carry forward whatever it was already set to just to avoid silently wiping it. Present only when the ward actually intends to change it, and replaces the prior value wholesale when it is. */
+  alsoKnownAs?: string[];
 }
 
 /** v0.2. Adds exactly one new guardian -- REQ-7.2-3/4/5. */
@@ -261,4 +265,6 @@ export interface ResolvedState {
   /** The DID that attested genesis (REQ-7.1-5's registrar proof entry), for L1 anchor/registrar-key pinning -- the attestation itself lives in genesis's own `proof` array within the log, not duplicated here. */
   registrarDid?: Did;
   deactivated: boolean;
+  /** WS-5.8 (audit, DECIDED): the "link, don't move" domain-migration story's own mechanism (spec §9) -- a declarative list of other identifiers this one claims a relationship with, surfaced verbatim into the resolved document's own `alsoKnownAs`. */
+  alsoKnownAs: string[];
 }

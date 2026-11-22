@@ -168,6 +168,7 @@ export function replay(did: Did, log: LogEntry[]): ResolvedState {
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY, ...(genesis.policy ?? {}) } as GuardianPolicy,
     registrarDid: extractRegistrarDid(genesis),
     deactivated: false,
+    alsoKnownAs: [...(genesis.alsoKnownAs ?? [])],
   };
 
   for (const entry of chain.slice(1)) {
@@ -236,7 +237,12 @@ export function toDidDocument(state: ResolvedState) {
       type: svc.type,
       serviceEndpoint: svc.endpoint,
     })),
-    alsoKnownAs: [],
+    // WS-5.8 (audit, DECIDED): previously always hardcoded to [] here,
+    // regardless of what the log itself declared -- the "link, don't move"
+    // domain-migration story (spec §9) names alsoKnownAs as its own
+    // mechanism, but nothing ever surfaced a declared value into the
+    // actual resolved document until now.
+    alsoKnownAs: [...state.alsoKnownAs],
     // WS-1.16 (audit): state.deactivated was already computed by replay()
     // but never surfaced anywhere in the presented document -- a resolver
     // had no way to learn REQ-6-5's own deactivated state short of

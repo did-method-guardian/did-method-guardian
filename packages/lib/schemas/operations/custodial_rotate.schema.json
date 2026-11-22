@@ -8,6 +8,7 @@
     "type": { "const": "custodial_rotate" },
     "operationalKeys": { "type": "array", "items": { "type": "string" } },
     "services": { "type": "object" },
+    "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "WS-5.8: optional. When present, replaces the prior value wholesale; when absent, the prior value carries forward unchanged -- unlike operationalKeys/services, an ordinary rotation with no reason to touch it shouldn't have to restate it just to avoid silently clearing it." },
     "prev": { "type": "string" },
     "proof": {
       "type": "array",

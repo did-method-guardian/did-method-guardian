@@ -32,6 +32,7 @@ function makeState(overrides: Partial<ResolvedState> = {}): ResolvedState {
     guardians: [],
     guardianPolicy: { ...DEFAULT_GUARDIAN_POLICY },
     deactivated: false,
+    alsoKnownAs: [],
     ...overrides,
   };
 }

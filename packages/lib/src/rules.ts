@@ -208,10 +208,16 @@ export const rotateRule: OperationRule<CustodialRotateOp> = {
   // satisfying set, not just however many the threshold strictly needs) is
   // the safe direction to err in here.
   requiredSigners: async (_op, ctx) => [ctx.wardDid, ...(await liveGuardians(ctx.state, ctx.isGuardianLive))],
+  // WS-5.8 (audit, DECIDED): alsoKnownAs is NOT replaced wholesale the way
+  // operationalKeys/services are -- unlike those two (always present,
+  // required fields), it's optional, and an ordinary rotation that has no
+  // reason to touch it shouldn't have to carry the prior value forward
+  // itself just to avoid silently wiping it out.
   applyToState: (op, state) => ({
     ...state,
     operationalKeys: [...op.operationalKeys],
     services: { ...op.services },
+    alsoKnownAs: op.alsoKnownAs !== undefined ? [...op.alsoKnownAs] : state.alsoKnownAs,
   }),
 };
 
