@@ -1,591 +1,401 @@
-import { canonicalize, sha256Bytes, signRawBytes, verifyRawBytes, contentRef, signPayload, verifyPayload } from "./crypto.js";
-import { meetsThreshold, requiredTransferSigners } from "./quorum.js";
-import { parseDid } from "./resolve.js";
-import { DEFAULT_GUARDIAN_POLICY, validatePolicy } from "./types.js";
-import type {
-  CustodialCreateOp,
-  CustodialRotateOp,
-  CustodialTombstoneOp,
-  DataIntegrityProof,
-  Did,
-  GuardianAddOp,
-  GuardianPolicy,
-  GuardianRelinquishOp,
-  GuardianRemoveOp,
-  GuardianTransferOp,
-  Operation,
-  PolicyUpdateOp,
-} from "./types.js";
+import { canonicalize, contentRef, sha256Bytes, signRawBytes, verifyRawBytes } from "./crypto.js";
+import type { DataIntegrityProof, Did, Key, Operation, Service } from "./types.js";
 
-/**
- * Resolves a DID's authoritative public key(s) -- live, never a frozen
- * snapshot (spec §4.8). Async: a real deployment resolves external DIDs
- * over the network (spec §5), not just from local state.
- *
- * `asOf`, when given, asks for whichever key(s) were valid for that DID at
- * that point in time -- REQ-4-2's own point-in-time requirement for a
- * guardian signature, determined by replaying that guardian's own log up to
- * `asOf` rather than asking what its key is right now. Omitted means "now"
- * -- the ordinary case for a signature that's verified immediately, in the
- * same call it was produced in (every self-contained convenience endpoint).
- * A signature collected asynchronously (registrar API spec §3) and verified
- * again later, after its own signer has since rotated, is exactly the case
- * this parameter exists for.
- */
-export type KeyResolver = (did: Did, asOf?: Date) => string[] | undefined | Promise<string[] | undefined>;
-
-/**
- * Fix 5: the content every proof in an operation's `proof` set signs --
- * the operation with `proof` itself removed. Per the W3C Data Integrity
- * spec's own proof-set semantics (confirmed directly against the spec
- * text, not assumed): every proof in a set signs the SAME
- * unsecuredDocument, with every proof removed -- never "every other
- * proof," which would make each proof's signing input depend on what
- * order proofs were added in.
- *
- * WS-1.10 (audit): `sigs` is excluded too, but ONLY for
- * `guardian_transfer` (v0.1, replay-only -- see its own comment in
- * types.ts) -- that's the one type whose own, separate signature scheme
- * (signPayload/verifyPayload, not a DataIntegrityProof) needs `sigs`
- * self-excluded from its signing input, the same way `proof` is self-
- * excluded for every current type. Stripping `sigs` unconditionally (as
- * a previous version of this function did) meant any OTHER operation
- * type could carry an arbitrary extra `sigs` field completely outside
- * both its cid (cidFor delegates to this same function) and every
- * signature's own coverage -- unauthenticated data riding along for
- * free, bound to neither.
- */
-export function unsecuredDocument<T extends { proof?: unknown; sigs?: unknown; type?: unknown }>(op: T): Omit<T, "proof" | "sigs"> {
-  const { proof: _proof, ...rest } = op as any;
-  if (rest.type === "guardian_transfer") {
-    const { sigs: _sigs, ...withoutSigs } = rest;
-    return withoutSigs;
-  }
+/** REQ-5-6: strip `proof`, then the result is hashed in canonical form. Accepts a partial operation with no `proof` member yet -- building the content a proof will sign over -- as well as a complete one. */
+export function unsecuredDocument<T extends object>(op: T): Omit<T, "proof"> {
+  const { proof: _proof, ...rest } = op as T & { proof?: unknown };
   return rest;
 }
 
-/**
- * WS-5.4 (audit, DECIDED): `capabilityInvocation` for a ward/guardian/
- * registrar signature authorizing an operation (including a proof of
- * possession -- the key it names is itself becoming, or already is, a
- * `capabilityInvocation` verification method per REQ-3-2), `assertionMethod`
- * for a registrar's genesis attestation, acceptance receipt, or log-head
- * statement -- a statement ABOUT the log, never an action against it.
- * `createProof`'s default covers every operation-signing call site in this
- * file (the overwhelming majority); the few assertionMethod producers
- * (signRegistrarAttestation, signReceipt, signLogHeadStatement) pass it
- * explicitly.
- */
-const ALLOWED_PROOF_PURPOSES = ["assertionMethod", "capabilityInvocation"] as const;
-type ProofPurpose = (typeof ALLOWED_PROOF_PURPOSES)[number];
-
-/**
- * ecdsa-jcs-2019 (W3C Data Integrity ECDSA Cryptosuites v1.0): signing
- * input = SHA-256(JCS(proof config, no proofValue)) || SHA-256(JCS(the
- * unsecured document)) -- raw hash bytes concatenated, not re-hashed
- * before being handed to ECDSA-with-SHA-256 itself (which hashes its
- * own input as part of the ordinary signing operation, one level
- * deeper). Verified directly against the W3C spec text, not assumed.
- */
-export async function createProof(
-  unsecuredDoc: unknown,
-  verificationMethod: string,
-  privateKeyB64url: string,
-  created: string = new Date().toISOString(),
-  proofPurpose: ProofPurpose = "capabilityInvocation",
-): Promise<DataIntegrityProof> {
-  // WS-3.1 (audit): canonicalize now checks JCS-safety itself (crypto.ts), on everything it's given -- no separate call needed here.
-  const proofConfig = { type: "DataIntegrityProof" as const, cryptosuite: "ecdsa-jcs-2019" as const, verificationMethod, proofPurpose, created };
-  const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
-  const documentHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));
-  const signingInput = new Uint8Array(proofConfigHash.length + documentHash.length);
-  signingInput.set(proofConfigHash, 0);
-  signingInput.set(documentHash, proofConfigHash.length);
-  const proofValue = await signRawBytes(signingInput, privateKeyB64url);
-  return { ...proofConfig, proofValue };
+/** REQ-5-6: the operation hash. */
+export async function operationHash(op: Operation): Promise<string> {
+  return contentRef(unsecuredDocument(op));
 }
 
-const PROOF_FIELDS = ["type", "cryptosuite", "verificationMethod", "proofPurpose", "created", "proofValue"] as const;
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
+const PROOF_CONFIG = { type: "DataIntegrityProof" as const, cryptosuite: "ecdsa-jcs-2019" as const, proofPurpose: "capabilityInvocation" as const };
 
 /**
- * WS-1.9 (audit): every DataIntegrityProof's own fields, checked before
- * any cryptographic work. type/cryptosuite/proofPurpose/created aren't
- * just inputs the signing-input hash happens to cover (a mismatch there
- * already fails the signature on its own, since createProof's signer
- * hashed the real values) -- they carry meaning under the W3C Data
- * Integrity model, and createProof never produces anything but this
- * fixed shape. Without this, a proof with an unrecognized cryptosuite, a
- * proofPurpose other than one of this method's two allowed values (WS-5.4),
- * a created that isn't a real ISO-8601 UTC instant, or an unexpected extra
- * field would only ever be caught indirectly, by relying on the signature
- * check to happen to fail -- which it does today only because nothing has
- * a reason to sign a different shape, not because anything actually checks
- * for one.
- *
- * This checks only that `proofPurpose` is one of the two values this
- * method ever produces (WS-5.4) -- not that it's the SPECIFIC one a given
- * proof's own role requires (an operation signature using
- * `capabilityInvocation`, a registrar attestation/receipt/log-head using
- * `assertionMethod`). That role-specific check would need every caller of
- * this function to say which role it expects, which no caller does today;
- * left as a known, documented gap rather than guessed at here.
+ * REQ-5-10: ecdsa-jcs-2019's signing input is SHA-256(JCS(proof config))
+ * concatenated with SHA-256(JCS(the secured document)) -- the secured
+ * document is the operation with `proof` removed (REQ-5-6's own
+ * definition, reused here: the operation hash and the signing input both
+ * hash the proof-stripped operation in canonical form).
  */
-export function validateProofShape(proof: DataIntegrityProof): { valid: boolean; reason?: string } {
-  if (proof.type !== "DataIntegrityProof") return { valid: false, reason: `proof.type must be "DataIntegrityProof"` };
-  if (proof.cryptosuite !== "ecdsa-jcs-2019") return { valid: false, reason: `proof.cryptosuite must be "ecdsa-jcs-2019"` };
-  if (!ALLOWED_PROOF_PURPOSES.includes(proof.proofPurpose as ProofPurpose)) {
-    return { valid: false, reason: `proof.proofPurpose must be one of: ${ALLOWED_PROOF_PURPOSES.join(", ")}` };
+async function signingInput(unsecuredDoc: unknown, verificationMethod: string): Promise<Uint8Array> {
+  const proofConfig = { ...PROOF_CONFIG, verificationMethod };
+  const configHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
+  const docHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));
+  const input = new Uint8Array(configHash.length + docHash.length);
+  input.set(configHash, 0);
+  input.set(docHash, configHash.length);
+  return input;
+}
+
+/** REQ-5-9/REQ-5-10/REQ-5-11: builds a proof over `unsecuredDoc` for `verificationMethod`. */
+export async function createProof(unsecuredDoc: unknown, verificationMethod: string, privateKeyB64url: string): Promise<DataIntegrityProof> {
+  const proofValue = await signRawBytes(await signingInput(unsecuredDoc, verificationMethod), privateKeyB64url);
+  return { ...PROOF_CONFIG, verificationMethod, proofValue };
+}
+
+/** REQ-5-13: the signature verifies with `publicKey`. Also used for REQ-5-14 clause 5, once the caller has resolved the key a DID reference names. */
+export async function verifyProofSignature(unsecuredDoc: unknown, proof: DataIntegrityProof, publicKey: Key): Promise<boolean> {
+  return verifyRawBytes(await signingInput(unsecuredDoc, proof.verificationMethod), proof.proofValue, publicKey);
+}
+
+/** REQ-5-12: a key reference. */
+export interface KeyReference {
+  kind: "key";
+  key: Key;
+}
+
+/** REQ-5-12: a DID reference. */
+export interface DidReference {
+  kind: "did";
+  did: Did;
+  versionId: string;
+  index: number;
+}
+
+const KEY_REFERENCE_RE = /^did:key:(z[^#]+)#(z[^#]+)$/;
+const DID_REFERENCE_RE = /^(did:guardian:[^?#]+)\?versionId=([^#]+)#key-(\d+|0)$/;
+
+/** REQ-5-12: parses a `verificationMethod`, or returns `undefined` if it matches neither form. */
+export function parseVerificationMethod(vm: string): KeyReference | DidReference | undefined {
+  const keyMatch = KEY_REFERENCE_RE.exec(vm);
+  if (keyMatch) {
+    if (keyMatch[1] !== keyMatch[2]) return undefined;
+    return { kind: "key", key: keyMatch[1] };
   }
-  if (typeof proof.verificationMethod !== "string" || proof.verificationMethod.length === 0) {
-    return { valid: false, reason: "proof.verificationMethod must be a non-empty string" };
-  }
-  if (typeof proof.created !== "string" || !ISO_INSTANT.test(proof.created)) {
-    return { valid: false, reason: "proof.created must be an ISO-8601 UTC instant" };
-  }
-  if (typeof proof.proofValue !== "string" || proof.proofValue.length === 0) {
-    return { valid: false, reason: "proof.proofValue must be a non-empty string" };
-  }
-  for (const key of Object.keys(proof)) {
-    if (!(PROOF_FIELDS as readonly string[]).includes(key)) return { valid: false, reason: `proof has an unexpected field: ${key}` };
-  }
-  return { valid: true };
-}
-
-/** The inverse of createProof, checked against one specific candidate public key -- the caller (verifySignerProof, PoP checks below) decides which key(s) are worth trying. */
-async function verifyProof(unsecuredDoc: unknown, proof: DataIntegrityProof, publicKeyMultikey: string): Promise<boolean> {
-  try {
-    if (!validateProofShape(proof).valid) return false;
-    // WS-3.1 (audit): canonicalize checks JCS-safety itself now, on
-    // proofConfig too (destructured straight from the wire-supplied
-    // `proof`, fully attacker-controlled) -- not just on unsecuredDoc as
-    // a previous version of this function only ever did.
-    const { proofValue, ...proofConfig } = proof;
-    const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
-    const documentHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));
-    const signingInput = new Uint8Array(proofConfigHash.length + documentHash.length);
-    signingInput.set(proofConfigHash, 0);
-    signingInput.set(documentHash, proofConfigHash.length);
-    return await verifyRawBytes(signingInput, proofValue, publicKeyMultikey);
-  } catch {
-    return false;
-  }
-}
-
-export function verificationMethodDid(vm: string): Did {
-  const i = vm.indexOf("#");
-  return i >= 0 ? vm.slice(0, i) : vm;
-}
-
-/**
- * Audit WS-5.3: a `#key-<N>` fragment is this method's own `verificationMethod`
- * id for an ordinary signer (REQ-3-1, REQ-6-7) -- it names WHICH of that
- * signer's current keys produced the proof, not merely which DID. Returns
- * `null` for anything that doesn't parse as exactly that shape (no fragment
- * at all, a non-numeric fragment, a negative or non-integer index, or a
- * `did:key:...` self-contained PoP id, which this never applies to) --
- * callers MUST treat `null` as "this proof can never be matched to a key by
- * index," never as index 0.
- */
-export function keyIndexFromVerificationMethod(vm: string): number | null {
-  const i = vm.indexOf("#key-");
-  if (i < 0) return null;
-  const rest = vm.slice(i + 5);
-  if (!/^\d+$/.test(rest)) return null;
-  return Number(rest);
-}
-
-/**
- * REQ-7.1-8/REQ-7.2-12: a key proving it holds itself, via a
- * self-contained `did:key:<multikey>#<multikey>` verification method --
- * no DID resolution needed, the public key the proof is checked against
- * is embedded in the verification method itself.
- */
-export function popVerificationMethod(multikeyPublicKey: string): string {
-  return `did:key:${multikeyPublicKey}#${multikeyPublicKey}`;
-}
-
-function findPopProof(proofs: DataIntegrityProof[], multikeyPublicKey: string): DataIntegrityProof | undefined {
-  return proofs.find((p) => p.verificationMethod === popVerificationMethod(multikeyPublicKey));
-}
-
-/**
- * Checks every entry in `keys` carries a valid proof of possession in
- * `proofs` -- each proof's own `did:key:` verification method embeds
- * the key it's checked against directly, so this never resolves
- * anything externally (an operational key isn't an independently
- * resolvable identity the way a guardian DID is).
- */
-export async function verifyPop(unsecuredDoc: unknown, keys: string[], proofs: DataIntegrityProof[]): Promise<{ valid: boolean; reason?: string }> {
-  for (const pubKey of keys) {
-    const proof = findPopProof(proofs, pubKey);
-    if (!proof || !(await verifyProof(unsecuredDoc, proof, pubKey))) {
-      return { valid: false, reason: `missing or invalid proof of possession for operational key ${pubKey}` };
-    }
-  }
-  return { valid: true };
-}
-
-/**
- * Finds a proof in `proofs` whose verification method names `did`, and
- * checks it against `did`'s live-resolved key(s) -- as of `asOf` if
- * given (REQ-4-2). More than one proof can name the same `did` (a
- * resolver returning several candidate keys is handled the same way);
- * the first one that verifies wins.
- */
-export async function verifySignerProof(unsecuredDoc: unknown, proofs: DataIntegrityProof[], did: Did, resolve: KeyResolver, asOf?: Date): Promise<boolean> {
-  if (!proofs.some((p) => verificationMethodDid(p.verificationMethod) === did)) return false;
-  const keys = await resolve(did, asOf);
-  if (!keys || keys.length === 0) return false;
-  return verifyAgainstKeys(unsecuredDoc, proofs, did, keys);
-}
-
-/**
- * The shared inner loop `verifySignerProof` uses once it has a key list in
- * hand -- also exported directly for callers that already KNOW the right
- * key set without needing to resolve it at all. Audit WS-1.1/1.2: the
- * ward's own current operational keys are exactly this case -- they're
- * already present in `ctx.state.operationalKeys` (the very state an
- * operation is being verified against), so resolving them a second time
- * through an external resolver function is both unnecessary and a risk
- * that resolver might disagree with `ctx.state` (the stale-cached-column
- * bug this closes). `proofs` is the operation's own full proof array --
- * this filters by `did` itself, same as `verifySignerProof`.
- */
-export async function verifyAgainstKeys(unsecuredDoc: unknown, proofs: DataIntegrityProof[], did: Did, keys: string[]): Promise<boolean> {
-  const candidates = proofs.filter((p) => verificationMethodDid(p.verificationMethod) === did);
-  for (const proof of candidates) {
-    // Audit WS-5.3: the verificationMethod's own #key-<N> fragment names
-    // WHICH of `did`'s current keys this proof claims to be -- checked
-    // against exactly that key, never every key in the list regardless of
-    // what the fragment claims. A fragment that doesn't parse as #key-<N>,
-    // or whose N is out of range for `keys`, can never match by
-    // construction: this is still every single-key identity's ordinary
-    // case (index 0 against a one-element keys array), not a new failure
-    // mode for anything that already worked.
-    const index = keyIndexFromVerificationMethod(proof.verificationMethod);
-    if (index === null || index < 0 || index >= keys.length) continue;
-    if (await verifyProof(unsecuredDoc, proof, keys[index])) return true;
-  }
-  return false;
-}
-
-async function filterValidSigners(unsecuredDoc: unknown, proofs: DataIntegrityProof[], dids: Did[], resolve: KeyResolver): Promise<Did[]> {
-  const valid: Did[] = [];
-  for (const did of dids) {
-    if (await verifySignerProof(unsecuredDoc, proofs, did, resolve)) valid.push(did);
-  }
-  return valid;
-}
-
-/**
- * `operationalPrivateKeys`, keyed by Multikey public key: REQ-7.1-8,
- * every entry in `partial.operationalKeys` must prove possession.
- * `incomingKeys`, keyed by DID: REQ-7.1-1, one proof per
- * `partial.incoming` entry, that guardian's own co-signed consent.
- */
-export async function signCustodialCreate(
-  partial: Omit<CustodialCreateOp, "proof">,
-  incomingKeys: Record<Did, string>,
-  operationalPrivateKeys: Record<string, string>,
-): Promise<CustodialCreateOp> {
-  const unsecuredDoc = unsecuredDocument(partial as any);
-  const proof: DataIntegrityProof[] = [];
-  for (const pubKey of partial.operationalKeys) {
-    const pk = operationalPrivateKeys[pubKey];
-    if (!pk) throw new Error(`missing private key for operational key ${pubKey}`);
-    proof.push(await createProof(unsecuredDoc, popVerificationMethod(pubKey), pk));
-  }
-  for (const did of partial.incoming) {
-    const pk = incomingKeys[did];
-    if (!pk) throw new Error(`missing private key for incoming guardian ${did}`);
-    proof.push(await createProof(unsecuredDoc, `${did}#key-0`, pk));
-  }
-  return { ...partial, proof };
-}
-
-/**
- * REQ-7.1-4/7.1-5: the accepting registrar's own attestation, one more
- * independent proof in the same set -- `created` here is this
- * attestation's own signed acceptance timestamp (closing the
- * previously-unsigned `acceptedAt` gap for genesis specifically; every
- * other operation type still relies on `LogEntry.acceptedAt`, unsigned,
- * since only genesis carries a registrar proof at all).
- */
-export async function signRegistrarAttestation(partial: Omit<CustodialCreateOp, "proof">, registrarDid: Did, registrarPrivateKey: string, created?: string): Promise<DataIntegrityProof> {
-  const unsecuredDoc = unsecuredDocument(partial as any);
-  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, created, "assertionMethod");
-}
-
-/**
- * WS-4.1 (audit): the registrar's own signed acceptance receipt -- one
- * more independent proof in the same set as every other signer's,
- * appended by the registrar AFTER an operation is otherwise fully
- * verified, with `created` set to the actual acceptance instant. Every
- * non-genesis operation type has no registrar proof at all until this is
- * appended; for genesis, REQ-7.1-5's own attestation already fills this
- * role (one mechanism, not two -- see `receiptCreatedAt` below for the
- * matching read side).
- */
-export async function signReceipt(unsecuredDoc: unknown, registrarDid: Did, registrarPrivateKey: string, acceptedAt: string): Promise<DataIntegrityProof> {
-  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, acceptedAt, "assertionMethod");
-}
-
-/**
- * WS-4.1: the one trustworthy acceptance time for `op` -- the registrar's
- * own receipt proof's `created`, never a signer's self-reported `created`
- * (a rotated-away key could backdate it to whenever it was still valid)
- * and never an unsigned, storage-layer timestamp. Every time-sensitive
- * check (REQ-6-8/6-9's nullification window, REQ-4-4's cross-log
- * deactivation timing) MUST read this, not `LogEntry.acceptedAt` directly.
- *
- * Genesis is the one case with no separate registrar receipt proof at
- * all: REQ-7.1-5's attestation (`${registrarDid}#key-0`) already serves
- * this role for an ordinary genesis, and Fix 7's root self-attestation
- * (no separate attestation exists; the root's own PoP proof stands in
- * for it) is checked as a fallback here for exactly that case.
- *
- * Returns undefined when no receipt can be found at all -- callers MUST
- * treat that as "this operation's acceptance time can't be trusted,"
- * never "assume now."
- */
-export function receiptCreatedAt(op: { type: string; proof?: DataIntegrityProof[]; did?: Did; operationalKeys?: string[] }, registrarDid: Did): string | undefined {
-  const registrarProof = (op.proof ?? []).find((p) => p.verificationMethod === `${registrarDid}#key-0`);
-  if (registrarProof) return registrarProof.created;
-  if (op.type === "custodial_create" && op.did === registrarDid) {
-    for (const key of op.operationalKeys ?? []) {
-      const pop = findPopProof(op.proof ?? [], key);
-      if (pop) return pop.created;
-    }
+  const didMatch = DID_REFERENCE_RE.exec(vm);
+  if (didMatch) {
+    const indexText = didMatch[3];
+    if (indexText !== "0" && indexText.startsWith("0")) return undefined; // REQ-5-12: no leading zeros
+    return { kind: "did", did: didMatch[1], versionId: didMatch[2], index: Number(indexText) };
   }
   return undefined;
 }
 
-/** WS-1.7/4.4 (audit): the only valid "accepting registrar" for a genesis is the bare-domain identity of `did`'s OWN domain -- never an arbitrary DID a caller happens to pass. Computed structurally from `did` itself, never scanned for out of a proof set (see WS-1.7's own fix below). Exported for WS-2.1's verifyLog, which needs the same derivation to check a whole log from scratch rather than trusting a caller-supplied registrarDid. */
-export function expectedRegistrarDid(did: Did): Did {
-  const { domain } = parseDid(did);
-  return `did:guardian:${domain}` as Did;
+/** REQ-5-12: the key reference `verificationMethod` for a key proving possession of itself. */
+export function keyReferenceVerificationMethod(key: Key): string {
+  return `did:key:${key}#${key}`;
 }
 
-export async function verifyCustodialCreate(op: CustodialCreateOp, resolve: KeyResolver, registrarDid: Did): Promise<{ valid: boolean; reason?: string }> {
-  if (op.prev !== null) return { valid: false, reason: "genesis must have prev: null" };
-  // WS-4.4: the passed-in `registrarDid` itself must actually be the
-  // domain root of `op.did` -- defense in depth against a caller (this
-  // registrar's own code is already correct, but the library can't
-  // assume every caller is) passing an unrelated DID that happens to
-  // resolve and sign correctly. "A genesis for acme.com:alice attested
-  // by did:guardian:evil.com#key-0" must never pass, regardless of what
-  // a caller claims the accepting registrar is.
-  let expected: Did;
-  try {
-    expected = expectedRegistrarDid(op.did);
-  } catch {
-    return { valid: false, reason: `genesis.did "${op.did}" does not parse as a valid did:guardian identifier (REQ-2-2)` };
+/** REQ-5-12: the DID reference `verificationMethod` for a guardian or root identity's approval. */
+export function didReferenceVerificationMethod(did: Did, versionId: string, index: number): string {
+  return `${did}?versionId=${versionId}#key-${index}`;
+}
+
+/**
+ * REQ-5-16: the signer a valid proof approves as. A key reference's
+ * signer is the key itself; a DID reference's signer is `<did>`.
+ */
+export function signerOf(vm: string): string | undefined {
+  const ref = parseVerificationMethod(vm);
+  if (!ref) return undefined;
+  return ref.kind === "key" ? ref.key : ref.did;
+}
+
+export interface ShapeResult {
+  valid: boolean;
+  reason?: string;
+}
+
+const invalid = (reason: string): ShapeResult => ({ valid: false, reason });
+const VALID: ShapeResult = { valid: true };
+
+/** REQ-5-3. */
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+function isUtf8SafeString(value: unknown): boolean {
+  return typeof value === "string" && !LONE_SURROGATE_RE.test(value);
+}
+
+/** REQ-5-2. */
+function isOperationInteger(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 2 ** 53 - 1;
+}
+
+/** REQ-5-9: every proof's own shape, independent of whether its signature verifies. */
+export function checkProofShape(proof: unknown): ShapeResult {
+  if (typeof proof !== "object" || proof === null) return invalid("a proof must be an object");
+  const p = proof as Record<string, unknown>;
+  const keys = Object.keys(p).sort();
+  const expected = ["cryptosuite", "proofPurpose", "proofValue", "type", "verificationMethod"];
+  if (keys.length !== expected.length || keys.some((k, i) => k !== expected[i])) {
+    return invalid("REQ-5-9: a proof must contain exactly type, cryptosuite, verificationMethod, proofPurpose and proofValue");
   }
-  if (registrarDid !== expected) {
-    return { valid: false, reason: `registrarDid "${registrarDid}" is not the domain root of genesis.did "${op.did}" -- expected "${expected}" (REQ-7.1-5/WS-4.4)` };
+  if (p.type !== "DataIntegrityProof") return invalid("REQ-5-9: proof.type must be \"DataIntegrityProof\"");
+  if (p.cryptosuite !== "ecdsa-jcs-2019") return invalid("REQ-5-9: proof.cryptosuite must be \"ecdsa-jcs-2019\"");
+  if (p.proofPurpose !== "capabilityInvocation") return invalid("REQ-5-9: proof.proofPurpose must be \"capabilityInvocation\"");
+  if (typeof p.verificationMethod !== "string" || !parseVerificationMethod(p.verificationMethod)) {
+    return invalid("REQ-5-12: verificationMethod must be a key reference or a DID reference");
   }
-  // WS-1.8: genesis's own `policy` (REQ-7.1-7) is Partial, so the check
-  // runs against it merged with DEFAULT_GUARDIAN_POLICY -- the same
-  // result document.ts's replay() will actually install into
-  // ResolvedState.guardianPolicy. Without this, a genesis naming a
-  // future policy version or a malformed threshold would be accepted
-  // outright and leave the ward unverifiable from its very first
-  // post-genesis operation onward.
-  if (op.policy !== undefined) {
-    const policyCheck = validatePolicy({ ...DEFAULT_GUARDIAN_POLICY, ...op.policy });
-    if (!policyCheck.valid) return { valid: false, reason: `genesis policy (REQ-7.1-7): ${policyCheck.reason}` };
+  if (typeof p.proofValue !== "string") return invalid("REQ-5-9: proofValue must be a string");
+  return VALID;
+}
+
+/** REQ-5-8/REQ-5-15: the `proof` member's own array shape, independent of each proof's own shape or validity. */
+export function checkProofArrayShape(proof: unknown): ShapeResult {
+  if (!Array.isArray(proof)) return invalid("REQ-5-8: proof must be an array");
+  const signers = new Set<string>();
+  for (const p of proof) {
+    const shape = checkProofShape(p);
+    if (!shape.valid) return shape;
+    const signer = signerOf((p as DataIntegrityProof).verificationMethod);
+    if (signer === undefined) return invalid("REQ-5-12: unrecognized verificationMethod");
+    if (signers.has(signer)) return invalid("REQ-5-15: an operation must not contain two proofs from the same signer");
+    signers.add(signer);
   }
-  const unsecuredDoc = unsecuredDocument(op as any);
-  const pop = await verifyPop(unsecuredDoc, op.operationalKeys, op.proof); // REQ-7.1-8
-  if (!pop.valid) return pop;
-  for (const did of op.incoming) {
-    if (!(await verifySignerProof(unsecuredDoc, op.proof, did, resolve))) {
-      return { valid: false, reason: `missing or invalid signature from incoming guardian ${did}` };
+  return VALID;
+}
+
+/** REQ-6-2. */
+export function checkServiceShape(services: unknown): ShapeResult {
+  if (!Array.isArray(services)) return invalid("services must be an array");
+  if (services.length > 32) return invalid("REQ-6-1: services must contain at most 32 entries");
+  const ids = new Set<string>();
+  for (const s of services) {
+    if (typeof s !== "object" || s === null) return invalid("REQ-6-2: a service must be an object");
+    const svc = s as Record<string, unknown>;
+    const keys = Object.keys(svc).sort();
+    if (keys.length !== 3 || keys[0] !== "id" || keys[1] !== "serviceEndpoint" || keys[2] !== "type") {
+      return invalid("REQ-6-2: a service must contain exactly id, type and serviceEndpoint");
+    }
+    if (typeof svc.id !== "string" || !svc.id.startsWith("#")) return invalid("REQ-6-2: service.id must be a string that begins with \"#\"");
+    if (typeof svc.type !== "string") return invalid("REQ-6-2: service.type must be a string");
+    if (typeof svc.serviceEndpoint !== "string") return invalid("REQ-6-2: service.serviceEndpoint must be a URI string");
+    if (ids.has(svc.id)) return invalid("REQ-6-2: two services must not have the same id");
+    ids.add(svc.id);
+  }
+  return VALID;
+}
+
+/** REQ-6-1: keys, 1 to 8 distinct entries. */
+export function checkKeysShape(keys: unknown): ShapeResult {
+  if (!Array.isArray(keys)) return invalid("keys must be an array");
+  if (keys.length < 1 || keys.length > 8) return invalid("REQ-6-1: keys must contain 1 to 8 entries");
+  if (keys.some((k) => typeof k !== "string")) return invalid("REQ-5-7: every key must be a Multikey string");
+  if (new Set(keys).size !== keys.length) return invalid("REQ-6-1: keys must be distinct");
+  return VALID;
+}
+
+/** REQ-6-1: guardians, 0 to 32 distinct DIDs. */
+export function checkGuardiansShape(guardians: unknown, selfDid?: Did): ShapeResult {
+  if (!Array.isArray(guardians)) return invalid("guardians must be an array");
+  if (guardians.length > 32) return invalid("REQ-6-1: guardians must contain at most 32 entries");
+  if (guardians.some((g) => typeof g !== "string")) return invalid("guardians must be DIDs");
+  if (new Set(guardians).size !== guardians.length) return invalid("REQ-6-1: guardians must be distinct");
+  if (selfDid !== undefined && guardians.includes(selfDid)) return invalid("REQ-6-3: an identity's DID must not appear in its own guardians");
+  return VALID;
+}
+
+/** REQ-6-1: alsoKnownAs, 0 to 32 distinct URI strings. */
+export function checkAlsoKnownAsShape(alsoKnownAs: unknown): ShapeResult {
+  if (!Array.isArray(alsoKnownAs)) return invalid("alsoKnownAs must be an array");
+  if (alsoKnownAs.length > 32) return invalid("REQ-6-1: alsoKnownAs must contain at most 32 entries");
+  if (alsoKnownAs.some((a) => typeof a !== "string")) return invalid("alsoKnownAs must be URI strings");
+  if (new Set(alsoKnownAs).size !== alsoKnownAs.length) return invalid("REQ-6-1: alsoKnownAs must be distinct");
+  return VALID;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactMembers(op: Record<string, unknown>, members: readonly string[]): boolean {
+  const keys = Object.keys(op).sort();
+  const expected = [...members].sort();
+  return keys.length === expected.length && keys.every((k, i) => k === expected[i]);
+}
+
+/** REQ-5-1/REQ-5-4/REQ-7-1/REQ-7-2/REQ-7-3: members common to every operation type, checked once. */
+export function checkCommonShape(op: unknown): ShapeResult {
+  if (!isPlainObject(op)) return invalid("REQ-5-1: an operation must be a JSON object");
+  const o = op as Record<string, unknown>;
+  if (typeof o.type !== "string" || !["create", "update", "addGuardian", "removeGuardian", "setPolicy", "deactivate"].includes(o.type)) {
+    return invalid("REQ-7-2: type must be one of create, update, addGuardian, removeGuardian, setPolicy or deactivate");
+  }
+  if (o.type === "create") {
+    if (o.prev !== null) return invalid("REQ-7-3: a create operation's prev must be null");
+  } else if (typeof o.prev !== "string") {
+    return invalid("REQ-7-3: prev must be the operation hash of the preceding operation");
+  }
+  return VALID;
+}
+
+const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$/;
+const NAME_RE = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
+
+/** REQ-4-2: a fully qualified DNS hostname, lowercase, no trailing dot, no port. */
+export function isValidDomain(domain: string): boolean {
+  return DOMAIN_RE.test(domain) && domain.includes(".");
+}
+
+/** REQ-4-3: 3 to 32 characters from a-z, 0-9 and -, beginning and ending with a letter or digit. */
+export function isValidName(name: string): boolean {
+  return NAME_RE.test(name);
+}
+
+/** REQ-4-1/REQ-4-4: parses a did:guardian identifier into its domain and optional name. */
+export function parseGuardianDid(did: string): { domain: string; name: string | null } | undefined {
+  const parts = did.split(":");
+  if (parts[0] !== "did" || parts[1] !== "guardian") return undefined;
+  if (parts.length === 3) {
+    return isValidDomain(parts[2]) ? { domain: parts[2], name: null } : undefined;
+  }
+  if (parts.length === 4) {
+    return isValidDomain(parts[2]) && isValidName(parts[3]) ? { domain: parts[2], name: parts[3] } : undefined;
+  }
+  return undefined;
+}
+
+/** REQ-4-5: the path segment of an identity. */
+export function pathSegment(name: string | null): string {
+  return name ?? "_";
+}
+
+const SETTING_WITH_ANY = new Set(["any", "majority", "all"]);
+const SETTING_NO_ANY = new Set(["majority", "all"]);
+
+function isValidSetting(value: unknown, allowAny: boolean): boolean {
+  if (typeof value === "number") return Number.isInteger(value) && value >= 1;
+  if (typeof value !== "string") return false;
+  return allowAny ? SETTING_WITH_ANY.has(value) : SETTING_NO_ANY.has(value);
+}
+
+/** REQ-6-4/REQ-6-5: a policy object's own shape, independent of any operation type. */
+export function checkPolicyShape(policy: unknown): ShapeResult {
+  if (!isPlainObject(policy)) return invalid("REQ-6-4: policy must be an object");
+  const allowed = ["recovery", "membership", "removal", "deactivation"];
+  for (const key of Object.keys(policy)) {
+    if (!allowed.includes(key)) return invalid(`REQ-6-4: policy must not contain "${key}"`);
+  }
+  if ("recovery" in policy && !isValidSetting(policy.recovery, true)) return invalid("REQ-6-4: recovery must be \"any\", \"majority\", \"all\" or an integer k >= 1");
+  if ("removal" in policy && !isValidSetting(policy.removal, true)) return invalid("REQ-6-4: removal must be \"any\", \"majority\", \"all\" or an integer k >= 1");
+  if ("membership" in policy && !isValidSetting(policy.membership, false)) return invalid("REQ-6-4: membership must be \"majority\", \"all\" or an integer k >= 1");
+  if ("deactivation" in policy) {
+    const d = policy.deactivation;
+    if (!isPlainObject(d) || !hasExactMembers(d, ["by", "threshold"])) return invalid("REQ-6-5: deactivation must contain exactly by and threshold");
+    if (!["self", "guardians", "either", "both"].includes(d.by as string)) return invalid("REQ-6-5: deactivation.by must be self, guardians, either or both");
+    if (!isValidSetting(d.threshold, false)) return invalid("REQ-6-5: deactivation.threshold must be \"majority\", \"all\" or an integer k >= 1");
+  }
+  return VALID;
+}
+
+/** REQ-7-5/REQ-7-6: a create operation's own members. */
+export function checkCreateShape(op: Record<string, unknown>): ShapeResult {
+  if (!hasExactMembers(op, ["type", "did", "keys", "guardians", "policy", "services", "alsoKnownAs", "prev", "proof"])) {
+    return invalid("REQ-7-5: a create operation must contain exactly type, did, keys, guardians, policy, services, alsoKnownAs, prev and proof");
+  }
+  if (typeof op.did !== "string" || !parseGuardianDid(op.did)) return invalid("REQ-4-1: did must be a valid did:guardian identifier");
+  const keysShape = checkKeysShape(op.keys);
+  if (!keysShape.valid) return keysShape;
+  const guardiansShape = checkGuardiansShape(op.guardians, op.did as Did);
+  if (!guardiansShape.valid) return guardiansShape;
+  const policyShape = checkPolicyShape(op.policy);
+  if (!policyShape.valid) return policyShape;
+  const servicesShape = checkServiceShape(op.services);
+  if (!servicesShape.valid) return servicesShape;
+  const alsoKnownAsShape = checkAlsoKnownAsShape(op.alsoKnownAs);
+  if (!alsoKnownAsShape.valid) return alsoKnownAsShape;
+  return checkProofArrayShape(op.proof);
+}
+
+/** REQ-7-7/REQ-7-8: an update operation's own members. */
+export function checkUpdateShape(op: Record<string, unknown>): ShapeResult {
+  if (!hasExactMembers(op, ["type", "keys", "services", "alsoKnownAs", "prev", "proof"])) {
+    return invalid("REQ-7-7: an update operation must contain exactly type, keys, services, alsoKnownAs, prev and proof");
+  }
+  const keysShape = checkKeysShape(op.keys);
+  if (!keysShape.valid) return keysShape;
+  const servicesShape = checkServiceShape(op.services);
+  if (!servicesShape.valid) return servicesShape;
+  const alsoKnownAsShape = checkAlsoKnownAsShape(op.alsoKnownAs);
+  if (!alsoKnownAsShape.valid) return alsoKnownAsShape;
+  return checkProofArrayShape(op.proof);
+}
+
+/** REQ-7-9/REQ-7-10/REQ-7-11: an addGuardian operation's own members. `guardian` against the state before the operation (REQ-7-10) is checked by rules.ts, which has that state. */
+export function checkAddGuardianShape(op: Record<string, unknown>): ShapeResult {
+  if (!hasExactMembers(op, ["type", "guardian", "prev", "proof"])) {
+    return invalid("REQ-7-9: an addGuardian operation must contain exactly type, guardian, prev and proof");
+  }
+  if (typeof op.guardian !== "string" || !parseGuardianDid(op.guardian)) return invalid("REQ-4-1: guardian must be a valid did:guardian identifier");
+  return checkProofArrayShape(op.proof);
+}
+
+/** REQ-7-12/REQ-7-13/REQ-7-15: a removeGuardian operation's own members. `guardian` against the state before the operation (REQ-7-13) and `evidence` (REQ-7-14) are checked by rules.ts, which can resolve logs. */
+export function checkRemoveGuardianShape(op: Record<string, unknown>): ShapeResult {
+  const hasEvidence = "evidence" in op;
+  const members = hasEvidence ? ["type", "guardian", "evidence", "prev", "proof"] : ["type", "guardian", "prev", "proof"];
+  if (!hasExactMembers(op, members)) {
+    return invalid("REQ-7-12: a removeGuardian operation must contain exactly type, guardian, prev and proof, and may contain evidence");
+  }
+  if (typeof op.guardian !== "string" || !parseGuardianDid(op.guardian)) return invalid("REQ-4-1: guardian must be a valid did:guardian identifier");
+  if (hasEvidence && typeof op.evidence !== "string") return invalid("REQ-7-14: evidence must be an operation hash");
+  return checkProofArrayShape(op.proof);
+}
+
+/** REQ-7-16/REQ-7-17: a setPolicy operation's own members. */
+export function checkSetPolicyShape(op: Record<string, unknown>): ShapeResult {
+  if (!hasExactMembers(op, ["type", "policy", "prev", "proof"])) {
+    return invalid("REQ-7-16: a setPolicy operation must contain exactly type, policy, prev and proof");
+  }
+  const policyShape = checkPolicyShape(op.policy);
+  if (!policyShape.valid) return policyShape;
+  return checkProofArrayShape(op.proof);
+}
+
+/** REQ-7-18/REQ-7-19: a deactivate operation's own members. */
+export function checkDeactivateShape(op: Record<string, unknown>): ShapeResult {
+  if (!hasExactMembers(op, ["type", "prev", "proof"])) {
+    return invalid("REQ-7-18: a deactivate operation must contain exactly type, prev and proof");
+  }
+  return checkProofArrayShape(op.proof);
+}
+
+/** REQ-5-2/REQ-5-3: every number and every string anywhere in the value. */
+function checkValuesShape(value: unknown): ShapeResult {
+  if (typeof value === "number") return isOperationInteger(value) ? VALID : invalid("REQ-5-2: every number must be an integer between 0 and 2^53 - 1");
+  if (typeof value === "string") return isUtf8SafeString(value) ? VALID : invalid("REQ-5-3: every string must be valid UTF-8 with no unpaired surrogates");
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const r = checkValuesShape(v);
+      if (!r.valid) return r;
+    }
+    return VALID;
+  }
+  if (isPlainObject(value)) {
+    for (const [k, v] of Object.entries(value)) {
+      if (!isUtf8SafeString(k)) return invalid("REQ-5-3: every string must be valid UTF-8 with no unpaired surrogates");
+      const r = checkValuesShape(v);
+      if (!r.valid) return r;
     }
   }
-  // Fix 7: the bare-domain root identity attests its own genesis -- there
-  // is no other party to vouch for the one identity a deployment
-  // bootstraps on its own, so its proof of possession (already checked
-  // above) IS the attestation, rather than a separate, impossible one.
-  const selfAttested = op.did === registrarDid;
-  if (!selfAttested && !(await verifySignerProof(unsecuredDoc, op.proof, registrarDid, resolve))) {
-    return { valid: false, reason: "registrar attestation is required (REQ-7.1-5)" };
+  return VALID;
+}
+
+/** REQ-5-1 through REQ-7-19: an operation's full shape, independent of signatures and approvals. */
+export function checkOperationShape(op: unknown): ShapeResult {
+  const common = checkCommonShape(op);
+  if (!common.valid) return common;
+  const values = checkValuesShape(op);
+  if (!values.valid) return values;
+  const o = op as Record<string, unknown>;
+  switch (o.type) {
+    case "create":
+      return checkCreateShape(o);
+    case "update":
+      return checkUpdateShape(o);
+    case "addGuardian":
+      return checkAddGuardianShape(o);
+    case "removeGuardian":
+      return checkRemoveGuardianShape(o);
+    case "setPolicy":
+      return checkSetPolicyShape(o);
+    case "deactivate":
+      return checkDeactivateShape(o);
+    default:
+      return invalid("REQ-7-2: unrecognized operation type");
   }
-  // WS-1.7: every proof in the set must be ACCOUNTED FOR -- a PoP proof
-  // for a declared operational key, an incoming guardian's own signature,
-  // or the registrar's attestation (or, for self-attestation, the root's
-  // own PoP again). An unexplained extra proof (e.g. a stray
-  // `did:guardian:evil.example#key-0`) was previously accepted outright
-  // and could later be picked up by document.ts's own registrarDid
-  // extraction as if it were the real attestation, poisoning L1 pinning.
-  const incomingSet = new Set(op.incoming);
-  for (const proof of op.proof) {
-    if (proof.verificationMethod.startsWith("did:key:")) {
-      if (!op.operationalKeys.some((k) => proof.verificationMethod === popVerificationMethod(k))) {
-        return { valid: false, reason: `unexplained proof of possession in genesis proof set: ${proof.verificationMethod}` };
-      }
-      continue;
-    }
-    const signerDid = verificationMethodDid(proof.verificationMethod);
-    if (signerDid === registrarDid || incomingSet.has(signerDid)) continue;
-    return { valid: false, reason: `unexplained proof in genesis proof set, from neither an incoming guardian nor the registrar: ${proof.verificationMethod}` };
-  }
-  return { valid: true };
-}
-
-/** `wardDid`: the verification method a self-authorized rotation's own proof names (REQ-7.2-1a). `newKeyPrivateKeys`, keyed by Multikey: REQ-7.2-12, proof of possession for every entry in `partial.operationalKeys`, the NEW keys being installed. */
-export async function signCustodialRotate(
-  partial: Omit<CustodialRotateOp, "proof">,
-  wardDid: Did,
-  privateKey: string,
-  newKeyPrivateKeys: Record<string, string>,
-): Promise<CustodialRotateOp> {
-  const unsecuredDoc = unsecuredDocument(partial as any);
-  const proof: DataIntegrityProof[] = [];
-  for (const pubKey of partial.operationalKeys) {
-    const pk = newKeyPrivateKeys[pubKey];
-    if (!pk) throw new Error(`missing private key for operational key ${pubKey}`);
-    proof.push(await createProof(unsecuredDoc, popVerificationMethod(pubKey), pk));
-  }
-  proof.push(await createProof(unsecuredDoc, `${wardDid}#key-0`, privateKey));
-  return { ...partial, proof };
-}
-
-/** REQ-7.2-1(b): guardian-initiated recovery rotation. Nullification eligibility (REQ-6-8) is checked at the log/registrar level (see document.ts), not here. `newKeyPrivateKeys`: same proof-of-possession requirement as self-rotation (REQ-7.2-12) -- a guardian can authorize installing a key, but the key itself still has to prove it's held by whoever's about to operate it. */
-export async function signCustodialRotateByGuardians(
-  partial: Omit<CustodialRotateOp, "proof">,
-  signerKeys: Record<Did, string>,
-  signers: Did[],
-  newKeyPrivateKeys: Record<string, string>,
-): Promise<CustodialRotateOp> {
-  const unsecuredDoc = unsecuredDocument(partial as any);
-  const proof: DataIntegrityProof[] = [];
-  for (const pubKey of partial.operationalKeys) {
-    const pk = newKeyPrivateKeys[pubKey];
-    if (!pk) throw new Error(`missing private key for operational key ${pubKey}`);
-    proof.push(await createProof(unsecuredDoc, popVerificationMethod(pubKey), pk));
-  }
-  for (const did of signers) {
-    const pk = signerKeys[did];
-    if (!pk) throw new Error(`missing private key for required signer ${did}`);
-    proof.push(await createProof(unsecuredDoc, `${did}#key-0`, pk));
-  }
-  return { ...partial, proof };
-}
-
-/** The v0.1-era interop harness path: self-authorized rotation only (REQ-7.2-1a) against a known current-key list. Guardian-initiated rotation (REQ-7.2-1b) goes through rules.ts's rotateRule in the real server path, not this function -- see its own header comment. */
-export async function verifyCustodialRotate(op: CustodialRotateOp, currentOperationalKeys: string[], resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
-  const unsecuredDoc = unsecuredDocument(op as any);
-  const pop = await verifyPop(unsecuredDoc, op.operationalKeys, op.proof); // REQ-7.2-12
-  if (!pop.valid) return pop;
-  for (const pk of currentOperationalKeys) {
-    for (const proof of op.proof) {
-      if (proof.verificationMethod.startsWith("did:key:")) continue; // a PoP proof, not the authorizing signature
-      if (await verifyProof(unsecuredDoc, proof, pk)) return { valid: true };
-    }
-  }
-  return { valid: false, reason: "rotation not signed by a current operational key" };
-}
-
-export async function signGuardianTransfer(partial: Omit<GuardianTransferOp, "sigs">, wardDid: Did, currentGuardians: Did[], signerKeys: Record<Did, string>): Promise<GuardianTransferOp> {
-  const required = requiredTransferSigners(wardDid, currentGuardians, partial.outgoing, partial.incoming);
-  const payload = unsecuredDocument(partial as any);
-  const sigs: Record<Did, string> = {};
-  for (const did of required) {
-    const pk = signerKeys[did];
-    if (!pk) throw new Error(`missing private key for required signer ${did}`);
-    sigs[did] = await signPayload(payload, pk);
-  }
-  return { ...partial, sigs };
-}
-
-// v0.1, guardian_transfer-only: the pre-Data-Integrity raw signature
-// scheme (signPayload/verifyPayload directly, no proof wrapper), kept
-// solely so this one legacy type can still be constructed/checked for
-// replay testing. Never used by any v0.2+ operation.
-async function verifyLegacySignerSig(op: { sigs: Record<Did, string> }, signerDid: Did, resolve: KeyResolver, asOf?: Date): Promise<boolean> {
-  const sigB64 = op.sigs[signerDid];
-  if (!sigB64) return false;
-  const keys = await resolve(signerDid, asOf);
-  if (!keys || keys.length === 0) return false;
-  const payload = unsecuredDocument(op as any);
-  for (const pk of keys) {
-    if (await verifyPayload(payload, sigB64, pk)) return true;
-  }
-  return false;
-}
-
-export async function verifyGuardianTransfer(op: GuardianTransferOp, wardDid: Did, currentGuardians: Did[], resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
-  if (op.incoming.length === 0) return { valid: false, reason: "incoming must be non-empty (use guardian_relinquish for full removal)" };
-  if (!op.outgoing.every((d) => currentGuardians.includes(d))) {
-    return { valid: false, reason: "outgoing includes a party that is not a current guardian" };
-  }
-  const required = requiredTransferSigners(wardDid, currentGuardians, op.outgoing, op.incoming);
-  for (const did of required) {
-    if (!(await verifyLegacySignerSig(op, did, resolve))) {
-      return { valid: false, reason: `missing or invalid signature from required party ${did}` };
-    }
-  }
-  return { valid: true };
-}
-
-/** v0.2+. Shared by guardian_add/guardian_remove/policy_update/guardian_relinquish/custodial_tombstone -- each just needs one proof per required signer, same shape. */
-async function signProofSet<T extends { proof?: DataIntegrityProof[] }>(partial: Omit<T, "proof">, signerKeys: Record<Did, string>, signers: Did[]): Promise<T> {
-  const unsecuredDoc = unsecuredDocument(partial as any);
-  const proof: DataIntegrityProof[] = [];
-  for (const did of signers) {
-    const pk = signerKeys[did];
-    if (!pk) throw new Error(`missing private key for required signer ${did}`);
-    proof.push(await createProof(unsecuredDoc, `${did}#key-0`, pk));
-  }
-  return { ...partial, proof } as T;
-}
-
-export function signGuardianAdd(partial: Omit<GuardianAddOp, "proof">, signerKeys: Record<Did, string>, signers: Did[]): Promise<GuardianAddOp> {
-  return signProofSet(partial, signerKeys, signers);
-}
-
-export function signGuardianRemove(partial: Omit<GuardianRemoveOp, "proof">, signerKeys: Record<Did, string>, signers: Did[]): Promise<GuardianRemoveOp> {
-  return signProofSet(partial, signerKeys, signers);
-}
-
-export function signPolicyUpdate(partial: Omit<PolicyUpdateOp, "proof">, signerKeys: Record<Did, string>, signers: Did[]): Promise<PolicyUpdateOp> {
-  return signProofSet(partial, signerKeys, signers);
-}
-
-export function signGuardianRelinquish(partial: Omit<GuardianRelinquishOp, "proof">, signerKeys: Record<Did, string>, signers: Did[]): Promise<GuardianRelinquishOp> {
-  return signProofSet(partial, signerKeys, signers);
-}
-
-export async function verifyGuardianRelinquish(op: GuardianRelinquishOp, currentGuardians: Did[], removalThreshold: GuardianPolicy["removal_threshold"], resolve: KeyResolver): Promise<{ valid: boolean; reason?: string }> {
-  const unsecuredDoc = unsecuredDocument(op as any);
-  const validSigners = await filterValidSigners(unsecuredDoc, op.proof, currentGuardians, resolve);
-  if (!meetsThreshold(removalThreshold, validSigners, currentGuardians)) {
-    return { valid: false, reason: "removal_threshold not met for guardian_relinquish" };
-  }
-  return { valid: true };
-}
-
-export function signCustodialTombstone(partial: Omit<CustodialTombstoneOp, "proof">, signerKeys: Record<Did, string>, signers: Did[]): Promise<CustodialTombstoneOp> {
-  return signProofSet(partial, signerKeys, signers);
-}
-
-export async function verifyCustodialTombstone(
-  op: CustodialTombstoneOp,
-  eligibleSigners: Did[], // operational key holder(s) treated as their own "did" for this check, plus current guardians
-  tombstoneThreshold: GuardianPolicy["tombstone_threshold"],
-  resolve: KeyResolver,
-): Promise<{ valid: boolean; reason?: string }> {
-  const unsecuredDoc = unsecuredDocument(op as any);
-  const validSigners = await filterValidSigners(unsecuredDoc, op.proof, eligibleSigners, resolve);
-  if (!meetsThreshold(tombstoneThreshold, validSigners, eligibleSigners)) {
-    return { valid: false, reason: "tombstone_threshold not met" };
-  }
-  return { valid: true };
-}
-
-/** REQ-6-4: this operation's entryHash/anchor -- the multihash of its content with every proof stripped (Fix 3: a signature is never deterministic, so hashing one in would make the result depend on which valid signature happened to be produced, not just on content). */
-export async function cidFor(op: Operation): Promise<string> {
-  return contentRef(unsecuredDocument(op as any));
 }

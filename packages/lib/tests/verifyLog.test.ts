@@ -1,199 +1,152 @@
-// WS-2.1 (audit): end-to-end tests for the real verifyLog, built from
-// genuine keys and signatures throughout -- unlike checkNullification's
-// own unit tests (document-v2.test.ts), which can get away with
-// placeholder proofs for genesis and for the entry being nullified
-// (checkNullification never re-verifies either one), verifyLog
-// cryptographically verifies EVERY entry, so every entry here has to be
-// real.
-
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeypair } from "../src/crypto.js";
-import { signCustodialCreate, signCustodialRotate, signCustodialRotateByGuardians, signCustodialTombstone, signRegistrarAttestation, cidFor } from "../src/operations.js";
-import { verifyLog } from "../src/verifyLog.js";
-import type { Did, LogEntry, CustodialCreateOp } from "../src/types.js";
+import {
+  createProof,
+  didReferenceVerificationMethod,
+  generateKeypair,
+  keyReferenceVerificationMethod,
+  operationHash,
+  unsecuredDocument,
+  verifyLog,
+} from "../src/index.js";
+import type { CreateOp, DeactivateOp, Did, Keypair, Log, LogResolver, UpdateOp } from "../src/index.js";
 
-const DID: Did = "did:guardian:example.com:alice";
-const REGISTRAR_DID: Did = "did:guardian:example.com";
+const DOMAIN = "example.com";
+const ROOT_DID = `did:guardian:${DOMAIN}`;
 
-async function makeResolver(keys: Record<string, string>) {
-  return (did: string) => (keys[did] ? [keys[did]] : undefined);
+/** A small fixture world: a root identity, a guardian (bob), and a ward (alice) with bob as her only guardian. */
+async function buildWorld() {
+  const rootKey = await generateKeypair();
+  const bobKey = await generateKeypair();
+  const aliceKey = await generateKeypair();
+  const bobDid: Did = `did:guardian:${DOMAIN}:bob`;
+  const aliceDid: Did = `did:guardian:${DOMAIN}:alice`;
+
+  const rootCreate: Omit<CreateOp, "proof"> = { type: "create", did: ROOT_DID, keys: [rootKey.publicKey], guardians: [], policy: {}, services: [], alsoKnownAs: [], prev: null };
+  const rootPop = await createProof(unsecuredDocument(rootCreate), keyReferenceVerificationMethod(rootKey.publicKey), rootKey.privateKey);
+  const rootOp: CreateOp = { ...rootCreate, proof: [rootPop] };
+  const rootLog: Log = [rootOp];
+  const rootHash = await operationHash(rootOp);
+
+  const bobCreate: Omit<CreateOp, "proof"> = { type: "create", did: bobDid, keys: [bobKey.publicKey], guardians: [], policy: {}, services: [], alsoKnownAs: [], prev: null };
+  const bobPop = await createProof(unsecuredDocument(bobCreate), keyReferenceVerificationMethod(bobKey.publicKey), bobKey.privateKey);
+  const bobAttestation = await createProof(unsecuredDocument(bobCreate), didReferenceVerificationMethod(ROOT_DID, rootHash, 0), rootKey.privateKey);
+  const bobOp: CreateOp = { ...bobCreate, proof: [bobPop, bobAttestation] };
+  const bobLog: Log = [bobOp];
+  const bobHash = await operationHash(bobOp);
+
+  const aliceCreate: Omit<CreateOp, "proof"> = { type: "create", did: aliceDid, keys: [aliceKey.publicKey], guardians: [bobDid], policy: {}, services: [], alsoKnownAs: [], prev: null };
+  const alicePop = await createProof(unsecuredDocument(aliceCreate), keyReferenceVerificationMethod(aliceKey.publicKey), aliceKey.privateKey);
+  const bobConsent = await createProof(unsecuredDocument(aliceCreate), didReferenceVerificationMethod(bobDid, bobHash, 0), bobKey.privateKey);
+  const rootAttestation = await createProof(unsecuredDocument(aliceCreate), didReferenceVerificationMethod(ROOT_DID, rootHash, 0), rootKey.privateKey);
+  const aliceOp: CreateOp = { ...aliceCreate, proof: [alicePop, bobConsent, rootAttestation] };
+  const aliceLog: Log = [aliceOp];
+
+  const logs = new Map<Did, Log>([[ROOT_DID, rootLog], [bobDid, bobLog], [aliceDid, aliceLog]]);
+  const resolveLog: LogResolver = (did) => logs.get(did);
+
+  return { rootKey, bobKey, aliceKey, bobDid, aliceDid, rootOp, bobOp, aliceOp, bobHash, logs, resolveLog };
 }
 
-async function attestedGenesis(partial: Omit<CustodialCreateOp, "proof" | "creator">, incomingKeys: Record<string, string>, registrar: { publicKey: string; privateKey: string }, operationalPrivateKeys: Record<string, string>) {
-  const withCreator = { ...partial, creator: REGISTRAR_DID };
-  const attestation = await signRegistrarAttestation(withCreator, REGISTRAR_DID, registrar.privateKey);
-  const signed = await signCustodialCreate(withCreator, incomingKeys, operationalPrivateKeys);
-  return { ...signed, proof: [...signed.proof, attestation] };
-}
+test("REQ-8-1: a minimal, self-contained root log verifies", async () => {
+  const { rootOp, resolveLog } = await buildWorld();
+  const result = await verifyLog(ROOT_DID, [rootOp], resolveLog);
+  assert.equal(result.valid, true, result.reason);
+});
 
-test("verifyLog accepts a clean genesis + rotate log and returns the right anchor and final state", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const genesis = await attestedGenesis({ type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null }, {}, registrar, { [ward.publicKey]: ward.privateKey });
-  const genesisCid = await cidFor(genesis);
-  const genesisEntry: LogEntry = { cid: genesisCid, op: genesis };
+test("REQ-7-4/REQ-8-1: a guardian-attested create verifies", async () => {
+  const { aliceDid, aliceOp, resolveLog } = await buildWorld();
+  const result = await verifyLog(aliceDid, [aliceOp], resolveLog);
+  assert.equal(result.valid, true, result.reason);
+});
+
+test("REQ-7-4: update via guardian recovery (one guardian, recovery defaults to majority -> 1) verifies", async () => {
+  const { aliceDid, aliceOp, bobDid, bobKey, bobHash, logs, resolveLog } = await buildWorld();
+  const newKey = await generateKeypair();
+  const aliceHash = await operationHash(aliceOp);
+  const partial: Omit<UpdateOp, "proof"> = { type: "update", keys: [newKey.publicKey], services: [], alsoKnownAs: [], prev: aliceHash };
+  const pop = await createProof(unsecuredDocument(partial), keyReferenceVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const guardianApproval = await createProof(unsecuredDocument(partial), didReferenceVerificationMethod(bobDid, bobHash, 0), bobKey.privateKey);
+  const updateOp: UpdateOp = { ...partial, proof: [pop, guardianApproval] };
+
+  logs.set(aliceDid, [aliceOp, updateOp]);
+  const result = await verifyLog(aliceDid, [aliceOp, updateOp], resolveLog);
+  assert.equal(result.valid, true, result.reason);
+  assert.deepEqual(result.state?.keys, [newKey.publicKey]);
+});
+
+test("REQ-7-4: update with no approving signer at all is rejected", async () => {
+  const { aliceDid, aliceOp, resolveLog } = await buildWorld();
+  const newKey = await generateKeypair();
+  const aliceHash = await operationHash(aliceOp);
+  const partial: Omit<UpdateOp, "proof"> = { type: "update", keys: [newKey.publicKey], services: [], alsoKnownAs: [], prev: aliceHash };
+  const pop = await createProof(unsecuredDocument(partial), keyReferenceVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const updateOp: UpdateOp = { ...partial, proof: [pop] };
+
+  const result = await verifyLog(aliceDid, [aliceOp, updateOp], resolveLog);
+  assert.equal(result.valid, false);
+  assert.match(result.reason!, /REQ-7-4/);
+});
+
+test("REQ-5-13/REQ-5-14: a tampered signature is rejected", async () => {
+  const { aliceDid, aliceOp, bobDid, bobKey, bobHash, resolveLog } = await buildWorld();
+  const newKey = await generateKeypair();
+  const aliceHash = await operationHash(aliceOp);
+  const partial: Omit<UpdateOp, "proof"> = { type: "update", keys: [newKey.publicKey], services: [], alsoKnownAs: [], prev: aliceHash };
+  const pop = await createProof(unsecuredDocument(partial), keyReferenceVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const guardianApproval = await createProof(unsecuredDocument(partial), didReferenceVerificationMethod(bobDid, bobHash, 0), bobKey.privateKey);
+  const tampered = { ...guardianApproval, proofValue: guardianApproval.proofValue.slice(0, -4) + "AAAA" };
+  const updateOp: UpdateOp = { ...partial, proof: [pop, tampered] };
+
+  const result = await verifyLog(aliceDid, [aliceOp, updateOp], resolveLog);
+  assert.equal(result.valid, false);
+  assert.match(result.reason!, /REQ-5-14/);
+});
+
+test("REQ-8-1 step 4: no operation may follow a deactivate", async () => {
+  const { aliceDid, aliceOp, bobDid, bobKey, bobHash, aliceKey, resolveLog } = await buildWorld();
+  const aliceHash = await operationHash(aliceOp);
+  const deactivatePartial: Omit<DeactivateOp, "proof"> = { type: "deactivate", prev: aliceHash };
+  const keyProof = await createProof(unsecuredDocument(deactivatePartial), keyReferenceVerificationMethod(aliceKey.publicKey), aliceKey.privateKey);
+  const guardianProof = await createProof(unsecuredDocument(deactivatePartial), didReferenceVerificationMethod(bobDid, bobHash, 0), bobKey.privateKey);
+  const deactivateOp: DeactivateOp = { ...deactivatePartial, proof: [keyProof, guardianProof] };
+  const deactivateHash = await operationHash(deactivateOp);
+
+  const confirmResult = await verifyLog(aliceDid, [aliceOp, deactivateOp], resolveLog);
+  assert.equal(confirmResult.valid, true, confirmResult.reason);
 
   const newKey = await generateKeypair();
-  const rotate = await signCustodialRotate({ type: "custodial_rotate", operationalKeys: [newKey.publicKey], services: {}, prev: genesisCid }, DID, ward.privateKey, { [newKey.publicKey]: newKey.privateKey });
-  const rotateCid = await cidFor(rotate);
-  const rotateEntry: LogEntry = { cid: rotateCid, op: rotate };
+  const afterPartial: Omit<UpdateOp, "proof"> = { type: "update", keys: [newKey.publicKey], services: [], alsoKnownAs: [], prev: deactivateHash };
+  const afterPop = await createProof(unsecuredDocument(afterPartial), keyReferenceVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const afterOp: UpdateOp = { ...afterPartial, proof: [afterPop] };
 
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey });
-  const result = await verifyLog(DID, [genesisEntry, rotateEntry], resolve);
-  assert.equal(result.valid, true, (result as any).reason);
-  if (result.valid) {
-    assert.equal(result.anchor, genesisCid);
-    assert.equal(result.registrarDid, REGISTRAR_DID);
-    assert.deepEqual(result.state.operationalKeys, [newKey.publicKey]);
-  }
-});
-
-test("verifyLog rejects a tampered cid instead of trusting a stored value at face value", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const genesis = await attestedGenesis({ type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null }, {}, registrar, { [ward.publicKey]: ward.privateKey });
-  const genesisEntry: LogEntry = { cid: "zTamperedCid", op: genesis }; // the real cid is NOT this
-
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey });
-  const result = await verifyLog(DID, [genesisEntry], resolve);
+  const result = await verifyLog(aliceDid, [aliceOp, deactivateOp, afterOp], resolveLog);
   assert.equal(result.valid, false);
-  assert.match((result as any).reason, /cid mismatch/);
+  assert.match(result.reason!, /REQ-8-1/);
 });
 
-test("verifyLog rejects an entry whose prev names something not in the chain at all, cleanly rather than throwing", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const guardianDid: Did = "did:guardian:example.com:board";
-  const guardian = await generateKeypair();
-  const genesis = await attestedGenesis(
-    { type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [guardianDid], policy: { recovery_threshold: "any" }, prev: null },
-    { [guardianDid]: guardian.privateKey },
-    registrar,
-    { [ward.publicKey]: ward.privateKey },
-  );
-  const genesisCid = await cidFor(genesis);
-  const genesisEntry: LogEntry = { cid: genesisCid, op: genesis };
-
-  // Guardian-signed (passes checkNullification's own ward-proof gate) but
-  // naming a prev that doesn't exist anywhere in the chain at all --
-  // reconstructChain would throw on this; checkNullification must catch
-  // that itself and return a clean rejection instead.
+test("REQ-8-4: an unreachable referenced log is reported as not verified", async () => {
+  const { aliceDid, aliceOp, bobDid, bobKey, bobHash } = await buildWorld();
   const newKey = await generateKeypair();
-  const rotate = await signCustodialRotateByGuardians(
-    { type: "custodial_rotate", operationalKeys: [newKey.publicKey], services: {}, prev: "zNotInTheChainAtAll" },
-    { [guardianDid]: guardian.privateKey },
-    [guardianDid],
-    { [newKey.publicKey]: newKey.privateKey },
-  );
-  const rotateEntry: LogEntry = { cid: await cidFor(rotate), op: rotate };
+  const aliceHash = await operationHash(aliceOp);
+  const partial: Omit<UpdateOp, "proof"> = { type: "update", keys: [newKey.publicKey], services: [], alsoKnownAs: [], prev: aliceHash };
+  const pop = await createProof(unsecuredDocument(partial), keyReferenceVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const guardianApproval = await createProof(unsecuredDocument(partial), didReferenceVerificationMethod(bobDid, bobHash, 0), bobKey.privateKey);
+  const updateOp: UpdateOp = { ...partial, proof: [pop, guardianApproval] };
 
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey, [guardianDid]: guardian.publicKey });
-  const result = await verifyLog(DID, [genesisEntry, rotateEntry], resolve);
+  const unreachableResolver: LogResolver = () => undefined;
+  const result = await verifyLog(aliceDid, [aliceOp, updateOp], unreachableResolver);
   assert.equal(result.valid, false);
-  assert.match((result as any).reason, /does not name any operation in the current chain/);
+  assert.match(result.reason!, /REQ-8-4/);
 });
 
-test("verifyLog rejects an operation that appears after this identity's own tombstone (REQ-6-5)", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const genesis = await attestedGenesis({ type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null }, {}, registrar, { [ward.publicKey]: ward.privateKey });
-  const genesisCid = await cidFor(genesis);
-  const genesisEntry: LogEntry = { cid: genesisCid, op: genesis };
-
-  const tombstone = await signCustodialTombstone({ type: "custodial_tombstone", prev: genesisCid }, { [DID]: ward.privateKey }, [DID]);
-  const tombstoneCid = await cidFor(tombstone);
-  const tombstoneEntry: LogEntry = { cid: tombstoneCid, op: tombstone };
-
-  const newKey = await generateKeypair();
-  const rotateAfter = await signCustodialRotate({ type: "custodial_rotate", operationalKeys: [newKey.publicKey], services: {}, prev: tombstoneCid }, DID, ward.privateKey, { [newKey.publicKey]: newKey.privateKey });
-  const rotateAfterEntry: LogEntry = { cid: await cidFor(rotateAfter), op: rotateAfter };
-
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey });
-  const result = await verifyLog(DID, [genesisEntry, tombstoneEntry, rotateAfterEntry], resolve);
+test("REQ-6-3: a create naming itself as a guardian is rejected", async () => {
+  const key: Keypair = await generateKeypair();
+  const did: Did = `did:guardian:${DOMAIN}:selfref`;
+  const partial: Omit<CreateOp, "proof"> = { type: "create", did, keys: [key.publicKey], guardians: [did], policy: {}, services: [], alsoKnownAs: [], prev: null };
+  const pop = await createProof(unsecuredDocument(partial), keyReferenceVerificationMethod(key.publicKey), key.privateKey);
+  const op: CreateOp = { ...partial, proof: [pop] };
+  const result = await verifyLog(did, [op], () => undefined);
   assert.equal(result.valid, false);
-  assert.match((result as any).reason, /REQ-6-5/);
-});
-
-test("verifyLog rejects a genesis naming itself as its own guardian (REQ-7.1-9)", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const genesis = await attestedGenesis({ type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [DID], prev: null }, { [DID]: ward.privateKey }, registrar, { [ward.publicKey]: ward.privateKey });
-  const genesisEntry: LogEntry = { cid: await cidFor(genesis), op: genesis };
-
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey, [DID]: ward.publicKey });
-  const result = await verifyLog(DID, [genesisEntry], resolve);
-  assert.equal(result.valid, false);
-  assert.match((result as any).reason, /REQ-7\.1-9/);
-});
-
-test("verifyLog rejects a genesis naming the same guardian twice in incoming", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const guardianDid: Did = "did:guardian:example.com:board";
-  const guardian = await generateKeypair();
-  const genesis = await attestedGenesis(
-    { type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [guardianDid, guardianDid] as any, prev: null },
-    { [guardianDid]: guardian.privateKey },
-    registrar,
-    { [ward.publicKey]: ward.privateKey },
-  );
-  const genesisEntry: LogEntry = { cid: await cidFor(genesis), op: genesis };
-
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey, [guardianDid]: guardian.publicKey });
-  const result = await verifyLog(DID, [genesisEntry], resolve);
-  assert.equal(result.valid, false);
-  assert.match((result as any).reason, /same guardian twice/);
-});
-
-test("verifyLog rejects a genesis with no operational keys at all", async () => {
-  const registrar = await generateKeypair();
-  const genesis = await attestedGenesis({ type: "custodial_create", did: DID, name: "alice", operationalKeys: [], services: {}, outgoing: [], incoming: [], prev: null }, {}, registrar, {});
-  const genesisEntry: LogEntry = { cid: await cidFor(genesis), op: genesis };
-
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey });
-  const result = await verifyLog(DID, [genesisEntry], resolve);
-  assert.equal(result.valid, false);
-  assert.match((result as any).reason, /REQ-7\.1-3/);
-});
-
-test("verifyLog accepts a genuine guardian-signed nullification -- a fork validated through checkNullification, and the final state reflects the nullifying branch", async () => {
-  const registrar = await generateKeypair();
-  const ward = await generateKeypair();
-  const guardianDid: Did = "did:guardian:example.com:board";
-  const guardian = await generateKeypair();
-
-  const genesis = await attestedGenesis(
-    { type: "custodial_create", did: DID, name: "alice", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [guardianDid], policy: { recovery_threshold: "any" }, prev: null },
-    { [guardianDid]: guardian.privateKey },
-    registrar,
-    { [ward.publicKey]: ward.privateKey },
-  );
-  const genesisCid = await cidFor(genesis);
-  const genesisEntry: LogEntry = { cid: genesisCid, op: genesis };
-
-  // The ward's own rotation, right after genesis -- this is what gets nullified.
-  const wardKey = await generateKeypair();
-  const wardRotate = await signCustodialRotate({ type: "custodial_rotate", operationalKeys: [wardKey.publicKey], services: {}, prev: genesisCid }, DID, ward.privateKey, { [wardKey.publicKey]: wardKey.privateKey });
-  const wardRotateWithReceipt = { ...wardRotate, proof: [...wardRotate.proof, await signRegistrarAttestation(wardRotate as any, REGISTRAR_DID, registrar.privateKey)] };
-  const wardRotateCid = await cidFor(wardRotateWithReceipt);
-  const wardRotateEntry: LogEntry = { cid: wardRotateCid, op: wardRotateWithReceipt };
-
-  // A guardian-signed rotation naming genesis (not the current head) as prev -- a nullification, well within the 72h window.
-  const recoveryKey = await generateKeypair();
-  const nullifyingRotate = await signCustodialRotateByGuardians(
-    { type: "custodial_rotate", operationalKeys: [recoveryKey.publicKey], services: {}, prev: genesisCid },
-    { [guardianDid]: guardian.privateKey },
-    [guardianDid],
-    { [recoveryKey.publicKey]: recoveryKey.privateKey },
-  );
-  const nullifyingCid = await cidFor(nullifyingRotate);
-  const nullifyingEntry: LogEntry = { cid: nullifyingCid, op: nullifyingRotate };
-
-  const resolve = await makeResolver({ [REGISTRAR_DID]: registrar.publicKey, [guardianDid]: guardian.publicKey });
-  const result = await verifyLog(DID, [genesisEntry, wardRotateEntry, nullifyingEntry], resolve);
-  assert.equal(result.valid, true, (result as any).reason);
-  if (result.valid) {
-    assert.deepEqual(result.state.operationalKeys, [recoveryKey.publicKey], "the final state must reflect the nullifying branch, not the nullified one");
-  }
+  assert.match(result.reason!, /REQ-6-3/);
 });

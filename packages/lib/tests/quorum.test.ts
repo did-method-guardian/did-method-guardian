@@ -1,104 +1,71 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { meetsThreshold, requiredCount, requiredTransferSigners } from "../src/quorum.js";
+import { guardiansCanApprove, requiredApprovals } from "../src/quorum.js";
 
-test("any: a single signer suffices, regardless of n", () => {
-  assert.equal(requiredCount("any", 1), 1);
-  assert.equal(requiredCount("any", 5), 1);
+// REQ-6-6: the table of required guardian approvals under the default
+// policy ("majority" for recovery/membership/removal, "majority" for
+// deactivation's threshold), matching the spec's own Appendix A table.
+const CASES: [n: number, recovery: number, membership: number, deactivation: number][] = [
+  [1, 1, 1, 1],
+  [2, 2, 2, 2],
+  [3, 2, 2, 2],
+  [5, 3, 3, 3],
+];
+
+for (const [n, recovery, membership, deactivation] of CASES) {
+  test(`REQ-6-6: N=${n}, recovery="majority" requires ${recovery}`, () => {
+    assert.equal(requiredApprovals("recovery", "majority", n, n), recovery);
+  });
+  test(`REQ-6-6: N=${n}, membership="majority" requires ${membership}`, () => {
+    assert.equal(requiredApprovals("membership", "majority", n, n), membership);
+  });
+  test(`REQ-6-6: N=${n}, deactivation.threshold="majority" requires ${deactivation}`, () => {
+    assert.equal(requiredApprovals("deactivation", "majority", n, n), deactivation);
+  });
+}
+
+test('REQ-6-6: N=1, removal="majority" (E=0) is not possible -- required exceeds E', () => {
+  const required = requiredApprovals("removal", "majority", 1, 0);
+  assert.equal(guardiansCanApprove(required, 0), false);
 });
 
-test("any: vacuously unsatisfiable at n=0, not an error", () => {
-  assert.equal(requiredCount("any", 0), Infinity);
-  assert.equal(meetsThreshold("any", [], []), false);
+test('REQ-6-6: N=3, removal="majority" (E=2) requires 2', () => {
+  assert.equal(requiredApprovals("removal", "majority", 3, 2), 2);
 });
 
-test("majority: strict floor(n/2)+1 for n=1..6", () => {
-  const expected: Record<number, number> = { 1: 1, 2: 2, 3: 2, 4: 3, 5: 3, 6: 4 };
-  for (const [n, want] of Object.entries(expected)) {
-    assert.equal(requiredCount("majority", Number(n)), want, `n=${n}`);
-  }
+test('REQ-6-6 step 1: "any" always has a base of 1', () => {
+  assert.equal(requiredApprovals("recovery", "any", 5, 5), 1);
 });
 
-test("majority degenerates to unanimous at n=2", () => {
-  assert.equal(requiredCount("majority", 2), requiredCount("unanimous", 2));
+test('REQ-6-6 step 2: "any" is exempt from the floor of 2 even when N >= 2', () => {
+  assert.equal(requiredApprovals("recovery", "any", 5, 5), 1);
 });
 
-test("majority is strict: exactly half does not satisfy it at even n", () => {
-  const eligible = ["a", "b", "c", "d"];
-  assert.equal(meetsThreshold("majority", ["a", "b"], eligible), false, "2 of 4 is not a majority");
-  assert.equal(meetsThreshold("majority", ["a", "b", "c"], eligible), true, "3 of 4 is a majority");
+test("REQ-6-6 step 2: a non-\"any\" setting is raised to at least 2 once N >= 2", () => {
+  assert.equal(requiredApprovals("recovery", 1, 2, 2), 2);
 });
 
-test("quorum intersection: no two disjoint cohorts can both independently satisfy majority", () => {
-  const eligible = ["a", "b", "c", "d"];
-  const required = requiredCount("majority", eligible.length);
-  const cohortA = ["a", "b"];
-  const cohortB = ["c", "d"];
-  // Neither disjoint half alone reaches the required count...
-  assert.equal(cohortA.length < required, true);
-  assert.equal(cohortB.length < required, true);
-  // ...and any two *valid* (threshold-meeting) cohorts must overlap, since
-  // 2*required > eligible.length for every n > 0.
-  assert.equal(2 * required > eligible.length, true);
+test("REQ-6-6 step 2: a non-\"any\" setting stays below 2 when N < 2", () => {
+  assert.equal(requiredApprovals("recovery", 1, 1, 1), 1);
 });
 
-test("unanimous requires every eligible party", () => {
-  assert.equal(requiredCount("unanimous", 3), 3);
-  assert.equal(meetsThreshold("unanimous", ["a", "b"], ["a", "b", "c"]), false);
-  assert.equal(meetsThreshold("unanimous", ["a", "b", "c"], ["a", "b", "c"]), true);
+test('REQ-6-6 step 3: membership is raised to at least floor(N/2)+1 even for an integer k smaller than that', () => {
+  assert.equal(requiredApprovals("membership", 1, 5, 5), 3); // floor(5/2)+1 = 3, k=1 alone would be 2 (step 2's floor)
 });
 
-test("unanimous: vacuously unsatisfiable at n=0, not trivially met by zero signers (audit WS-1.3)", () => {
-  assert.equal(requiredCount("unanimous", 0), Infinity, "unanimous over an empty eligible set must never resolve to 0 required");
-  assert.equal(meetsThreshold("unanimous", [], []), false, "zero signers must never satisfy a threshold evaluated against zero eligible parties");
+test('REQ-6-6 step 3: removal is NOT raised by the membership/deactivation floor', () => {
+  assert.equal(requiredApprovals("removal", 1, 5, 4), 2); // step 2's floor of 2 only, not step 3's floor of 3
 });
 
-test("at_least(n): an absolute count regardless of eligible set size", () => {
-  assert.equal(requiredCount({ at_least: 2 }, 10), 2);
-  assert.equal(meetsThreshold({ at_least: 2 }, ["a"], ["a", "b", "c"]), false);
-  assert.equal(meetsThreshold({ at_least: 2 }, ["a", "b"], ["a", "b", "c"]), true);
+test('REQ-6-6: "all" requires every eligible guardian', () => {
+  assert.equal(requiredApprovals("removal", "all", 5, 4), 4);
 });
 
-test("at_least(0) or negative: unsatisfiable, never trivially met by zero signers (audit WS-1.3)", () => {
-  assert.equal(requiredCount({ at_least: 0 }, 5), Infinity, "at_least:0 must not resolve to 0 required signers");
-  assert.equal(requiredCount({ at_least: -3 }, 5), Infinity, "a negative at_least must not resolve to 0 required signers either");
-  assert.equal(meetsThreshold({ at_least: 0 }, [], ["a", "b", "c"]), false, "an empty proof array must never satisfy at_least:0");
+test("REQ-6-6: an integer k larger than E is capped at E", () => {
+  assert.equal(requiredApprovals("recovery", 10, 3, 3), 3);
 });
 
-test("every threshold kind is unsatisfiable over an empty eligible set (audit WS-1.3: a guardian-less ward, or one whose sole guardian is deactivated, must never be trivially satisfied)", () => {
-  for (const threshold of ["any", "unanimous", "majority", { at_least: 1 }] as const) {
-    assert.equal(requiredCount(threshold, 0), Infinity, JSON.stringify(threshold));
-    assert.equal(meetsThreshold(threshold, [], []), false, JSON.stringify(threshold));
-  }
-});
-
-test("ineligible or duplicate signers are never double-counted", () => {
-  const eligible = ["a", "b", "c"];
-  assert.equal(meetsThreshold("majority", ["a", "a", "stranger"], eligible), false, "1 valid distinct signer is not a majority of 3");
-});
-
-test("requiredTransferSigners: continuing guardians (in current and incoming, not in outgoing) are excluded", () => {
-  // current = [troy, jane]; troy steps down, jane continues, caleb joins.
-  const signers = requiredTransferSigners("fred", ["troy", "jane"], ["troy"], ["jane", "caleb"]);
-  assert.deepEqual(new Set(signers), new Set(["troy", "caleb"]), "jane continues and should not need to re-sign");
-});
-
-test("requiredTransferSigners: naming someone in both outgoing and incoming still requires their signature", () => {
-  // Listing a party in `outgoing` is itself a claim they're being removed,
-  // so their consent is still required even if `incoming` re-adds them --
-  // this isn't the "jane continues" case, it's "jane is removed and rejoins".
-  const signers = requiredTransferSigners("fred", ["troy", "jane"], ["troy", "jane"], ["jane", "caleb"]);
-  assert.deepEqual(new Set(signers), new Set(["troy", "jane", "caleb"]));
-});
-
-test("requiredTransferSigners: establishing from zero (current empty) requires incoming AND the ward's own consent", () => {
-  const signers = requiredTransferSigners("fred", [], [], ["board-a", "board-b"]);
-  assert.deepEqual(new Set(signers), new Set(["board-a", "board-b", "fred"]), "the ward itself must also consent to acquiring a guardian where it had none");
-});
-
-test("requiredTransferSigners: ordinary reshuffle among already-consenting guardians does not re-require the ward", () => {
-  // current is non-empty, so this is NOT the zero-to-one transition --
-  // the ward already accepted oversight once and isn't re-asked here.
-  const signers = requiredTransferSigners("fred", ["troy"], ["troy"], ["caleb"]);
-  assert.ok(!signers.includes("fred"), "ward consent is only required when establishing guardianship from zero");
+test("REQ-6-7: guardians can approve only when the required number does not exceed E", () => {
+  assert.equal(guardiansCanApprove(3, 3), true);
+  assert.equal(guardiansCanApprove(4, 3), false);
 });

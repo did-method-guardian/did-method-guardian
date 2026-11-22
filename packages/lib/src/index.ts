@@ -5,5 +5,4 @@ export * from "./operations.js";
 export * from "./document.js";
 export * from "./resolve.js";
 export * from "./rules.js";
-export * from "./freshness.js";
 export * from "./verifyLog.js";
