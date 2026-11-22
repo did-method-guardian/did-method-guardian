@@ -50,7 +50,7 @@ export async function findByHash(log: Log, hash: string): Promise<number> {
  * a version or key index that doesn't exist, a bad signature, a
  * deactivated root) is invalid.
  */
-export async function verifyAttestation(create: CreateOp, resolveLog: LogResolver): Promise<Outcome> {
+export async function verifyAttestation(create: CreateOp, resolveLog: LogResolver, implementedExtensions: ReadonlySet<string> = new Set()): Promise<Outcome> {
   const attestation = create.attestation;
   if (!attestation) return "valid"; // the root identity's own create has none (REQ-7-7)
   if (!isSupportedCryptosuite(attestation.cryptosuite)) return "unsupported";
@@ -66,7 +66,7 @@ export async function verifyAttestation(create: CreateOp, resolveLog: LogResolve
   const opIndex = await findByHash(rootLog, version);
   if (opIndex === -1) return "invalid";
 
-  const prefixResult = await verifyLog(rootDid, rootLog.slice(0, opIndex + 1));
+  const prefixResult = await verifyLog(rootDid, rootLog.slice(0, opIndex + 1), implementedExtensions);
   if (prefixResult.result === "unsupported") return "unsupported";
   if (prefixResult.result !== "valid") return "invalid";
   const state = prefixResult.state!;
@@ -84,15 +84,15 @@ export interface ResolveResult {
   metadata?: ResolutionMetadata;
 }
 
-/** REQ-11-1: resolves a DID to its document. */
-export async function resolve(did: Did, log: Log, resolveLog: LogResolver): Promise<ResolveResult> {
-  const verified = await verifyLog(did, log);
+/** REQ-11-1: resolves a DID to its document. `implementedExtensions` defaults to empty, same as `verifyLog`. */
+export async function resolve(did: Did, log: Log, resolveLog: LogResolver, implementedExtensions: ReadonlySet<string> = new Set()): Promise<ResolveResult> {
+  const verified = await verifyLog(did, log, implementedExtensions);
   if (verified.result !== "valid") return { result: verified.result, reason: verified.reason };
 
   const domain = parseGuardianDid(did)!.domain;
   const isRoot = did === `did:guardian:${domain}`;
   if (!isRoot) {
-    const attestationResult = await verifyAttestation(log[0] as CreateOp, resolveLog);
+    const attestationResult = await verifyAttestation(log[0] as CreateOp, resolveLog, implementedExtensions);
     if (attestationResult !== "valid") return { result: attestationResult };
   }
 
@@ -118,10 +118,17 @@ export type MutualityResult = "unavailable" | "different identity" | "deactivate
  * (standing, below) -- never used for REQ-11-5 itself, which has no
  * such exception.
  */
-export async function checkMutuality(wardDid: Did, wardAnchor: string, entry: Entry, resolveLog: LogResolver, skipKeysCheck = false): Promise<MutualityResult> {
+export async function checkMutuality(
+  wardDid: Did,
+  wardAnchor: string,
+  entry: Entry,
+  resolveLog: LogResolver,
+  skipKeysCheck = false,
+  implementedExtensions: ReadonlySet<string> = new Set(),
+): Promise<MutualityResult> {
   const log = await resolveLog(entry.did);
   if (!log) return "unavailable";
-  const verified = await verifyLog(entry.did, log);
+  const verified = await verifyLog(entry.did, log, implementedExtensions);
   if (verified.result !== "valid") return "unavailable";
 
   const anchor = await anchorOf(log[0] as CreateOp);
@@ -143,10 +150,15 @@ export async function checkMutuality(wardDid: Did, wardAnchor: string, entry: En
 export type WardReportResult = "unavailable" | "different identity" | "guardian" | "successor" | "not related";
 
 /** REQ-11-6: one ward record's own report, from the perspective of `thisDid` (the identity whose `wards` this record came from). */
-export async function checkWardReport(thisDid: Did, record: WardRecord, resolveLog: LogResolver): Promise<WardReportResult> {
+export async function checkWardReport(
+  thisDid: Did,
+  record: WardRecord,
+  resolveLog: LogResolver,
+  implementedExtensions: ReadonlySet<string> = new Set(),
+): Promise<WardReportResult> {
   const log = await resolveLog(record.did);
   if (!log) return "unavailable";
-  const verified = await verifyLog(record.did, log);
+  const verified = await verifyLog(record.did, log, implementedExtensions);
   if (verified.result !== "valid") return "unavailable";
 
   const anchor = await anchorOf(log[0] as CreateOp);

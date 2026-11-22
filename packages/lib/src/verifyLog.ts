@@ -3,7 +3,6 @@ import {
   checkOperationShape,
   isPlainObject,
   isSupportedCryptosuite,
-  isSupportedExtension,
   isSupportedOperationType,
   keyOfVerificationMethod,
   operationHash,
@@ -31,16 +30,16 @@ function result(outcome: VerifyOutcome, reason?: string, state?: State): VerifyR
  * `proof`'s entries (never `attestation`, which REQ-11-2 checks during
  * resolution, not verification), or an extension name -- from the state's
  * `critical` before this operation, or from the operation's own
- * `critical` -- that this library does not implement.
+ * `critical` -- not in `implementedExtensions`.
  */
-function unsupportedReason(op: unknown, criticalBefore: string[]): string | undefined {
+function unsupportedReason(op: unknown, criticalBefore: string[], implementedExtensions: ReadonlySet<string>): string | undefined {
   if (!isPlainObject(op)) return undefined; // not even an object -- REQ-5-1 catches this as invalid
   if (typeof op.type !== "string") return undefined; // REQ-5-1/7-2 catches this as invalid
   if (!isSupportedOperationType(op.type)) return `REQ-8-1: operation type "${op.type}" is not implemented`;
 
   const ownCritical = Array.isArray(op.critical) ? op.critical.filter((c): c is string => typeof c === "string") : [];
   for (const name of [...criticalBefore, ...ownCritical]) {
-    if (!isSupportedExtension(name)) return `REQ-8-1: extension "${name}" is not implemented`;
+    if (!implementedExtensions.has(name)) return `REQ-8-1: extension "${name}" is not implemented`;
   }
 
   if (Array.isArray(op.proof)) {
@@ -66,8 +65,14 @@ async function verifyProofs(op: object, proofs: DataIntegrityProof[]): Promise<{
   return { validKeys };
 }
 
-/** REQ-8-1: verifies the log of `did`, reporting valid, invalid or unsupported (REQ-8-2: depends only on this log). */
-export async function verifyLog(did: Did, log: Log): Promise<VerifyResult> {
+/**
+ * REQ-8-1: verifies the log of `did`, reporting valid, invalid or
+ * unsupported (REQ-8-2: depends only on this log). `implementedExtensions`
+ * defaults to empty -- production code implements no extensions; a
+ * caller opts into one (e.g. the toy `min-keys` extension, for
+ * conformance testing only) by naming it explicitly.
+ */
+export async function verifyLog(did: Did, log: Log, implementedExtensions: ReadonlySet<string> = new Set()): Promise<VerifyResult> {
   if (!Array.isArray(log) || log.length === 0) return result("invalid", "REQ-8-1: the log must be a non-empty array of operations");
 
   let state: State | undefined;
@@ -80,7 +85,7 @@ export async function verifyLog(did: Did, log: Log): Promise<VerifyResult> {
     if (state?.deactivated) return result("invalid", "REQ-8-1: no operation may follow a deactivate", state);
 
     // REQ-8-1 intro: unsupported conditions are checked before the steps.
-    const unsupported = unsupportedReason(op, state?.critical ?? []);
+    const unsupported = unsupportedReason(op, state?.critical ?? [], implementedExtensions);
     if (unsupported) return result("unsupported", unsupported, state);
 
     // REQ-8-1 step 5.1 (Sections 5 and 7).

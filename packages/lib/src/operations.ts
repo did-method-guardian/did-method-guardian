@@ -154,11 +154,16 @@ export function isSupportedOperationType(type: string): boolean {
   return SUPPORTED_OPERATION_TYPES.has(type);
 }
 
-/** REQ-7-29/REQ-7-33 through 7-35/REQ-8-1: the one extension this library implements, for conformance testing (README: "the toy extension"). It is not part of the did:guardian method itself. */
+/**
+ * REQ-7-29/REQ-7-33 through 7-35/REQ-8-1: a toy extension, for
+ * conformance testing only (README: "the toy extension"). It is not
+ * part of the did:guardian method, and production code never
+ * implements it -- `verifyLog`/`resolve`/`checkAcceptance` all default
+ * to implementing no extensions at all; a caller opts into this one by
+ * passing `new Set([MIN_KEYS_EXTENSION])` explicitly, which only tests
+ * do.
+ */
 export const MIN_KEYS_EXTENSION = "https://example.org/ext/min-keys";
-export function isSupportedExtension(name: string): boolean {
-  return name === MIN_KEYS_EXTENSION;
-}
 
 /**
  * The toy extension's own rule (REQ-7-33/7-35), checked against a state

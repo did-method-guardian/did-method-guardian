@@ -22,8 +22,15 @@ const reject = (reason: string): AcceptResult => ({ accepted: false, reason });
 const ACCEPT: AcceptResult = { accepted: true };
 
 /** REQ-10-6: an entry has standing for `wardDid`/`wardAnchor`. `skipKeysCheckFor`, when it names this same entry's DID, is REQ-10-7's own exception to item 3 for an `updateGuardian` of that entry. */
-async function hasStanding(wardDid: Did, wardAnchor: string, entry: Entry, resolveLog: LogResolver, skipKeysCheckFor?: Did): Promise<boolean> {
-  const result = await checkMutuality(wardDid, wardAnchor, entry, resolveLog, skipKeysCheckFor === entry.did);
+async function hasStanding(
+  wardDid: Did,
+  wardAnchor: string,
+  entry: Entry,
+  resolveLog: LogResolver,
+  implementedExtensions: ReadonlySet<string>,
+  skipKeysCheckFor?: Did,
+): Promise<boolean> {
+  const result = await checkMutuality(wardDid, wardAnchor, entry, resolveLog, skipKeysCheckFor === entry.did, implementedExtensions);
   return result === "mutual";
 }
 
@@ -34,7 +41,15 @@ async function hasStanding(wardDid: Did, wardAnchor: string, entry: Entry, resol
  * the same set `checkApprovals` already computed, reused here so this
  * never re-verifies a signature.
  */
-async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore: State | undefined, candidate: Operation, signers: Set<Key>, resolveLog: LogResolver): Promise<AcceptResult> {
+async function checkCrossLogRules(
+  wardDid: Did,
+  wardAnchor: string,
+  stateBefore: State | undefined,
+  candidate: Operation,
+  signers: Set<Key>,
+  resolveLog: LogResolver,
+  implementedExtensions: ReadonlySet<string>,
+): Promise<AcceptResult> {
   const guardians = stateBefore?.guardians ?? [];
   const successor = stateBefore?.successor ?? null;
 
@@ -44,7 +59,7 @@ async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore:
   for (const entry of [...guardians, ...(successor ? [successor] : [])]) {
     const approves = entry.keys.some((k) => signers.has(k));
     if (!approves) continue;
-    if (!(await hasStanding(wardDid, wardAnchor, entry, resolveLog, updatingGuardian))) {
+    if (!(await hasStanding(wardDid, wardAnchor, entry, resolveLog, implementedExtensions, updatingGuardian))) {
       return reject(`REQ-10-7: ${entry.did}'s entry does not have standing`);
     }
   }
@@ -52,25 +67,25 @@ async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore:
   switch (candidate.type) {
     case "create": {
       for (const entry of [...candidate.guardians, ...(candidate.successor ? [candidate.successor] : [])]) {
-        if (!(await hasStanding(wardDid, wardAnchor, entry, resolveLog))) return reject(`REQ-10-7: the new entry for ${entry.did} does not have standing`);
+        if (!(await hasStanding(wardDid, wardAnchor, entry, resolveLog, implementedExtensions))) return reject(`REQ-10-7: the new entry for ${entry.did} does not have standing`);
       }
       return ACCEPT;
     }
     case "addGuardian": {
-      if (!(await hasStanding(wardDid, wardAnchor, candidate.entry, resolveLog))) return reject(`REQ-10-7: the new entry for ${candidate.entry.did} does not have standing`);
+      if (!(await hasStanding(wardDid, wardAnchor, candidate.entry, resolveLog, implementedExtensions))) return reject(`REQ-10-7: the new entry for ${candidate.entry.did} does not have standing`);
       return ACCEPT;
     }
     case "setPolicy": {
       const successorChanged = candidate.successor !== null && candidate.successor.did !== successor?.did;
       if (candidate.successor !== null && successorChanged) {
-        if (!(await hasStanding(wardDid, wardAnchor, candidate.successor, resolveLog))) return reject(`REQ-10-7: the new entry for ${candidate.successor.did} does not have standing`);
+        if (!(await hasStanding(wardDid, wardAnchor, candidate.successor, resolveLog, implementedExtensions))) return reject(`REQ-10-7: the new entry for ${candidate.successor.did} does not have standing`);
       }
       return ACCEPT;
     }
     case "updateGuardian": {
       const guardianLog = await resolveLog(candidate.guardian);
       if (!guardianLog) return reject("REQ-10-7: the guardian's log could not be retrieved");
-      const guardianVerified = await verifyLog(candidate.guardian, guardianLog);
+      const guardianVerified = await verifyLog(candidate.guardian, guardianLog, implementedExtensions);
       if (guardianVerified.result !== "valid") return reject("REQ-10-7: the guardian's log does not verify");
       if (!sameKeys(candidate.keys, guardianVerified.state!.keys)) return reject("REQ-10-7: updateGuardian's new keys must equal the keys in the current state of guardian");
       return ACCEPT;
@@ -80,7 +95,7 @@ async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore:
       if (candidate.evidence !== undefined && removed) {
         const guardianLog = await resolveLog(candidate.guardian);
         if (!guardianLog) return reject("REQ-10-7: the guardian's log could not be retrieved");
-        const guardianVerified = await verifyLog(candidate.guardian, guardianLog);
+        const guardianVerified = await verifyLog(candidate.guardian, guardianLog, implementedExtensions);
         if (guardianVerified.result !== "valid") return reject("REQ-10-7: the guardian's log does not verify");
         const anchor = await anchorOf(guardianLog[0] as CreateOp);
         if (anchor !== removed.anchor) return reject("REQ-10-7: evidence -- the guardian's anchor does not match the entry");
@@ -92,12 +107,12 @@ async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore:
         const consentIndex = await findByHash(guardianLog, removed.consent);
         if (consentIndex === -1 || evidenceIndex <= consentIndex) return reject("REQ-10-7: evidence must follow the entry's consent");
 
-        const standing = await hasStanding(wardDid, wardAnchor, removed, resolveLog);
+        const standing = await hasStanding(wardDid, wardAnchor, removed, resolveLog, implementedExtensions);
         if (standing) return reject("REQ-10-7: evidence is valid only once the entry's standing is already lost by deactivation or release");
       }
       const remainingGuardians = guardians.filter((g) => g.did !== candidate.guardian);
       const promotesSuccessor = remainingGuardians.length === 0 && successor !== null;
-      if (promotesSuccessor && !(await hasStanding(wardDid, wardAnchor, successor, resolveLog))) {
+      if (promotesSuccessor && !(await hasStanding(wardDid, wardAnchor, successor, resolveLog, implementedExtensions))) {
         return reject(`REQ-10-7: the successor's entry for ${successor.did} does not have standing`);
       }
       return ACCEPT;
@@ -105,7 +120,7 @@ async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore:
     case "acceptWard": {
       const wardLog = await resolveLog(candidate.ward.did);
       if (wardLog) {
-        const wardVerified = await verifyLog(candidate.ward.did, wardLog);
+        const wardVerified = await verifyLog(candidate.ward.did, wardLog, implementedExtensions);
         if (wardVerified.result === "valid") {
           const actualAnchor = await anchorOf(wardLog[0] as CreateOp);
           if (actualAnchor !== candidate.ward.anchor) return reject("REQ-10-7: the ward record must name that DID's own current anchor");
@@ -128,7 +143,13 @@ async function checkCrossLogRules(wardDid: Did, wardAnchor: string, stateBefore:
  * `verifyLog` on the appended log have this from `checkApprovals`'s own
  * work; this function does not re-verify signatures.
  */
-export async function checkAcceptance(did: Did, existingLog: Log, candidate: Operation, resolveLog: LogResolver): Promise<AcceptResult> {
+export async function checkAcceptance(
+  did: Did,
+  existingLog: Log,
+  candidate: Operation,
+  resolveLog: LogResolver,
+  implementedExtensions: ReadonlySet<string> = new Set(),
+): Promise<AcceptResult> {
   if (!isSupportedOperationType(candidate.type)) return reject(`REQ-10-5: operation type "${candidate.type}" is not implemented`);
 
   // REQ-10-5 step 1.
@@ -139,7 +160,7 @@ export async function checkAcceptance(did: Did, existingLog: Log, candidate: Ope
 
   // REQ-10-5 step 2.
   const newLog = [...existingLog, candidate];
-  const verified = await verifyLog(did, newLog);
+  const verified = await verifyLog(did, newLog, implementedExtensions);
   if (verified.result === "unsupported") return reject("REQ-10-5: an unsupported result is a rejection");
   if (verified.result !== "valid") return reject(`REQ-10-5: ${verified.reason}`);
 
@@ -160,10 +181,10 @@ export async function checkAcceptance(did: Did, existingLog: Log, candidate: Ope
   }
 
   // REQ-10-5 step 3 (REQ-10-7).
-  const stateBefore = existingLog.length > 0 ? (await verifyLog(did, existingLog)).state : undefined;
+  const stateBefore = existingLog.length > 0 ? (await verifyLog(did, existingLog, implementedExtensions)).state : undefined;
   const wardAnchor = await anchorOf((existingLog[0] ?? candidate) as CreateOp);
   const signers = await approvingKeys(candidate);
-  const crossLog = await checkCrossLogRules(did, wardAnchor, stateBefore, candidate, signers, resolveLog);
+  const crossLog = await checkCrossLogRules(did, wardAnchor, stateBefore, candidate, signers, resolveLog, implementedExtensions);
   if (!crossLog.accepted) return crossLog;
 
   return ACCEPT;
