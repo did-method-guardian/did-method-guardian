@@ -1,1 +1,3 @@
+/docs/spec/latest /docs/did-guardian-spec-v0.2.0/ 301
 /docs/spec/latest/* /docs/did-guardian-spec-v0.2.0/:splat 301
+/favicon.ico /img/favicon.svg 301

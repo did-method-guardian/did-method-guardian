@@ -22,7 +22,7 @@ This assumes the ward already has at least one guardian, and that its key is act
 
 A registrar-held ward is a different case: the registrar still custodies the key behind it, so what's actually "lost" is usually just your own login credential, not the key itself -- that's an account-recovery problem (see the registrar API doc's own login/account-recovery flows), separate from this page's own guardian-signed `custodial_rotate`.
 
-That last option -- a guardian that is another identity you control, rather than a separate person -- is the usual answer when there's no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s guardian covers exactly this case, with no second party involved at all. [Set one up](/docs/how-to/ai-agent-identity/) while you still have the chance -- either the ordinary way afterward (`guardian add`/`adopt`), or directly at genesis with `create --guardian <cold-storage-did> --guardian-key <label>` if you're creating `alice` for the first time and already hold both keys.
+A did:guardian guardian doesn't have to be a separate person at all -- it can be another identity you yourself control instead, which is the usual answer when there's genuinely no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s own guardian covers exactly this case, with no second party involved at all. Set one up while `alice` still has the chance to get a guardian -- the [AI-agent walkthrough](/docs/how-to/ai-agent-identity/) is written around an agent specifically, but registering a plain identity to hold the cold-storage key works exactly the same way for a human's own ward. Either the ordinary way afterward (`guardian add`/`adopt`), or directly at genesis with `create --guardian <cold-storage-did> --guardian-key <label>` if you're creating `alice` for the first time and already hold both keys.
 
 ## The recovery itself
 
@@ -30,7 +30,7 @@ That last option -- a guardian that is another identity you control, rather than
 did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --submit
 ```
 
-This needs `bob` (the guardian) to hold a key [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) can sign with directly -- if bob is still registrar-held, run `did-guardian key take-custody did:guardian:example.com:bob` first, or use the asynchronous proposal flow (`.../propose` then `.../pending/<id>/sign-as-self`, logged in as bob) described in the [registrar API doc](/docs/registrar/)'s §3 instead. Without `--submit`, the command prints the signed operation and stops there -- useful for checking it before it goes live, or for collecting more signatures by hand if `recovery_threshold` needs more than just bob.
+This `guardian recover` command needs `bob` (the guardian) to hold a key [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) can sign with directly -- if bob is still registrar-held, run `did-guardian key take-custody did:guardian:example.com:bob` first, or use the registrar's own [asynchronous signature collection](/docs/registrar/#3-asynchronous-signature-collection-pending_operations) instead (`.../propose` then `.../pending/<id>/sign-as-self`, logged in as bob). Without `--submit`, the command prints the signed operation and stops there -- useful for checking it before it goes live, or for collecting more signatures by hand if `recovery_threshold` needs more than just bob.
 
 A fresh operational key is generated and saved automatically (as `<ward-did>-recovered`); pass `--new-key <label>` to install one you already hold instead.
 
@@ -42,7 +42,7 @@ A key that's lost to theft, not just misplaced, might already have been used to 
 did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --prev <cid-before-the-fraudulent-rotation> --submit
 ```
 
-The registrar's replay logic (REQ-6-8/6-9) handles the rest. Past 72 hours, that specific undo is no longer available -- only an ordinary forward rotation is, which still replaces the compromised key, just without erasing it from the log's history.
+Naming an earlier `prev` this way is what the formal spec calls nullification -- the registrar's own replay logic ([REQ-6-8](/docs/did-guardian-spec-v0.2.0/#req-6-8)/[REQ-6-9](/docs/did-guardian-spec-v0.2.0/#req-6-9)) recognizes it and excludes the fraudulent rotation from the identity's current state automatically; nothing else needs to be told about it by hand. Past 72 hours, that specific undo is no longer available -- only an ordinary forward rotation is, which still replaces the compromised key, just without erasing it from the log's history.
 
 ## After recovering
 

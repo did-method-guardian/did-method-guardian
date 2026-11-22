@@ -56,7 +56,7 @@ Ethereum's account abstraction standard lets a smart-contract wallet designate o
 
 **Comparable:** the M-of-N guardian-set mechanic is structurally close to a `GuardianPolicy` threshold.
 
-**Different:** this lives entirely at the smart-contract/application layer, tied to one chain's execution environment, not in a portable, method-level operation log -- a DID layered on top of such a wallet wouldn't inherit guardianship as a property of the DID method. If the identity in question *is* a crypto wallet, and on-chain enforcement of recovery logic matters more than portability across chains or off-chain use, this pattern fits that directly.
+**Different:** ERC-4337's guardian logic lives entirely at the smart-contract/application layer, tied to one chain's execution environment, not in did:guardian's own method-level operation log -- a DID layered on top of such a wallet wouldn't inherit guardianship as a property of the DID method itself the way a did:guardian identity does. If the identity in question *is* a crypto wallet, and on-chain enforcement of recovery logic matters more than portability across chains or off-chain use, ERC-4337's own pattern fits that directly.
 
 ## When did:guardian fits, and when it doesn't
 
