@@ -2,20 +2,20 @@
   "note": "A standalone guardian_add establishing the first guardian for a previously guardian-less ward -- both the incoming guardian's and the ward's signatures are present (REQ-7.2-5).",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:example.com:fred": "zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh",
-    "did:guardian:example.com:board": "zDnaesZZKivQsdjPoC8358kDEszwHrsM6xneHD3yEHoTbGgEi",
-    "did:guardian:example.com": "zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh"
+    "did:guardian:example.com:fred": "zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ",
+    "did:guardian:example.com:board": "zDnaeYGQfzqk8Sfi7G3ZFUdJFnExtoEigSGCuXnEupPD4JN49",
+    "did:guardian:example.com": "zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmSh5KhU4GdaeTC483VBJ9cCQJnFrJEkMvHTs9LetA6swW",
+      "cid": "zQmTsipDXioH26AhPCDDjyvsz5EZ7ZJNRi1nAoWzZXc9KCE",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh"
+          "zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ"
         ],
         "services": {},
         "outgoing": [],
@@ -26,44 +26,44 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh#zDnaeaFj89s2EUr44rTv3sdewwLWJ7Y8sU6fZFvknaHv7zfYh",
+            "verificationMethod": "did:key:zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ#zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:35:38.325Z",
-            "proofValue": "z3sSKuYDvpC5nASRzxHorW6fyRu4Mxt9bfK63X1medBE39ucwaSTKcf21ns9MUR5XaBhzb1sarysfGdTH4biuaMp6"
+            "created": "2026-11-22T00:46:12.935Z",
+            "proofValue": "z3A34TPMXtxEztYiWigofNSxeEdkr6szrrnSqzTsg5BRREKrp1VjoHiqFJ2zcdUTvM5W8BzeukR1p3UiT7WT3ZjHb"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:35:38.325Z",
-            "proofValue": "z4wK7TE561Gtf12L67Zgi92XuSrQaweb78EXEZsWSFM6pPf6NAzjrZoUZLrNRyCVjxVJCLkowh5jQPM4nJ55utH4v"
+            "created": "2026-11-22T00:46:12.936Z",
+            "proofValue": "z56cDjoFT2wPMZv9jBXjQEWik6a11fqYhBqtP5PvCJgf453g1SnHVkcAwcv42D5RFDTj1HsPFcMr5dzWxpG8sTBsA"
           }
         ]
       }
     },
     {
-      "cid": "zQmWtsEyG68AKCrwaSZk2XrKP5bipLtS83hApFgB22pRxTM",
+      "cid": "zQme6wMRc6Fqc6Yzqv2wCKJK2VvDY9KB2Hm4dfEPJcSKip8",
       "op": {
         "type": "guardian_add",
         "incoming": "did:guardian:example.com:board",
-        "prev": "zQmSh5KhU4GdaeTC483VBJ9cCQJnFrJEkMvHTs9LetA6swW",
+        "prev": "zQmTsipDXioH26AhPCDDjyvsz5EZ7ZJNRi1nAoWzZXc9KCE",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:35:38.325Z",
-            "proofValue": "z24CFfd9Xg1eUAcZsouSQQLcbLJJvHj535ffm8Awcoyjr7pAD2mgE6zvXq2wQW9d9H5kMEfyh2Nrj12er9ExQSkLU"
+            "created": "2026-11-22T00:46:12.936Z",
+            "proofValue": "z2VwTZLkDdfWDW5G1oaR97wzPspgBNQjL4gY3vCwm8sjWNkwZp5LxMUD79C5kuiN6us1y1cajABQ6sMquTtqZvuvs"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:fred#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:35:38.325Z",
-            "proofValue": "z5Vrgj95Q3zESTbs4HkescD7DVSJpjZqX6bYTFPbn8iuPH9PjjQcGGZJLaoPiyqj6QHK1KicL2hMaQnoRHUWqjAwx"
+            "created": "2026-11-22T00:46:12.936Z",
+            "proofValue": "z3PkoeoQGk3T7YW1uXaJcRykRJACWnLRLWf8Sdh1khdEootD3FMmMkGSSD3jnErtsFxK1FZiBxfYLHLvZpZx7DwYc"
           }
         ]
       }

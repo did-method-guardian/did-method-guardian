@@ -2,18 +2,18 @@
   "note": "Fix 7: the bare-domain root identity's own genesis carries only its own proof of possession -- no separate registrar attestation exists, because there is no other party on this deployment to vouch for it. verifyCustodialCreate must accept this when op.did === registrarDid.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:example.com": "zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh"
+    "did:guardian:example.com": "zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmTQWpw7XgCDfSRTo1HXLquQrVuXAWzuB5TFraXJK5mYm8",
+      "cid": "zQmRJ8Y49tmn6dA1CN2D7jRvUXpNTz4CcAqUEMzYPAhSKce",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com",
         "name": "",
         "operationalKeys": [
-          "zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh"
+          "zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3"
         ],
         "services": {},
         "outgoing": [],
@@ -24,10 +24,10 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh#zDnaeQyK3EVrDw6p2DVySg9F5MxpCuuqzHdCbQsP3ycNUQrEh",
+            "verificationMethod": "did:key:zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3#zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:35:38.326Z",
-            "proofValue": "z3PVqFpHH4mj2afGFQTNTwLnkGbmXfchDkvjzqJuxCRDzDGgGN9MqE2L5CD67cdaYhahahtqPrNmES7xmVH1Ho3nY"
+            "created": "2026-11-22T00:46:12.936Z",
+            "proofValue": "z4FCbL4iXCCcUE74ostfSeNR4NcgaUQEyEyASYNiSyv2RaDhxybJ1ckjYmuovDYCTjw4KKzM8TuJnLXZJCAREH8Lu"
           }
         ]
       }

@@ -6,23 +6,25 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateKeypair } from "../src/crypto.js";
+import { generateKeypair, fromMultibaseBase58btc, toMultibaseBase58btc, canonicalize, sha256Bytes, signRawBytes } from "../src/crypto.js";
 import {
   signCustodialCreate,
   signCustodialRotate,
+  signCustodialRotateByGuardians,
   signGuardianAdd,
   signGuardianRemove,
   signGuardianRelinquish,
   signCustodialTombstone,
   signPolicyUpdate,
   signRegistrarAttestation,
+  signReceipt,
   createProof,
   unsecuredDocument,
   popVerificationMethod,
   cidFor,
 } from "../src/operations.js";
 import { DEFAULT_GUARDIAN_POLICY } from "../src/types.js";
-import type { CustodialCreateOp, Did, LogEntry } from "../src/types.js";
+import type { CustodialCreateOp, CustodialRotateOp, Did, LogEntry } from "../src/types.js";
 
 // `here` is dist/scripts when run compiled -- repo root is four levels up
 // (scripts -> dist -> lib -> packages -> repo root).
@@ -517,6 +519,381 @@ async function signGenesis(
     "Fix 6: policy_update bumps GuardianPolicy.version beyond what this verifier supports; the guardian_add that follows is otherwise fully and validly signed but must still be rejected, since this verifier can't trust ANY threshold read off a policy version it doesn't recognize.",
     { "did:guardian:example.com:board-a": boardA.publicKey, [boardDid]: boardB.publicKey, ...registrarKnownKeys },
     "reject",
+  );
+}
+
+// WS-3.4 (audit): fixtures below fill in the audit's own named gaps in
+// negative-case coverage. A few of the audit's original 15 are covered
+// already (unknown/invalid policy version is exactly what
+// policy_version_gate_blocks_governed_op.json already tests) or don't
+// translate into a verifyLog-checkable fixture at all ("replayed
+// superseded recovery" is an acceptance-time/storage invariant --
+// registrar.ts's own submitOperation rejects a cid that already exists
+// anywhere in ITS stored log, WS-1.5 -- never a property of a log
+// verifyLog is handed complete and already-accepted; already covered by
+// a server-level regression test, not duplicated here).
+
+const P256_N = BigInt("0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551");
+
+/** The mathematically-equivalent high-S counterpart of a genuine low-S signature -- same technique as crypto.test.ts's own malleability test, applied to a real proofValue here instead of the old base64url scheme. */
+function toHighS(proofValueMultibase: string): string {
+  const bytes = fromMultibaseBase58btc(proofValueMultibase);
+  const r = bytes.slice(0, 32);
+  let s = 0n;
+  for (const b of bytes.slice(32, 64)) s = (s << 8n) | BigInt(b);
+  const highS = P256_N - s;
+  const highSBytes = new Uint8Array(32);
+  let v = highS;
+  for (let i = 31; i >= 0; i--) {
+    highSBytes[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  const out = new Uint8Array(64);
+  out.set(r, 0);
+  out.set(highSBytes, 32);
+  return toMultibaseBase58btc(out);
+}
+
+/** Signs a hand-built proofConfig directly -- for the two fixtures below that need a genuinely valid signature over content createProof itself would never construct (a cryptosuite/created it doesn't support). */
+async function signRawProofConfig(unsecuredDoc: unknown, proofConfig: { type: "DataIntegrityProof"; cryptosuite: string; verificationMethod: string; proofPurpose: string; created: string }, privateKey: string) {
+  const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
+  const documentHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));
+  const signingInput = new Uint8Array(proofConfigHash.length + documentHash.length);
+  signingInput.set(proofConfigHash, 0);
+  signingInput.set(documentHash, proofConfigHash.length);
+  const proofValue = await signRawBytes(signingInput, privateKey);
+  return { ...proofConfig, proofValue };
+}
+
+// --- invalid: the ward's own signature over a rotation is the mathematically-equivalent high-S counterpart of a valid one (Fix 3 malleability) ---
+{
+  const highSDid: Did = "did:guardian:example.com:highs";
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: highSDid, name: "highs", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const newKey = await generateKeypair();
+  const rotate = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: [newKey.publicKey], services: {}, prev: genesisCid },
+    highSDid,
+    ward.privateKey,
+    { [newKey.publicKey]: newKey.privateKey },
+  );
+  const tamperedProof = rotate.proof.map((p) => (p.verificationMethod === `${highSDid}#key-0` ? { ...p, proofValue: toHighS(p.proofValue) } : p));
+  const tamperedRotate = { ...rotate, proof: tamperedProof };
+  write(
+    "invalid",
+    "high_s_signature_malleability",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(tamperedRotate), op: tamperedRotate }],
+    "REJECT: the ward's own signature over the rotation is the mathematically-equivalent high-S counterpart of a valid signature -- ECDSA malleability must not produce a second valid form (Fix 3).",
+    { [highSDid]: ward.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: genesis attested by a registrar from a different domain than genesis.did's own (WS-4.4) ---
+{
+  const evilRegistrarDid: Did = "did:guardian:evil.example";
+  const evilRegistrar = await generateKeypair();
+  const partial = { type: "custodial_create" as const, did: "did:guardian:example.com:foreign", name: "foreign", operationalKeys: [ward.publicKey], services: {}, outgoing: [] as [], incoming: [] as Did[], prev: null, creator: evilRegistrarDid };
+  const signed = await signCustodialCreate(partial, {}, { [ward.publicKey]: ward.privateKey });
+  const evilAttestation = await signRegistrarAttestation(partial, evilRegistrarDid, evilRegistrar.privateKey);
+  const genesis = { ...signed, proof: [...signed.proof, evilAttestation] };
+  write(
+    "invalid",
+    "foreign_domain_genesis_attestation",
+    [{ cid: await cidFor(genesis), op: genesis }],
+    "REJECT: genesis for example.com:foreign is attested by did:guardian:evil.example#key-0 -- a real, validly-signed attestation, but not from example.com's own domain root (WS-4.4/REQ-7.1-5).",
+    { [evilRegistrarDid]: evilRegistrar.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: genesis naming itself as its own guardian (REQ-7.1-9) ---
+{
+  const selfGuardianDid: Did = "did:guardian:example.com:selfguardian";
+  const partial = { type: "custodial_create" as const, did: selfGuardianDid, name: "selfguardian", operationalKeys: [ward.publicKey], services: {}, outgoing: [] as [], incoming: [selfGuardianDid], prev: null };
+  const genesis = await signGenesis(partial, { [selfGuardianDid]: ward.privateKey }, { [ward.publicKey]: ward.privateKey });
+  write(
+    "invalid",
+    "genesis_self_guardian",
+    [{ cid: await cidFor(genesis), op: genesis }],
+    "REJECT: a genesis can't name itself as its own guardian (REQ-7.1-9), even though it co-signs successfully.",
+    { [selfGuardianDid]: ward.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: genesis naming the same guardian twice in incoming ---
+{
+  const dupGuardianDid: Did = "did:guardian:example.com:dupguardian";
+  const partial = { type: "custodial_create" as const, did: "did:guardian:example.com:dupward", name: "dupward", operationalKeys: [ward.publicKey], services: {}, outgoing: [] as [], incoming: [dupGuardianDid, dupGuardianDid], prev: null };
+  const genesis = await signGenesis(partial, { [dupGuardianDid]: boardA.privateKey }, { [ward.publicKey]: ward.privateKey });
+  write(
+    "invalid",
+    "genesis_duplicate_incoming_guardian",
+    [{ cid: await cidFor(genesis), op: genesis }],
+    "REJECT: genesis names the same guardian twice in incoming -- malformed, even though the single real signature would trivially satisfy both entries.",
+    { [dupGuardianDid]: boardA.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: an operation appears after this identity's own tombstone (REQ-6-5) ---
+{
+  const postTombstoneDid: Did = "did:guardian:example.com:posttombstone";
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: postTombstoneDid, name: "posttombstone", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const tombstone = await signCustodialTombstone({ type: "custodial_tombstone", prev: genesisCid }, { [postTombstoneDid]: ward.privateKey }, [postTombstoneDid]);
+  const tombstoneCid = await cidFor(tombstone);
+  const newKey = await generateKeypair();
+  const rotateAfter = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: [newKey.publicKey], services: {}, prev: tombstoneCid },
+    postTombstoneDid,
+    ward.privateKey,
+    { [newKey.publicKey]: newKey.privateKey },
+  );
+  write(
+    "invalid",
+    "operation_after_tombstone",
+    [{ cid: genesisCid, op: genesis }, { cid: tombstoneCid, op: tombstone }, { cid: await cidFor(rotateAfter), op: rotateAfter }],
+    "REJECT: a custodial_rotate appears after this identity's own tombstone -- REQ-6-5 requires every subsequent operation to be rejected once deactivated.",
+    { [postTombstoneDid]: ward.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: nullification naming a prev whose successor was accepted more than 72h ago (REQ-6-9) ---
+{
+  const nullWinGuardianDid: Did = "did:guardian:example.com:nullwinguardian";
+  const nullWinGuardian = await generateKeypair();
+  const nullWinDid: Did = "did:guardian:example.com:nullwinward";
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: nullWinDid, name: "nullwinward", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [nullWinGuardianDid], prev: null },
+    { [nullWinGuardianDid]: nullWinGuardian.privateKey },
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const oldKey = await generateKeypair();
+  const wardRotate = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: [oldKey.publicKey], services: {}, prev: genesisCid },
+    nullWinDid,
+    ward.privateKey,
+    { [oldKey.publicKey]: oldKey.privateKey },
+  );
+  const staleReceiptAt = new Date(Date.now() - 73 * 60 * 60 * 1000).toISOString(); // 73h ago -- outside the 72h window
+  const staleReceipt = await signReceipt(unsecuredDocument(wardRotate as any), registrarDid, registrar.privateKey, staleReceiptAt);
+  const wardRotateWithReceipt = { ...wardRotate, proof: [...wardRotate.proof, staleReceipt] };
+  const wardRotateCid = await cidFor(wardRotateWithReceipt);
+
+  const recoveryKey = await generateKeypair();
+  const nullifyingRotate = await signCustodialRotateByGuardians(
+    { type: "custodial_rotate", operationalKeys: [recoveryKey.publicKey], services: {}, prev: genesisCid },
+    { [nullWinGuardianDid]: nullWinGuardian.privateKey },
+    [nullWinGuardianDid],
+    { [recoveryKey.publicKey]: recoveryKey.privateKey },
+  );
+  write(
+    "invalid",
+    "nullification_outside_window",
+    [{ cid: genesisCid, op: genesis }, { cid: wardRotateCid, op: wardRotateWithReceipt }, { cid: await cidFor(nullifyingRotate), op: nullifyingRotate }],
+    "REJECT: the guardian-signed nullifying rotation names genesis as prev, but the rotation it would nullify was accepted (per its own registrar receipt) 73 hours ago -- outside REQ-6-9's 72h window.",
+    { [nullWinGuardianDid]: nullWinGuardian.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: a guardian-signed nullifying rotation installing a key with no proof of possession (REQ-7.2-12) ---
+{
+  const noPopGuardianDid: Did = "did:guardian:example.com:nopopguardian";
+  const noPopGuardian = await generateKeypair();
+  const noPopDid: Did = "did:guardian:example.com:nopopward";
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: noPopDid, name: "nopopward", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [noPopGuardianDid], prev: null },
+    { [noPopGuardianDid]: noPopGuardian.privateKey },
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const oldKey = await generateKeypair();
+  const wardRotate = await signCustodialRotate(
+    { type: "custodial_rotate", operationalKeys: [oldKey.publicKey], services: {}, prev: genesisCid },
+    noPopDid,
+    ward.privateKey,
+    { [oldKey.publicKey]: oldKey.privateKey },
+  );
+  const freshReceipt = await signReceipt(unsecuredDocument(wardRotate as any), registrarDid, registrar.privateKey, new Date().toISOString());
+  const wardRotateWithReceipt = { ...wardRotate, proof: [...wardRotate.proof, freshReceipt] };
+  const wardRotateCid = await cidFor(wardRotateWithReceipt);
+
+  const recoveryKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [recoveryKey.publicKey], services: {}, prev: genesisCid };
+  const guardianProof = await createProof(unsecuredDocument(partial as any), `${noPopGuardianDid}#key-0`, noPopGuardian.privateKey);
+  const nullifyingRotate = { ...partial, proof: [guardianProof] }; // no PoP proof for recoveryKey at all
+  write(
+    "invalid",
+    "nullification_without_pop",
+    [{ cid: genesisCid, op: genesis }, { cid: wardRotateCid, op: wardRotateWithReceipt }, { cid: await cidFor(nullifyingRotate), op: nullifyingRotate }],
+    "REJECT: the guardian-signed nullifying rotation installs a new key with no proof of possession for it at all -- REQ-7.2-12 is still required for a nullification, same as any other rotation.",
+    { [noPopGuardianDid]: noPopGuardian.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// WS-3.4 (audit): "zero threshold" deliberately NOT added as its own
+// fixture -- any value low enough to be an interesting "zero threshold"
+// case (at_least <= 0) is already rejected by threshold.schema.json's
+// own `minimum: 1` at the structural level, so it could never be
+// schema-valid (this suite's own established convention, enforced by
+// schemas.test.ts: every fixture, invalid ones included, must still be
+// schema-conformant -- invalidity has to come from a semantic check, not
+// malformed shape). WS-1.3's actual behavior here (every threshold kind
+// unsatisfiable over an empty eligible set, n=0) is already covered
+// directly in quorum.test.ts.
+
+// --- invalid: genesis carrying an unexplained extra proof, from neither a declared key, an incoming guardian, nor the registrar (WS-1.7) ---
+{
+  const strayProofDid: Did = "did:guardian:example.com:strayproof";
+  const strayDid: Did = "did:guardian:evil.example";
+  const stray = await generateKeypair();
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: strayProofDid, name: "strayproof", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const strayProof = await createProof(unsecuredDocument(genesis as any), `${strayDid}#key-0`, stray.privateKey);
+  const poisoned = { ...genesis, proof: [...genesis.proof, strayProof] };
+  write(
+    "invalid",
+    "genesis_unexplained_extra_proof",
+    [{ cid: await cidFor(poisoned), op: poisoned }],
+    "REJECT: genesis carries a real, validly-signed extra proof from a DID that's neither a declared operational key, an incoming guardian, nor the registrar (WS-1.7) -- an unexplained proof must never be silently accepted.",
+    { [strayProofDid]: ward.publicKey, [strayDid]: stray.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: a proof with a proofPurpose this implementation doesn't use, even though its signature is genuinely valid over that exact content (WS-1.9) ---
+// WS-3.4 (audit): "wrong cryptosuite" specifically has no fixture of its
+// own -- data-integrity-proof.schema.json already constrains cryptosuite
+// to the literal constant "ecdsa-jcs-2019" (schema-enforced, same
+// reasoning as the dropped zero-threshold fixture above), so a wrong-
+// cryptosuite proof could never be schema-valid in the first place.
+// proofPurpose has no such schema constant (just `{"type": "string"}`),
+// so it's the one of the pair that actually needs its own fixture here.
+{
+  const badPurposeDid: Did = "did:guardian:example.com:badpurpose";
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: badPurposeDid, name: "badpurpose", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const newKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [newKey.publicKey], services: {}, prev: genesisCid };
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const popProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const forgedWardProof = await signRawProofConfig(
+    unsecuredDoc,
+    { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod: `${badPurposeDid}#key-0`, proofPurpose: "capabilityInvocation", created: new Date().toISOString() },
+    ward.privateKey,
+  );
+  const rotate = { ...partial, proof: [popProof, forgedWardProof] } as unknown as CustodialRotateOp;
+  write(
+    "invalid",
+    "proof_wrong_proof_purpose",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(rotate), op: rotate }],
+    "REJECT: the ward's own proof over the rotation carries proofPurpose capabilityInvocation, not this implementation's one current value (assertionMethod) -- a genuinely valid signature over that exact content, which validateProofShape (WS-1.9) must still refuse.",
+    { [badPurposeDid]: ward.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- invalid: a proof with a malformed (non-ISO-8601) created value, even though its signature is genuinely valid over that exact content (WS-1.9) ---
+{
+  const badCreatedDid: Did = "did:guardian:example.com:badcreated";
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: badCreatedDid, name: "badcreated", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: [], prev: null },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  const newKey = await generateKeypair();
+  const partial = { type: "custodial_rotate" as const, operationalKeys: [newKey.publicKey], services: {}, prev: genesisCid };
+  const unsecuredDoc = unsecuredDocument(partial as any);
+  const popProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
+  const forgedWardProof = await signRawProofConfig(
+    unsecuredDoc,
+    { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod: `${badCreatedDid}#key-0`, proofPurpose: "assertionMethod", created: "not-a-real-timestamp" },
+    ward.privateKey,
+  );
+  const rotate = { ...partial, proof: [popProof, forgedWardProof] } as unknown as CustodialRotateOp;
+  write(
+    "invalid",
+    "proof_malformed_created",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(rotate), op: rotate }],
+    "REJECT: the ward's own proof over the rotation carries created: \"not-a-real-timestamp\" -- a genuinely valid signature over that exact content, which validateProofShape (WS-1.9) must still refuse.",
+    { [badCreatedDid]: ward.publicKey, ...registrarKnownKeys },
+    "reject",
+  );
+}
+
+// --- valid: a genesis whose services map has integer-like keys -- exercises RFC 8785 key ordering (WS-3.1), not just the common alphabetic case ---
+{
+  const intKeysDid: Did = "did:guardian:example.com:intkeys";
+  const genesis = await signGenesis(
+    {
+      type: "custodial_create",
+      did: intKeysDid,
+      name: "intkeys",
+      operationalKeys: [ward.publicKey],
+      services: { "10": { type: "GuardianRegistrarService", endpoint: "https://example.com/ten" }, "2": { type: "GuardianRegistrarService", endpoint: "https://example.com/two" } },
+      outgoing: [],
+      incoming: [],
+      prev: null,
+    },
+    {},
+    { [ward.publicKey]: ward.privateKey },
+  );
+  write(
+    "valid",
+    "genesis_integer_like_service_keys",
+    [{ cid: await cidFor(genesis), op: genesis }],
+    "ACCEPT: genesis's services map has integer-like keys (\"2\", \"10\") -- any implementation whose JCS canonicalization sorts object keys by native numeric enumeration instead of RFC 8785's lexicographic UTF-16 order (WS-3.1) computes a DIFFERENT cid/signing input for this exact content and must fail to verify it.",
+    { [intKeysDid]: ward.publicKey, ...registrarKnownKeys },
+    "accept",
+  );
+}
+
+// --- valid: forced guardian_remove meeting removal_threshold against the full live set (REQ-7.2-7b) ---
+{
+  const boardC = await generateKeypair();
+  const forcedDid: Did = "did:guardian:example.com:forcedremoval";
+  const guardians: [Did, Did, Did] = ["did:guardian:example.com:board-a", "did:guardian:example.com:board-b", "did:guardian:example.com:board-c"];
+  const genesis = await signGenesis(
+    { type: "custodial_create", did: forcedDid, name: "forcedremoval", operationalKeys: [ward.publicKey], services: {}, outgoing: [], incoming: guardians, prev: null },
+    { [guardians[0]]: boardA.privateKey, [guardians[1]]: boardB.privateKey, [guardians[2]]: boardC.privateKey },
+    { [ward.publicKey]: ward.privateKey },
+  );
+  const genesisCid = await cidFor(genesis);
+  // board-a and board-b (majority of the full 3-member set) force out board-c, who never signs.
+  const removeOp = await signGuardianRemove(
+    { type: "guardian_remove", outgoing: guardians[2], prev: genesisCid },
+    { [guardians[0]]: boardA.privateKey, [guardians[1]]: boardB.privateKey },
+    [guardians[0], guardians[1]],
+  );
+  write(
+    "valid",
+    "guardian_remove_forced_majority",
+    [{ cid: genesisCid, op: genesis }, { cid: await cidFor(removeOp), op: removeOp }],
+    "ACCEPT: board-a and board-b, a majority of the full three-member guardian set, forcibly remove board-c (REQ-7.2-7b) -- board-c itself never signs.",
+    { [guardians[0]]: boardA.publicKey, [guardians[1]]: boardB.publicKey, [guardians[2]]: boardC.publicKey, ...registrarKnownKeys },
+    "accept",
   );
 }
 

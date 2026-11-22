@@ -1,0 +1,113 @@
+{
+  "note": "REJECT: the guardian-signed nullifying rotation installs a new key with no proof of possession for it at all -- REQ-7.2-12 is still required for a nullification, same as any other rotation.",
+  "expect": "reject",
+  "known_keys": {
+    "did:guardian:example.com:nopopguardian": "zDnaeTXb8KuYym7b2CseXYuBAtW9tGxXaaueZ5GXeaDnmZY6o",
+    "did:guardian:example.com": "zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3"
+  },
+  "registrar_did": "did:guardian:example.com",
+  "log": [
+    {
+      "cid": "zQmdSPm21Z1HtcM6hEGb2Wpau6zDUEBqhRkZCNMB6ziT7vV",
+      "op": {
+        "type": "custodial_create",
+        "did": "did:guardian:example.com:nopopward",
+        "name": "nopopward",
+        "operationalKeys": [
+          "zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ"
+        ],
+        "services": {},
+        "outgoing": [],
+        "incoming": [
+          "did:guardian:example.com:nopopguardian"
+        ],
+        "prev": null,
+        "creator": "did:guardian:example.com",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ#zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.947Z",
+            "proofValue": "zn4hGR7fUCGNStYZ7em9AAxAoDpfE24xu1gcucAdoUEsxqnAMZYPRSpxggrN6tjBiYS3UZRSXV34VM88M7CHKhLr"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:nopopguardian#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.947Z",
+            "proofValue": "z5Z9kjHRvwkQKdCa6J5vxoAFqFgPpueMdVs2cEv6t3ccm9FVMzTej3PYGcxupqDkKfZ2ajASt4aEv4SzJp5sKfcqh"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.947Z",
+            "proofValue": "zVVA653t1MnGb15c5LJLBVFzdnZnZM8ZMQ7opBZG7vzzDscFgyo8ZJBs1R3MPvyXh9NLURAV4AoGhf4qJ32Qzq1o"
+          }
+        ]
+      }
+    },
+    {
+      "cid": "zQmZ3VH21kNQP7AEZfQN26M5giWnhxrAccZiTiE12UnR5CE",
+      "op": {
+        "type": "custodial_rotate",
+        "operationalKeys": [
+          "zDnaeX6mqak14ofQcYGzP1rqcFjLuKfsFS32e4jFvvLCgUt6h"
+        ],
+        "services": {},
+        "prev": "zQmdSPm21Z1HtcM6hEGb2Wpau6zDUEBqhRkZCNMB6ziT7vV",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeX6mqak14ofQcYGzP1rqcFjLuKfsFS32e4jFvvLCgUt6h#zDnaeX6mqak14ofQcYGzP1rqcFjLuKfsFS32e4jFvvLCgUt6h",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.947Z",
+            "proofValue": "z2v58Ju4M3EpsH2AgCng9i2MtmWQWQodFnNyfWruttRi6oeHhxW99LTzk7qry3B6j6aFD1KBRZv6JyfYx1fGAkB1k"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:nopopward#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.947Z",
+            "proofValue": "z5yvBSTgoQh7gKM8Eu7g5pCbEg2EWbTreorUd5LMKGhtjvB91bBRj1aGDzTPEnNm93tnDtmLDG4LeZRnGLZ3nrw73"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.947Z",
+            "proofValue": "z4HNdRuW82FAMK9px42jPJoBCg3mtg4iJDj7tYYa4JXcMS28CXi3quHKAsM1aTgTL4XX1VTf8Y9NRdQZKdyRmvhuc"
+          }
+        ]
+      }
+    },
+    {
+      "cid": "zQmcHRx2waVR848vgmTQone2LEKyGN1n4T5QUoNAfEfWB5U",
+      "op": {
+        "type": "custodial_rotate",
+        "operationalKeys": [
+          "zDnaeWPbKtDgjiYW9ctHoQ4toneXZUVpPHzfDKCX2CVoZTEqs"
+        ],
+        "services": {},
+        "prev": "zQmdSPm21Z1HtcM6hEGb2Wpau6zDUEBqhRkZCNMB6ziT7vV",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:nopopguardian#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.948Z",
+            "proofValue": "z2Gz7rA5qdBk5hP8K4KA9bv86yS3WZE6ySSzSr99AFBXjSRLrgEmcREVdL3Fzu5Jttts2exTPeL5k6uiHMhvUDa8p"
+          }
+        ]
+      }
+    }
+  ]
+}

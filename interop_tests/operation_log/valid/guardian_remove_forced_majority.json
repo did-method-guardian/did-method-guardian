@@ -1,0 +1,101 @@
+{
+  "note": "ACCEPT: board-a and board-b, a majority of the full three-member guardian set, forcibly remove board-c (REQ-7.2-7b) -- board-c itself never signs.",
+  "expect": "accept",
+  "known_keys": {
+    "did:guardian:example.com:board-a": "zDnaeYGQfzqk8Sfi7G3ZFUdJFnExtoEigSGCuXnEupPD4JN49",
+    "did:guardian:example.com:board-b": "zDnaeVJKZ1kfVQLekA4Mc7iXR3qqdEKP5LZvjMYbon2pypALw",
+    "did:guardian:example.com:board-c": "zDnaekeF8eivoWXgu3hEMt5ReKMVZJzyDpSf3kH9FGAAWGYA1",
+    "did:guardian:example.com": "zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3"
+  },
+  "registrar_did": "did:guardian:example.com",
+  "log": [
+    {
+      "cid": "zQmcx6CSvifjDSkPGArxjYEzDwdWaCF4Hfzb2PZy1NhdNTM",
+      "op": {
+        "type": "custodial_create",
+        "did": "did:guardian:example.com:forcedremoval",
+        "name": "forcedremoval",
+        "operationalKeys": [
+          "zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ"
+        ],
+        "services": {},
+        "outgoing": [],
+        "incoming": [
+          "did:guardian:example.com:board-a",
+          "did:guardian:example.com:board-b",
+          "did:guardian:example.com:board-c"
+        ],
+        "prev": null,
+        "creator": "did:guardian:example.com",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:key:zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ#zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z3DUSBKFQ3Wezn9SBdk6HrVQn9EpFnz79e4oyVsnRrg38Mx6Z8dfPWK8W5aXMDeVWtsmSvh4b24PS42fvW6t46qY6"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:board-a#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z4gxq2gTwmUuCU4f6HBJ6CSxnvzAK19q3NSXntJFdVDWdeqheMGAsjbiiUbVsSyVg32XPYQ7h2jGjrGAfLJdQy6GB"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:board-b#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z5ttqKSuLbsCaV2QY5Qzmq9oi1RGKAXRLKV2WC8yevNvbAtu1MtDGCeCHtHaMa2PJskvZxxA8Cx5L3qJqzr1od6f4"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:board-c#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z4iJGDZz25CynZ2MLWwBsscvpV4mm7nchGfDaeQkpTstQXeTGjHpJ8yCZmexTJKietBJ6SFS9Mw8jRhy1QXHgG1kz"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z2qBt4MBMSwgncmxiAkGpNqMcepVwgZUMajBCCveu8fxzA91BeJcGMX3DyYhm2xbFvMksR4SzFDoRRCrka1dAsF4s"
+          }
+        ]
+      }
+    },
+    {
+      "cid": "zQmdTJaSQNkSxT3oeZ94hqU7pLA9FMYuEme8kRsKz33kFxC",
+      "op": {
+        "type": "guardian_remove",
+        "outgoing": "did:guardian:example.com:board-c",
+        "prev": "zQmcx6CSvifjDSkPGArxjYEzDwdWaCF4Hfzb2PZy1NhdNTM",
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:board-a#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z2jfFVMDTRwFFEo4uyoFEYGsagvJBt9jgyhePSqTSgrrXdgTEwUoCHdzAM9smgfSo3w1M325Gd36iXQ4a5tG1Qx7D"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "verificationMethod": "did:guardian:example.com:board-b#key-0",
+            "proofPurpose": "assertionMethod",
+            "created": "2026-11-22T00:46:12.951Z",
+            "proofValue": "z2gehKHpu5o5qQ2NVpadjJpRSzZRgmchm4QU2hQKBFKL7EdHnsNSgLAZwssXpYBcHWvMh3g4t3hD4WMKZVEJNi3GC"
+          }
+        ]
+      }
+    }
+  ]
+}
