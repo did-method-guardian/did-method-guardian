@@ -3,10 +3,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyCustodialCreate, verifyCustodialRotate, verifyCustodialTombstone, verifyGuardianRelinquish, verifyGuardianTransfer } from "../src/operations.js";
-import { DEFAULT_GUARDIAN_POLICY } from "../src/types.js";
 import { replay } from "../src/document.js";
-import { verifyByRules } from "../src/rules.js";
+import { verifyLog as realVerifyLog } from "../src/verifyLog.js";
 import type { KeyResolver } from "../src/operations.js";
 import type { Did, LogEntry } from "../src/types.js";
 
@@ -30,50 +28,23 @@ function loadFixtures(subdir: "valid" | "invalid"): { name: string; fixture: Fix
     .map((f) => ({ name: f, fixture: JSON.parse(readFileSync(join(dir, f), "utf8")) as Fixture }));
 }
 
-/** Verifies every operation in a fixture's log in order, stopping at (and reporting) the first failure. */
+/**
+ * WS-2.1/3.3 (audit): delegates to the library's own real verifyLog,
+ * rather than this test file's own prior hand-rolled walk -- that
+ * version never recomputed a single cid, never checked prev linkage at
+ * all (it just trusted fixture.log's own array order), and never ran a
+ * fork through checkNullification. `fixture.registrar_did` is no longer
+ * read here: the real verifyLog derives the expected registrar
+ * structurally from each genesis's own domain (WS-4.4), never from a
+ * caller-supplied value -- consistent with every fixture already using a
+ * registrar_did that IS that domain root (gen-fixtures.ts constructs
+ * them that way), and a stronger check than trusting the fixture's own
+ * claim about who the registrar is.
+ */
 async function verifyLog(fixture: Fixture, wardDid: Did): Promise<{ valid: boolean; reason?: string }> {
   const resolve: KeyResolver = (did) => (fixture.known_keys[did] ? [fixture.known_keys[did]] : undefined);
-  let currentGuardians: Did[] = [];
-  let currentOperationalKeys: string[] = [];
-  const logSoFar: LogEntry[] = [];
-
-  for (const entry of fixture.log) {
-    const op = entry.op;
-    if (op.type === "custodial_create") {
-      const result = await verifyCustodialCreate(op, resolve, fixture.registrar_did);
-      if (!result.valid) return result;
-      currentGuardians = op.incoming;
-      currentOperationalKeys = op.operationalKeys;
-    } else if (op.type === "custodial_rotate") {
-      const result = await verifyCustodialRotate(op, currentOperationalKeys, resolve);
-      if (!result.valid) return result;
-      currentOperationalKeys = op.operationalKeys;
-    } else if (op.type === "guardian_transfer") {
-      const result = await verifyGuardianTransfer(op, wardDid, currentGuardians, resolve);
-      if (!result.valid) return result;
-      currentGuardians = op.incoming;
-    } else if (op.type === "guardian_relinquish") {
-      const result = await verifyGuardianRelinquish(op, currentGuardians, DEFAULT_GUARDIAN_POLICY.removal_threshold, resolve);
-      if (!result.valid) return result;
-      currentGuardians = [];
-    } else if (op.type === "guardian_add" || op.type === "guardian_remove" || op.type === "policy_update") {
-      // These v0.2 operation types have no standalone operations.ts function
-      // at all -- their real acceptance path (registrar.ts's submitOperation)
-      // is rules.ts's verifyByRules, same as here. State as of just before
-      // this entry, same way `replay` itself reconstructs it.
-      const state = replay(wardDid, logSoFar);
-      const result = await verifyByRules(op, { wardDid, state, resolveKey: resolve, isGuardianLive: () => true });
-      if (!result.valid) return result;
-      if (op.type === "guardian_add") currentGuardians = [...currentGuardians, op.incoming];
-      if (op.type === "guardian_remove") currentGuardians = currentGuardians.filter((g) => g !== op.outgoing);
-    } else if (op.type === "custodial_tombstone") {
-      const eligible = [wardDid, ...currentGuardians];
-      const result = await verifyCustodialTombstone(op, eligible, DEFAULT_GUARDIAN_POLICY.tombstone_threshold, resolve);
-      if (!result.valid) return result;
-    }
-    logSoFar.push(entry);
-  }
-  return { valid: true };
+  const result = await realVerifyLog(wardDid, fixture.log, resolve);
+  return result.valid ? { valid: true } : { valid: false, reason: result.reason };
 }
 
 /** Audit WS-3.3: the ward is derived from the fixture's own genesis.did, never hardcoded -- several fixtures deliberately use a genesis name other than the common case (puppet/puppet2/keyswap/unsigned, each exercising a specific forgery), and a hardcoded ward here silently looked up the wrong identity's state for those. */

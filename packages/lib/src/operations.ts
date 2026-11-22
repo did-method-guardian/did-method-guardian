@@ -305,8 +305,8 @@ export function receiptCreatedAt(op: { type: string; proof?: DataIntegrityProof[
   return undefined;
 }
 
-/** WS-1.7/4.4 (audit): the only valid "accepting registrar" for a genesis is the bare-domain identity of `did`'s OWN domain -- never an arbitrary DID a caller happens to pass. Computed structurally from `did` itself, never scanned for out of a proof set (see WS-1.7's own fix below). */
-function expectedRegistrarDid(did: Did): Did {
+/** WS-1.7/4.4 (audit): the only valid "accepting registrar" for a genesis is the bare-domain identity of `did`'s OWN domain -- never an arbitrary DID a caller happens to pass. Computed structurally from `did` itself, never scanned for out of a proof set (see WS-1.7's own fix below). Exported for WS-2.1's verifyLog, which needs the same derivation to check a whole log from scratch rather than trusting a caller-supplied registrarDid. */
+export function expectedRegistrarDid(did: Did): Did {
   const { domain } = parseDid(did);
   return `did:guardian:${domain}` as Did;
 }
