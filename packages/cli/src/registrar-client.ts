@@ -56,14 +56,15 @@ export async function fetchLog(did: Did): Promise<LogEntry[]> {
 
 /**
  * `cid`, when the registrar returns one (currently only for a genesis
- * submission, v0.3 REQ-8-2): the accepted operation's REAL cid, computed
- * server-side over the content the registrar actually stored, including
- * its just-added `registrar` attestation. Never the same value a
- * caller could have computed locally before submitting -- the
- * attestation is part of the signed content, so adding it necessarily
- * changes the cid. Anything that needs to report or pin an anchor for a
- * newly-created identity must use this value, not one computed from the
- * unattested op it sent.
+ * submission, v0.3 REQ-8-2): the accepted operation's final cid, computed
+ * server-side over the content the registrar actually stored.
+ *
+ * WS-3.7 (audit): per REQ-6-4, this is identical to what computing it
+ * locally from the submitted (unattested) op would already give -- the
+ * registrar's just-added attestation is itself a proof, and every proof
+ * is stripped before hashing, so appending one never changes the cid.
+ * Reported here as the confirmed, final value for convenience (one less
+ * local recomputation for the caller), not because it could differ.
  */
 export async function submitOperation(did: Did, op: Operation): Promise<{ accepted: boolean; reason?: string; cid?: string }> {
   const { domain, name } = parseDid(did);

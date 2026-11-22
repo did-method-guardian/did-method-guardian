@@ -55,21 +55,29 @@ export function registerCreateCommand(program: Command): void {
         const result = await submitOperation(did, genesis);
         if (!result.accepted) throw new Error(`"${name}" was not accepted by ${domain}: ${result.reason}`);
         console.log(`${did} is live.`);
-        // The registrar's reported cid, not one computed here -- its added
-        // attestation is part of the signed content, so the anchor only
-        // exists once that's attached (see submitOperation's comment in
-        // registrar-client.ts).
-        console.log(`Anchor (genesis CID): ${result.cid}`);
+        // WS-3.7 (audit): the registrar's reported cid -- which, per
+        // REQ-6-4, is identical to what computing it locally from
+        // `genesis` would already give, since every proof (the just-
+        // added registrar attestation included) is stripped before
+        // hashing. Reported here as the final, confirmed value rather
+        // than recomputed locally purely as a convenience, not because
+        // the attestation changes it -- it never does.
+        console.log(`Anchor (final; computed without proofs, REQ-6-4): ${result.cid}`);
         console.log(`Public key (Multikey): ${key.publicKey}`);
         return;
       }
 
-      // No registrar attestation yet, so this draft's cid will change the
-      // moment one accepts it -- shown only to let this draft be inspected
-      // or diffed locally, never to be pinned as a real anchor.
+      // WS-3.7 (audit): per REQ-6-4 this cid is already final -- every
+      // proof (a future registrar attestation included) is stripped
+      // before hashing, so accepting this exact content elsewhere would
+      // report this same value, not a different one. Still labeled DRAFT
+      // because the identity itself isn't real until some registrar
+      // actually accepts it (no attestation yet means no conformant
+      // registrar will take it as-is), never because this cid itself is
+      // provisional.
       const anchor = await cidFor(genesis);
       console.log(`DRAFT -- ${did}`);
-      console.log(`Draft CID (changes once a registrar attests it): ${anchor}`);
+      console.log(`Anchor (final; computed without proofs, REQ-6-4): ${anchor}`);
       console.log(`Public key (Multikey): ${key.publicKey}`);
       console.log("");
       console.log("This genesis operation carries no registrar attestation (REQ-7.1-5), so no conformant registrar will accept it as-is:");
