@@ -1,0 +1,197 @@
+{
+  "description": "REQ-7-10: guardian must not already be a guardian.",
+  "expect": "reject",
+  "reject_req": "REQ-7-10",
+  "did": "did:guardian:example.com:alice3g",
+  "log": [
+    {
+      "type": "create",
+      "did": "did:guardian:example.com:alice3g",
+      "keys": [
+        "zDnaeuKxo8jweiaUxkpH7cX16DKpGdHfrRs5bR1SAJwPzQJYh"
+      ],
+      "guardians": [
+        "did:guardian:example.com:guardone",
+        "did:guardian:example.com:guardtwo",
+        "did:guardian:example.com:guardthree"
+      ],
+      "policy": {},
+      "services": [],
+      "alsoKnownAs": [],
+      "prev": null,
+      "proof": [
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:key:zDnaeuKxo8jweiaUxkpH7cX16DKpGdHfrRs5bR1SAJwPzQJYh#zDnaeuKxo8jweiaUxkpH7cX16DKpGdHfrRs5bR1SAJwPzQJYh",
+          "proofValue": "z2sibjHD9hsPDogq4CHecifDXE5DhSygam5MN2tEJo8mFCVLEiZoCQQmVBC7uj5ghe6k5hYjjGUuS4yLZBh1CW46a"
+        },
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com:guardone?versionId=zQmSRBstzgQjT8nHJY16B6dvX578ACABQYkrorTbeBnyDvc#key-0",
+          "proofValue": "z2NoPRFYwatspGb1F13sGTR1xcsjymn1E4UEne23wkTR4HwycTrHvqKAQK6XHaQ5rekP5ndWqJ7PaJLW3cjJDy1QN"
+        },
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com:guardtwo?versionId=zQmdE1ccPKBcSgtL3UpemcRk5RysYKydRBYotR4jWqhYuCe#key-0",
+          "proofValue": "z4UCTvNU8YwnJYzfDfFSTk8FHmiYWX1rEN1FAdLpqZrExb9EGqYbNpVouEW3UEpJyS2Hyxfa5VWBjqFaiDmKhRuDw"
+        },
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com:guardthree?versionId=zQmeWUkHU1dn4DVX2ddvhP5bZdHgiV4kFjBmvJ2LGqZFPC7#key-0",
+          "proofValue": "z5JYDjZVZWKbMArvrAsckXVzQZi1z4eiyBMPQgJHqRx7ZKyAzoTgw2UyV2LaomCbKFMyHSHKRkHSg3t2x2yTNzC85"
+        },
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com?versionId=zQmPJY4TeANLJnk58GGCPzeCEi3aDZsvumWK9h66QGf2HHC#key-0",
+          "proofValue": "z4kWTTc5wf6DLijrABGR8sEiDPrZuDNQvY7sZnwpD8AiCZ8WCJhocWCECAtahJVFnSHdNEhorekn4meGNLgdT4aUu"
+        }
+      ]
+    },
+    {
+      "type": "addGuardian",
+      "guardian": "did:guardian:example.com:guardone",
+      "prev": "zQmWSDX3T267xzdCXU39N9PMnziHencFfkjwsW1Z46dedWQ",
+      "proof": [
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com:guardone?versionId=zQmSRBstzgQjT8nHJY16B6dvX578ACABQYkrorTbeBnyDvc#key-0",
+          "proofValue": "zzawhzWuGi9QTP8aFCBMGaBv8DM4junw8hb4ncTAvZd7MzQBEa3UmPoqYU2YnADpgUTt3aVgNfV6jaRHgtvGHtS6"
+        },
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com:guardtwo?versionId=zQmdE1ccPKBcSgtL3UpemcRk5RysYKydRBYotR4jWqhYuCe#key-0",
+          "proofValue": "z4f6HronNvxZjBTX2hWEFDWWHf4j4gLeC4jrom6kAxzzHF2xobNUQag7GdQLrE16CxjrYVJVt91zYNS1xBV4GZh9A"
+        }
+      ]
+    }
+  ],
+  "resolve": {
+    "did:guardian:example.com:guardone": [
+      {
+        "type": "create",
+        "did": "did:guardian:example.com:guardone",
+        "keys": [
+          "zDnaemYyq9NCkzjfjEuBf1iRrETg3FjAeNu5fYJVCQjn1enCh"
+        ],
+        "guardians": [],
+        "policy": {},
+        "services": [],
+        "alsoKnownAs": [],
+        "prev": null,
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:key:zDnaemYyq9NCkzjfjEuBf1iRrETg3FjAeNu5fYJVCQjn1enCh#zDnaemYyq9NCkzjfjEuBf1iRrETg3FjAeNu5fYJVCQjn1enCh",
+            "proofValue": "z5kLTdgeRfUtvVms5JmQZX8D41pNvAcHq7DupZNu2KjC9KC6ET9YmuT8iF7E94p8nUgnGtFsoK2PpcYsCBFKdE1ZD"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:guardian:example.com?versionId=zQmPJY4TeANLJnk58GGCPzeCEi3aDZsvumWK9h66QGf2HHC#key-0",
+            "proofValue": "z5EmN3x8f4EWKxew32ngAaYPbJKCnKH2wYj9M2EWuBQmABTVVmVLCN27NuwsLgzST5HdLqr4ZtpLm6qwYdSiqXdPG"
+          }
+        ]
+      }
+    ],
+    "did:guardian:example.com:guardtwo": [
+      {
+        "type": "create",
+        "did": "did:guardian:example.com:guardtwo",
+        "keys": [
+          "zDnaeyjUW7Tp6KTCZVL8jYBs55oQDQkv8tSLTQtdwURmDTF2B"
+        ],
+        "guardians": [],
+        "policy": {},
+        "services": [],
+        "alsoKnownAs": [],
+        "prev": null,
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:key:zDnaeyjUW7Tp6KTCZVL8jYBs55oQDQkv8tSLTQtdwURmDTF2B#zDnaeyjUW7Tp6KTCZVL8jYBs55oQDQkv8tSLTQtdwURmDTF2B",
+            "proofValue": "z5EmLeuZvSZauQUrVfDiRzUcHA2eiZmfN3rzk3A9iDDNPVZgyCQ7Tk45jemCSg1aHcGukZ4MTQXc7vRmpACPtw8qF"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:guardian:example.com?versionId=zQmPJY4TeANLJnk58GGCPzeCEi3aDZsvumWK9h66QGf2HHC#key-0",
+            "proofValue": "z4Ri6v25qojehQhSrUCyEDUNgVu3dDLwkCGsYL8jT81u9nuWPTYvk8hWx2KNaT41CAoK7gW3diDg2hCXDeqRrvapF"
+          }
+        ]
+      }
+    ],
+    "did:guardian:example.com:guardthree": [
+      {
+        "type": "create",
+        "did": "did:guardian:example.com:guardthree",
+        "keys": [
+          "zDnaeQd8JdM6oTqiv1hLeyzw99ZY83fjX5eAGXveCmguAtKcm"
+        ],
+        "guardians": [],
+        "policy": {},
+        "services": [],
+        "alsoKnownAs": [],
+        "prev": null,
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:key:zDnaeQd8JdM6oTqiv1hLeyzw99ZY83fjX5eAGXveCmguAtKcm#zDnaeQd8JdM6oTqiv1hLeyzw99ZY83fjX5eAGXveCmguAtKcm",
+            "proofValue": "z4TijB2pNsBCPPT5YSqN1j55i6ZDN7zpgscRmbjkKWpi1jmdu3XCs2D2Eyi6kp7dMZrUR6aUBF5RfDuv7shDijoXv"
+          },
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:guardian:example.com?versionId=zQmPJY4TeANLJnk58GGCPzeCEi3aDZsvumWK9h66QGf2HHC#key-0",
+            "proofValue": "z3yKSsD2D7cbYup8YWmwKZDGzVNxezhypyXMZesX7qmEavQneXvmiCUXTdhGRhjEXaPPJGXQyP3td2imY6oet91Et"
+          }
+        ]
+      }
+    ],
+    "did:guardian:example.com": [
+      {
+        "type": "create",
+        "did": "did:guardian:example.com",
+        "keys": [
+          "zDnaewofVRd2JiJfKz5E6kQn6vGR4ZygvBxZMjGg1ePVrs8kF"
+        ],
+        "guardians": [],
+        "policy": {},
+        "services": [],
+        "alsoKnownAs": [],
+        "prev": null,
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:key:zDnaewofVRd2JiJfKz5E6kQn6vGR4ZygvBxZMjGg1ePVrs8kF#zDnaewofVRd2JiJfKz5E6kQn6vGR4ZygvBxZMjGg1ePVrs8kF",
+            "proofValue": "z4F2cEvs8hK6fXbz1pGLYDGHngnMgJhWTvuQT8u3uCn8mKaSnKxW8SForsjhjaNtjapfHeA7PQ5NzvTEoHAwbzWpv"
+          }
+        ]
+      }
+    ]
+  }
+}

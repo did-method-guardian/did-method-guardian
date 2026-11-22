@@ -103,13 +103,16 @@ export function checkRemoveGuardianApprovals(op: Extract<Operation, { type: "rem
 
   if (signers.dids.has(op.guardian)) return VALID; // the removed guardian's own approval
 
+  if (hasEvidence && (approved(signers, stateBefore.keys).length > 0 || approved(signers, stateBefore.guardians).length > 0)) return VALID;
+
   const others = stateBefore.guardians.filter((g) => g !== op.guardian);
   const n = stateBefore.guardians.length;
   const e = n - 1;
   const required = requiredApprovals("removal", stateBefore.policy.removal ?? DEFAULT_POLICY.removal, n, e);
-  if (guardiansCanApprove(required, e) && approved(signers, others).length >= required) return VALID;
-
-  if (hasEvidence && (approved(signers, stateBefore.keys).length > 0 || approved(signers, stateBefore.guardians).length > 0)) return VALID;
+  if (!guardiansCanApprove(required, e)) {
+    return invalid(hasEvidence ? "REQ-7-4: removeGuardian requires the removed guardian's approval, or (with evidence) one current key or one guardian" : "REQ-6-7: guardians cannot approve this removeGuardian");
+  }
+  if (approved(signers, others).length >= required) return VALID;
 
   return invalid("REQ-7-4: removeGuardian requires the removed guardian's approval, enough guardian approvals per removal, or (with evidence) one current key or one guardian");
 }

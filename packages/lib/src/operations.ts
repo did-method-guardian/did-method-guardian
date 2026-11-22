@@ -1,4 +1,4 @@
-import { canonicalize, contentRef, sha256Bytes, signRawBytes, verifyRawBytes } from "./crypto.js";
+import { canonicalize, contentRef, multikeyToSpki, sha256Bytes, signRawBytes, verifyRawBytes } from "./crypto.js";
 import type { DataIntegrityProof, Did, Key, Operation, Service } from "./types.js";
 
 /** REQ-5-6: strip `proof`, then the result is hashed in canonical form. Accepts a partial operation with no `proof` member yet -- building the content a proof will sign over -- as well as a complete one. */
@@ -171,10 +171,21 @@ export function checkServiceShape(services: unknown): ShapeResult {
 }
 
 /** REQ-6-1: keys, 1 to 8 distinct entries. */
+/** REQ-5-7: a Multikey-encoded P-256 public key. */
+export function isValidKey(key: unknown): boolean {
+  if (typeof key !== "string") return false;
+  try {
+    multikeyToSpki(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function checkKeysShape(keys: unknown): ShapeResult {
   if (!Array.isArray(keys)) return invalid("keys must be an array");
   if (keys.length < 1 || keys.length > 8) return invalid("REQ-6-1: keys must contain 1 to 8 entries");
-  if (keys.some((k) => typeof k !== "string")) return invalid("REQ-5-7: every key must be a Multikey string");
+  if (keys.some((k) => !isValidKey(k))) return invalid("REQ-5-7: every key must be a Multikey-encoded P-256 public key");
   if (new Set(keys).size !== keys.length) return invalid("REQ-6-1: keys must be distinct");
   return VALID;
 }
@@ -249,6 +260,18 @@ export function parseGuardianDid(did: string): { domain: string; name: string | 
   return undefined;
 }
 
+/** REQ-4-1/REQ-4-2/REQ-4-3: a did:guardian identifier's shape, reporting the specific requirement a malformed value violates (parseGuardianDid, by contrast, only says yes or no). */
+export function checkDidShape(value: unknown, member: string): ShapeResult {
+  if (typeof value !== "string") return invalid(`REQ-4-1: ${member} must be a string`);
+  const parts = value.split(":");
+  if (parts[0] !== "did" || parts[1] !== "guardian" || (parts.length !== 3 && parts.length !== 4)) {
+    return invalid(`REQ-4-1: ${member} must match did:guardian:<domain> or did:guardian:<domain>:<name>`);
+  }
+  if (!isValidDomain(parts[2])) return invalid(`REQ-4-2: ${member}'s domain must be a lowercase, dot-joined hostname with no trailing dot or port`);
+  if (parts.length === 4 && !isValidName(parts[3])) return invalid(`REQ-4-3: ${member}'s name must be 3 to 32 characters from a-z, 0-9 and -, beginning and ending with a letter or digit`);
+  return VALID;
+}
+
 /** REQ-4-5: the path segment of an identity. */
 export function pathSegment(name: string | null): string {
   return name ?? "_";
@@ -287,7 +310,8 @@ export function checkCreateShape(op: Record<string, unknown>): ShapeResult {
   if (!hasExactMembers(op, ["type", "did", "keys", "guardians", "policy", "services", "alsoKnownAs", "prev", "proof"])) {
     return invalid("REQ-7-5: a create operation must contain exactly type, did, keys, guardians, policy, services, alsoKnownAs, prev and proof");
   }
-  if (typeof op.did !== "string" || !parseGuardianDid(op.did)) return invalid("REQ-4-1: did must be a valid did:guardian identifier");
+  const didShape = checkDidShape(op.did, "did");
+  if (!didShape.valid) return didShape;
   const keysShape = checkKeysShape(op.keys);
   if (!keysShape.valid) return keysShape;
   const guardiansShape = checkGuardiansShape(op.guardians, op.did as Did);
@@ -320,7 +344,8 @@ export function checkAddGuardianShape(op: Record<string, unknown>): ShapeResult 
   if (!hasExactMembers(op, ["type", "guardian", "prev", "proof"])) {
     return invalid("REQ-7-9: an addGuardian operation must contain exactly type, guardian, prev and proof");
   }
-  if (typeof op.guardian !== "string" || !parseGuardianDid(op.guardian)) return invalid("REQ-4-1: guardian must be a valid did:guardian identifier");
+  const guardianShape = checkDidShape(op.guardian, "guardian");
+  if (!guardianShape.valid) return guardianShape;
   return checkProofArrayShape(op.proof);
 }
 
@@ -331,7 +356,8 @@ export function checkRemoveGuardianShape(op: Record<string, unknown>): ShapeResu
   if (!hasExactMembers(op, members)) {
     return invalid("REQ-7-12: a removeGuardian operation must contain exactly type, guardian, prev and proof, and may contain evidence");
   }
-  if (typeof op.guardian !== "string" || !parseGuardianDid(op.guardian)) return invalid("REQ-4-1: guardian must be a valid did:guardian identifier");
+  const guardianShape = checkDidShape(op.guardian, "guardian");
+  if (!guardianShape.valid) return guardianShape;
   if (hasEvidence && typeof op.evidence !== "string") return invalid("REQ-7-14: evidence must be an operation hash");
   return checkProofArrayShape(op.proof);
 }

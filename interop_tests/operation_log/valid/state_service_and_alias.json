@@ -1,0 +1,68 @@
+{
+  "description": "REQ-6-2/REQ-9-2: a conforming service and an alsoKnownAs entry are accepted and carried into the DID document.",
+  "expect": "accept",
+  "did": "did:guardian:example.com:goodsvc",
+  "log": [
+    {
+      "type": "create",
+      "did": "did:guardian:example.com:goodsvc",
+      "keys": [
+        "zDnaepihPF7L6VoZRjexZwy5t8PhbAZWDUpBaZPGW5Yub9nFF"
+      ],
+      "guardians": [],
+      "policy": {},
+      "services": [
+        {
+          "id": "#home",
+          "type": "LinkedDomains",
+          "serviceEndpoint": "https://goodsvc.example"
+        }
+      ],
+      "alsoKnownAs": [
+        "https://alias.example"
+      ],
+      "prev": null,
+      "proof": [
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:key:zDnaepihPF7L6VoZRjexZwy5t8PhbAZWDUpBaZPGW5Yub9nFF#zDnaepihPF7L6VoZRjexZwy5t8PhbAZWDUpBaZPGW5Yub9nFF",
+          "proofValue": "zmrNQZQQG5m3UKN5UQXTJwCtXjAKZWTKgsYsmX35G1hK1n3NdoUJsJDPmrfc6biYvdf8P6xnW2wKAzU9267pxV44"
+        },
+        {
+          "type": "DataIntegrityProof",
+          "cryptosuite": "ecdsa-jcs-2019",
+          "proofPurpose": "capabilityInvocation",
+          "verificationMethod": "did:guardian:example.com?versionId=zQmPJY4TeANLJnk58GGCPzeCEi3aDZsvumWK9h66QGf2HHC#key-0",
+          "proofValue": "z4TvcJBdDEJRPkR7Ft4AEE6v4HQAEzwgzAnVhArWFfLeCMmbdwqRmcn1ykJdzTsLBA3o8cMB33jdkra1i5k8r9A87"
+        }
+      ]
+    }
+  ],
+  "resolve": {
+    "did:guardian:example.com": [
+      {
+        "type": "create",
+        "did": "did:guardian:example.com",
+        "keys": [
+          "zDnaewofVRd2JiJfKz5E6kQn6vGR4ZygvBxZMjGg1ePVrs8kF"
+        ],
+        "guardians": [],
+        "policy": {},
+        "services": [],
+        "alsoKnownAs": [],
+        "prev": null,
+        "proof": [
+          {
+            "type": "DataIntegrityProof",
+            "cryptosuite": "ecdsa-jcs-2019",
+            "proofPurpose": "capabilityInvocation",
+            "verificationMethod": "did:key:zDnaewofVRd2JiJfKz5E6kQn6vGR4ZygvBxZMjGg1ePVrs8kF#zDnaewofVRd2JiJfKz5E6kQn6vGR4ZygvBxZMjGg1ePVrs8kF",
+            "proofValue": "z4F2cEvs8hK6fXbz1pGLYDGHngnMgJhWTvuQT8u3uCn8mKaSnKxW8SForsjhjaNtjapfHeA7PQ5NzvTEoHAwbzWpv"
+          }
+        ]
+      }
+    ]
+  }
+}
