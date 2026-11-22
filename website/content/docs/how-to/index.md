@@ -66,13 +66,14 @@ Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.we
 
 ### Holding a key yourself instead
 
-Everything above leaves the registrar holding both keys, encrypted. If you'd rather hold a key yourself from the start:
+Everything above leaves the registrar holding both keys, encrypted. If you'd rather hold a key yourself, log back in as `alice` specifically first -- the session above is `bob`'s, and `take-custody` acts as whichever identity is actually logged in, never the identity named in the command itself:
 
 ```text {linenos=false}
+did-guardian login did:guardian:guardianspec.org:alice --login-secret <alice's secret>
 did-guardian key take-custody did:guardian:guardianspec.org:alice
 ```
 
-ends the registrar's custody of `alice`'s key -- `did-guardian guardian add`/`recover`/`tombstone` then sign and submit directly with keys you hold, no session needed. Refuses without `--force` if `alice` has no guardian yet, since losing a self-held key with nothing to recover it is unrecoverable by anyone, ever.
+ends the registrar's custody of `alice`'s key -- `did-guardian guardian add`/`recover`/`tombstone` then sign and submit directly with keys you hold, no session needed. This still refuses without `--force` here, for a less obvious reason than "no guardian at all": `alice` already has a guardian (`bob`, from the step above), but the registrar still custodies `bob`'s key too, and `bob` alone already satisfies `alice`'s default `recovery_threshold` ("any") -- so this registrar could still rotate `alice`'s key at any time by signing as `bob` instead, even after `alice`'s own key moves to self-custody. The refusal is the CLI surfacing that real fact about the trust model, not a bug; `--force` proceeds once you've actually considered it. (A ward with literally no guardian refuses for the more familiar reason: losing a self-held key with nothing to recover it is unrecoverable by anyone, ever.)
 
 For a brand-new identity, `did-guardian create <name> --registrar <domain>` builds a genesis operation with a key you generate yourself and never hand to any registrar, then submits it for real -- genesis submission is part of the method now (formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), not a registrar-specific convenience, so this works against any conformant registrar's `.../operations` endpoint, not just one that happens to support it. `create <name> --domain <domain>` (no `--registrar`) builds the same operation fully offline instead, with no network call at all -- useful for understanding the mechanics or embedding [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, but the result is a draft until something actually accepts it.
 

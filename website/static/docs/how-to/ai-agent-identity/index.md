@@ -16,7 +16,7 @@ description: "Register an identity for an agent, make a human its guardian, and 
 
 # Give an AI agent an identity a human can revoke
 
-An agent gets an identity, with a key. A human (or a team) becomes its guardian, with the power to authorize things the agent can't approve alone, recover it if its key is compromised, and shut it down when it's retired. Neither of those actions requires the guardian to hold, or ever see, the agent's key. Commands below use [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) (`npm install -g @did-guardian/cli`); see the [registrar API doc](/docs/registrar/) for the plain HTTP underneath any of them.
+An agent gets an identity, with a key. A human (or a team) becomes its guardian, with the power to recover it if its key is compromised, shut it down when it's retired, and -- via the reference registrar's own [delegation-chain token exchange](/docs/registrar/#10-delegation-chain-tokens-token-exchange), a registrar-profile feature, not something the method itself defines -- act as the agent for things it can't approve alone. Neither recovery nor shutdown requires the guardian to hold, or ever see, the agent's key; which custody mode the agent's own key is actually in changes who those commands act *as*, not whether they work -- see the note under "Make a human its guardian" below. Commands below use [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) (`npm install -g @did-guardian/cli`); see the [registrar API doc](/docs/registrar/) for the plain HTTP underneath any of them.
 
 ## Register the agent's identity
 
@@ -46,7 +46,7 @@ did-guardian login did:guardian:guardianspec.org:priya --login-secret <priya's s
 did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7
 ```
 
-`adopt` is session-based (the registrar API's `.../adopt`): the caller is the *incoming guardian*, and since the registrar still holds both the agent's and the human's keys, it produces both signatures once the human is authenticated. Nobody outside the registrar ever sees either private key.
+`adopt` is session-based (the registrar API's `.../adopt`): the caller is the *incoming guardian*, and since the registrar still holds both the agent's and the human's keys, it produces both signatures once the human is authenticated. Nobody outside the registrar ever sees either private key -- but in this default registrar-held mode, the registrar itself still can, since it's the one producing both signatures: it can sign as the agent, or as the human guardian, for any operation either of them could authorize alone, including recovering or tombstoning the agent without the human's own session ever being involved (formal spec [§12.4](/docs/did-guardian-spec-v0.2.0/#124-key-custody-modes)). Taking custody of a key (below) is what actually removes the registrar from that part of the trust model, not merely not seeing the key afterward.
 
 **If you'd rather hold a key yourself** for one or both parties -- the agent, say, if you don't want the registrar able to sign on its behalf at all -- `did-guardian key take-custody <did>` ends the registrar's custody of that identity's key, and `did-guardian guardian add <agent-did> <guardian-did> --ward-key <label> --guardian-key <label> --submit` signs and submits the same `guardian_add` directly, once both parties hold keys locally.
 

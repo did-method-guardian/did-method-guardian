@@ -34,7 +34,7 @@ Three situations come up often enough to need a standard answer:
 
 
 
-**Someone needs standing authority to act for an identity.** The word "guardian" comes from family law, where a guardian makes important decisions (e.g. medical, financial, legal), for someone who can't make them for themselves. did:guardian carries that same idea into a digital identity. A company might not want the AI agent it runs to have full authority over certain actions on its own. Its guardian can authorize those specific actions instead. Acting on an identity's behalf this way is one of guardianship's primary uses.
+**Someone needs standing authority to act for an identity.** The word "guardian" comes from family law, where a guardian makes important decisions (e.g. medical, financial, legal), for someone who can't make them for themselves. did:guardian carries that same idea into a digital identity. A company might not want the AI agent it runs to have full authority over certain actions on its own. Its guardian can act on its behalf for those specific actions instead, via the reference registrar's own [delegation-chain token exchange](/docs/registrar/#10-delegation-chain-tokens-token-exchange) -- a registrar-profile mechanism, not something the method itself defines a dedicated operation for. Acting on an identity's behalf this way is one of guardianship's primary uses.
 
 
 

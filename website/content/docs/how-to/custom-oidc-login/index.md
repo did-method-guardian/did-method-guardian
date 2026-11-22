@@ -16,7 +16,7 @@ description: "Register an OAuth client against a registrar's standard OpenID Con
 
 # Sign in via custom OIDC
 
-Any did:guardian registrar runs as a standard OpenID Connect provider. A relying party that accepts a custom or generic OIDC identity provider -- Tailscale, Grafana, and many self-hosted tools all have an option like this -- works against it the same way it would against any other provider.
+The reference registrar runs as a standard OpenID Connect provider -- a registrar-profile feature, not something every conformant registrar has to offer. A relying party that accepts a custom or generic OIDC identity provider -- Tailscale, Grafana, and many self-hosted tools all have an option like this -- works against it the same way it would against any other provider.
 
 ## Register an OAuth client
 

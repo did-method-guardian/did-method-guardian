@@ -52,7 +52,7 @@ Builds a self-held genesis operation with a key you generate yourself and never 
 ```
 did-guardian register <name> --registrar <domain> [--json]
 ```
-Creates a registrar-held identity the ordinary way (`POST /register`). This is the only way to get a real, live identity on the current reference registrar.
+Creates a registrar-held identity the ordinary way (`POST /register`) -- the registrar-held path. `create --registrar <domain>` above is the self-held path: both publish a real, live identity on any conformant registrar (formal spec REQ-8-2), differing only in who holds the resulting key.
 
 ### Resolve and verify
 

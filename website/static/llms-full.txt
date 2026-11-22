@@ -19,7 +19,7 @@ Three situations come up often enough to need a standard answer:
 
 
 
-**Someone needs standing authority to act for an identity.** The word "guardian" comes from family law, where a guardian makes important decisions (e.g. medical, financial, legal), for someone who can't make them for themselves. did:guardian carries that same idea into a digital identity. A company might not want the AI agent it runs to have full authority over certain actions on its own. Its guardian can authorize those specific actions instead. Acting on an identity's behalf this way is one of guardianship's primary uses.
+**Someone needs standing authority to act for an identity.** The word "guardian" comes from family law, where a guardian makes important decisions (e.g. medical, financial, legal), for someone who can't make them for themselves. did:guardian carries that same idea into a digital identity. A company might not want the AI agent it runs to have full authority over certain actions on its own. Its guardian can act on its behalf for those specific actions instead, via the reference registrar's own [delegation-chain token exchange](/docs/registrar/#10-delegation-chain-tokens-token-exchange) -- a registrar-profile mechanism, not something the method itself defines a dedicated operation for. Acting on an identity's behalf this way is one of guardianship's primary uses.
 
 
 
@@ -727,7 +727,7 @@ Every action here, including email forwarding, works for the domain's own bare-d
 
 ## 9. Managed Identity API
 
-`POST /register` already exists for plain self-service (§1 restates the method's own requirements; registering a brand-new, guardian-less identity has always been part of that). This section is about the one case that's different: an agent-hosting platform (zz's own managed-identity feature is the motivating example, not the only one) wants to create a *new* identity with a human as its own signed guardian from the moment it exists -- never ownerless, and never guarded by the platform itself.
+`POST /register` already exists for plain self-service -- this registrar's own profile convenience (§2), not the method-required `.../operations` path itself ([§1](#1-method-required-endpoints), formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), though it produces exactly the same kind of guardian-less genesis either way. This section is about the one case that's different: an agent-hosting platform (zz's own managed-identity feature is the motivating example, not the only one) wants to create a *new* identity with a human as its own signed guardian from the moment it exists -- never ownerless, and never guarded by the platform itself.
 
 **The guardian is derived from a validated access token's own `sub`, never a client-supplied field.** `POST /register` with `Authorization: Bearer <access_token>` and a token whose own granted `scope` includes `create:managed-identity` creates the new ward with that token's own `sub` as its guardian. A request with no bearer token at all still gets the ordinary case: self-service, no guardian. A bearer token present but missing the scope is rejected outright (`403`), not silently downgraded to "no guardian."
 
@@ -955,13 +955,14 @@ Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.we
 
 ### Holding a key yourself instead
 
-Everything above leaves the registrar holding both keys, encrypted. If you'd rather hold a key yourself from the start:
+Everything above leaves the registrar holding both keys, encrypted. If you'd rather hold a key yourself, log back in as `alice` specifically first -- the session above is `bob`'s, and `take-custody` acts as whichever identity is actually logged in, never the identity named in the command itself:
 
 ```text {linenos=false}
+did-guardian login did:guardian:guardianspec.org:alice --login-secret <alice's secret>
 did-guardian key take-custody did:guardian:guardianspec.org:alice
 ```
 
-ends the registrar's custody of `alice`'s key -- `did-guardian guardian add`/`recover`/`tombstone` then sign and submit directly with keys you hold, no session needed. Refuses without `--force` if `alice` has no guardian yet, since losing a self-held key with nothing to recover it is unrecoverable by anyone, ever.
+ends the registrar's custody of `alice`'s key -- `did-guardian guardian add`/`recover`/`tombstone` then sign and submit directly with keys you hold, no session needed. This still refuses without `--force` here, for a less obvious reason than "no guardian at all": `alice` already has a guardian (`bob`, from the step above), but the registrar still custodies `bob`'s key too, and `bob` alone already satisfies `alice`'s default `recovery_threshold` ("any") -- so this registrar could still rotate `alice`'s key at any time by signing as `bob` instead, even after `alice`'s own key moves to self-custody. The refusal is the CLI surfacing that real fact about the trust model, not a bug; `--force` proceeds once you've actually considered it. (A ward with literally no guardian refuses for the more familiar reason: losing a self-held key with nothing to recover it is unrecoverable by anyone, ever.)
 
 For a brand-new identity, `did-guardian create <name> --registrar <domain>` builds a genesis operation with a key you generate yourself and never hand to any registrar, then submits it for real -- genesis submission is part of the method now (formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), not a registrar-specific convenience, so this works against any conformant registrar's `.../operations` endpoint, not just one that happens to support it. `create <name> --domain <domain>` (no `--registrar`) builds the same operation fully offline instead, with no network call at all -- useful for understanding the mechanics or embedding [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, but the result is a draft until something actually accepts it.
 
@@ -983,7 +984,7 @@ Each of these walks through one specific task, start to finish, with commands yo
 
 Canonical URL: https://guardianspec.org/docs/how-to/ai-agent-identity/
 
-An agent gets an identity, with a key. A human (or a team) becomes its guardian, with the power to authorize things the agent can't approve alone, recover it if its key is compromised, and shut it down when it's retired. Neither of those actions requires the guardian to hold, or ever see, the agent's key. Commands below use [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) (`npm install -g @did-guardian/cli`); see the [registrar API doc](/docs/registrar/) for the plain HTTP underneath any of them.
+An agent gets an identity, with a key. A human (or a team) becomes its guardian, with the power to recover it if its key is compromised, shut it down when it's retired, and -- via the reference registrar's own [delegation-chain token exchange](/docs/registrar/#10-delegation-chain-tokens-token-exchange), a registrar-profile feature, not something the method itself defines -- act as the agent for things it can't approve alone. Neither recovery nor shutdown requires the guardian to hold, or ever see, the agent's key; which custody mode the agent's own key is actually in changes who those commands act *as*, not whether they work -- see the note under "Make a human its guardian" below. Commands below use [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) (`npm install -g @did-guardian/cli`); see the [registrar API doc](/docs/registrar/) for the plain HTTP underneath any of them.
 
 ## Register the agent's identity
 
@@ -1013,7 +1014,7 @@ did-guardian login did:guardian:guardianspec.org:priya --login-secret <priya's s
 did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7
 ```
 
-`adopt` is session-based (the registrar API's `.../adopt`): the caller is the *incoming guardian*, and since the registrar still holds both the agent's and the human's keys, it produces both signatures once the human is authenticated. Nobody outside the registrar ever sees either private key.
+`adopt` is session-based (the registrar API's `.../adopt`): the caller is the *incoming guardian*, and since the registrar still holds both the agent's and the human's keys, it produces both signatures once the human is authenticated. Nobody outside the registrar ever sees either private key -- but in this default registrar-held mode, the registrar itself still can, since it's the one producing both signatures: it can sign as the agent, or as the human guardian, for any operation either of them could authorize alone, including recovering or tombstoning the agent without the human's own session ever being involved (formal spec [§12.4](/docs/did-guardian-spec-v0.2.0/#124-key-custody-modes)). Taking custody of a key (below) is what actually removes the registrar from that part of the trust model, not merely not seeing the key afterward.
 
 **If you'd rather hold a key yourself** for one or both parties -- the agent, say, if you don't want the registrar able to sign on its behalf at all -- `did-guardian key take-custody <did>` ends the registrar's custody of that identity's key, and `did-guardian guardian add <agent-did> <guardian-did> --ward-key <label> --guardian-key <label> --submit` signs and submits the same `guardian_add` directly, once both parties hold keys locally.
 
@@ -1044,7 +1045,7 @@ Retiring one is the same `custodial_tombstone` described above, signed by the gu
 
 Canonical URL: https://guardianspec.org/docs/how-to/custom-oidc-login/
 
-Any did:guardian registrar runs as a standard OpenID Connect provider. A relying party that accepts a custom or generic OIDC identity provider -- Tailscale, Grafana, and many self-hosted tools all have an option like this -- works against it the same way it would against any other provider.
+The reference registrar runs as a standard OpenID Connect provider -- a registrar-profile feature, not something every conformant registrar has to offer. A relying party that accepts a custom or generic OIDC identity provider -- Tailscale, Grafana, and many self-hosted tools all have an option like this -- works against it the same way it would against any other provider.
 
 ## Register an OAuth client
 
@@ -1091,7 +1092,9 @@ Canonical URL: https://guardianspec.org/docs/how-to/recover-lost-key/
 
 If a ward's operational key is lost, enough of its guardians (meeting whatever `recovery_threshold` its policy sets, `any` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.
 
-This assumes the ward already has at least one guardian. If it doesn't, there's nothing that can help: without a guardian, there is no recovery path, full stop -- a lost key with no guardian is unrecoverable by anyone, ever. did:guardian deliberately works this way instead of `did:plc`'s ordered recovery-key list: a guardian can be a person, a committee, or another identity entirely, not just a second key you happen to hold.
+This assumes the ward already has at least one guardian, and that its key is actually lost -- held by no one, not even the registrar. If both are true, there's nothing that can help: without a guardian, there is no recovery path, full stop -- a self-held key, with no guardian, that's actually gone, is unrecoverable by anyone, ever. did:guardian deliberately works this way instead of `did:plc`'s ordered recovery-key list: a guardian can be a person, a committee, or another identity entirely, not just a second key you happen to hold.
+
+A registrar-held ward is a different case: the registrar still custodies the key behind it, so what's actually "lost" is usually just your own login credential, not the key itself -- that's an account-recovery problem (see the registrar API doc's own login/account-recovery flows), separate from this page's own guardian-signed `custodial_rotate`.
 
 That last option -- a guardian that is another identity you control, rather than a separate person -- is the usual answer when there's no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s guardian covers exactly this case, with no second party involved at all. [Set one up](/docs/how-to/ai-agent-identity/) while you still have the chance -- either the ordinary way afterward (`guardian add`/`adopt`), or directly at genesis with `create --guardian <cold-storage-did> --guardian-key <label>` if you're creating `alice` for the first time and already hold both keys.
 
