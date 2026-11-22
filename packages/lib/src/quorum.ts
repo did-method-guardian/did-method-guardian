@@ -1,13 +1,13 @@
 import type { Setting } from "./types.js";
 
-/** REQ-6-4's four policy members that this calculation applies to. */
+/** REQ-6-11's four settings this calculation applies to. */
 export type SettingKind = "recovery" | "membership" | "removal" | "deactivation";
 
 /**
- * REQ-6-6: the number of guardian approvals a setting value requires, given
+ * REQ-6-8: the number of guardian approvals a setting value requires, given
  * N (guardians in the state before the operation) and E (guardians eligible
- * to approve it -- the caller computes E, since REQ-6-6 defines it
- * per-operation-type: E = N, except for `removeGuardian`, where E = N - 1).
+ * to approve it -- the caller computes E, since REQ-6-8 defines it
+ * per-operation-type: E = N - 1 for `removeGuardian`, E = N otherwise).
  */
 export function requiredApprovals(kind: SettingKind, value: Setting, n: number, e: number): number {
   // Step 1.
@@ -26,7 +26,7 @@ export function requiredApprovals(kind: SettingKind, value: Setting, n: number, 
   return required;
 }
 
-/** REQ-6-7: guardians cannot approve the operation if the required number exceeds E. */
+/** REQ-6-9: a clause that requires guardians per a setting cannot be met if E is 0 or if the required number exceeds E. */
 export function guardiansCanApprove(required: number, e: number): boolean {
-  return required <= e;
+  return e > 0 && required <= e;
 }

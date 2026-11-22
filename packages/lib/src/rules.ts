@@ -1,190 +1,176 @@
 import { guardiansCanApprove, requiredApprovals } from "./quorum.js";
-import { parseGuardianDid, type ShapeResult } from "./operations.js";
-import type { Did, Key, Operation, State } from "./types.js";
+import { invalid, VALID, type ShapeResult } from "./operations.js";
+import type { Entry, Key, Operation, State } from "./types.js";
 import { DEFAULT_POLICY } from "./types.js";
 
-const invalid = (reason: string): ShapeResult => ({ valid: false, reason });
-const VALID: ShapeResult = { valid: true };
-
-/**
- * The signers whose proof on this operation already verified
- * cryptographically (REQ-5-13/REQ-5-14) -- computed by verifyLog.ts, which
- * owns DID resolution. This module takes that result as given and decides
- * only whether REQ-7-4's table is satisfied; it performs no cryptography
- * and resolves no logs.
- */
-export interface ValidSigners {
-  keys: Set<Key>;
-  dids: Set<Did>;
+/** REQ-5-16: a key approves if it produced a valid proof. */
+function allApprove(validKeys: Set<Key>, keys: Key[]): boolean {
+  return keys.every((k) => validKeys.has(k));
 }
 
-function approved(signers: ValidSigners, candidates: Iterable<string>): string[] {
-  const out: string[] = [];
-  for (const c of candidates) if (signers.keys.has(c) || signers.dids.has(c)) out.push(c);
-  return out;
+/** REQ-5-16: a guardian or successor approves if at least one key in its entry approves. */
+function entryApproves(validKeys: Set<Key>, entry: Entry): boolean {
+  return entry.keys.some((k) => validKeys.has(k));
 }
 
-/** REQ-7-4: no proof from a signer outside `allowed`. */
-function onlyAllowedSigners(signers: ValidSigners, allowed: Set<string>): ShapeResult {
-  for (const k of signers.keys) if (!allowed.has(k)) return invalid(`REQ-7-4: no rule for this operation lists ${k} as a signer`);
-  for (const d of signers.dids) if (!allowed.has(d)) return invalid(`REQ-7-4: no rule for this operation lists ${d} as a signer`);
+function oneCurrentKey(validKeys: Set<Key>, state: State): boolean {
+  return state.keys.some((k) => validKeys.has(k));
+}
+
+function countApprovingGuardians(validKeys: Set<Key>, entries: Entry[]): number {
+  return entries.filter((e) => entryApproves(validKeys, e)).length;
+}
+
+/** REQ-7-6/REQ-7-7: create. */
+export function checkCreateApprovals(op: Extract<Operation, { type: "create" }>, validKeys: Set<Key>): ShapeResult {
+  if (!allApprove(validKeys, op.keys)) return invalid("REQ-7-6: create requires a proof of possession for every key in keys");
+  for (const g of op.guardians) {
+    if (!allApprove(validKeys, g.keys)) return invalid(`REQ-7-6: create requires a proof of possession for every key in ${g.did}'s entry`);
+  }
+  if (op.successor && !allApprove(validKeys, op.successor.keys)) return invalid("REQ-7-6: create requires a proof of possession for every key in successor's entry");
   return VALID;
 }
 
-/** REQ-7-4/REQ-7-5/REQ-7-6: create. */
-export function checkCreateApprovals(op: Extract<Operation, { type: "create" }>, signers: ValidSigners): ShapeResult {
-  const parsed = parseGuardianDid(op.did);
-  if (!parsed) return invalid("REQ-4-1: did must be a valid did:guardian identifier");
-  const rootDid = `did:guardian:${parsed.domain}`;
-  const isRoot = op.did === rootDid;
-
-  const allowed = new Set<string>([...op.keys, ...op.guardians]);
-  if (!isRoot) allowed.add(rootDid);
-
-  const allowedCheck = onlyAllowedSigners(signers, allowed);
-  if (!allowedCheck.valid) return allowedCheck;
-
-  for (const key of op.keys) if (!signers.keys.has(key)) return invalid(`REQ-7-4: create requires a proof of possession for ${key}`);
-  for (const guardian of op.guardians) if (!signers.dids.has(guardian)) return invalid(`REQ-7-4: create requires ${guardian}'s own approval`);
-  if (!isRoot && !signers.dids.has(rootDid)) return invalid("REQ-7-4: create requires the root identity's approval");
-  return VALID;
-}
-
-/** REQ-7-4/REQ-7-7/REQ-7-8: update. "one current key" is REQ-7.2's own phrase for a key in the state before the operation. */
-export function checkUpdateApprovals(op: Extract<Operation, { type: "update" }>, stateBefore: State, signers: ValidSigners): ShapeResult {
-  const allowed = new Set<string>([...op.keys, ...stateBefore.keys, ...stateBefore.guardians]);
-  const allowedCheck = onlyAllowedSigners(signers, allowed);
-  if (!allowedCheck.valid) return allowedCheck;
-
-  for (const key of op.keys) if (!signers.keys.has(key)) return invalid(`REQ-7-4: update requires a proof of possession for ${key}`);
-
-  const oneCurrentKey = approved(signers, stateBefore.keys).length > 0;
-  if (oneCurrentKey) return VALID;
-
+/** REQ-7-6/REQ-7-10: update. */
+export function checkUpdateApprovals(_op: Extract<Operation, { type: "update" }>, newKeys: Key[], stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  if (!allApprove(validKeys, newKeys)) return invalid("REQ-7-6: update requires a proof of possession for every key in keys");
+  if (oneCurrentKey(validKeys, stateBefore)) return VALID;
   const n = stateBefore.guardians.length;
   const e = n;
   const required = requiredApprovals("recovery", stateBefore.policy.recovery ?? DEFAULT_POLICY.recovery, n, e);
-  if (!guardiansCanApprove(required, e)) return invalid("REQ-6-7: guardians cannot approve this update");
-  if (approved(signers, stateBefore.guardians).length < required) return invalid("REQ-7-4: update requires one current key or enough guardian approvals per recovery");
-  return VALID;
+  if (guardiansCanApprove(required, e) && countApprovingGuardians(validKeys, stateBefore.guardians) >= required) return VALID;
+  return invalid("REQ-7-6: update requires one current key or enough guardian approvals per recovery");
 }
 
-/** REQ-7-4/REQ-7-9/REQ-7-10/REQ-7-11: addGuardian. */
-export function checkAddGuardianApprovals(op: Extract<Operation, { type: "addGuardian" }>, stateBefore: State, signers: ValidSigners): ShapeResult {
-  if (stateBefore.guardians.includes(op.guardian)) return invalid("REQ-7-10: guardian must not already be a guardian");
-
+/** REQ-7-6/REQ-7-13: addGuardian. */
+export function checkAddGuardianApprovals(op: Extract<Operation, { type: "addGuardian" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  if (stateBefore.guardians.some((g) => g.did === op.entry.did)) return invalid("REQ-7-13: the DID of entry must not already be a guardian");
+  if (!allApprove(validKeys, op.entry.keys)) return invalid("REQ-7-6: addGuardian requires a proof of possession for every key in entry");
+  if (!oneCurrentKey(validKeys, stateBefore)) return invalid("REQ-7-6: addGuardian requires one current key");
   const n = stateBefore.guardians.length;
-  const byKey = n === 0;
-  const allowed = new Set<string>([op.guardian, ...(byKey ? stateBefore.keys : stateBefore.guardians)]);
-  const allowedCheck = onlyAllowedSigners(signers, allowed);
-  if (!allowedCheck.valid) return allowedCheck;
-
-  if (!signers.dids.has(op.guardian)) return invalid("REQ-7-4: addGuardian requires the added guardian's own approval");
-
-  if (byKey) {
-    if (approved(signers, stateBefore.keys).length === 0) return invalid("REQ-7-4: addGuardian requires one current key when there are no guardians");
-    return VALID;
-  }
+  if (n === 0) return VALID;
   const e = n;
   const required = requiredApprovals("membership", stateBefore.policy.membership ?? DEFAULT_POLICY.membership, n, e);
-  if (!guardiansCanApprove(required, e)) return invalid("REQ-6-7: guardians cannot approve this addGuardian");
-  if (approved(signers, stateBefore.guardians).length < required) return invalid("REQ-7-4: addGuardian requires enough guardian approvals per membership");
+  if (!guardiansCanApprove(required, e)) return invalid("REQ-6-9: guardians cannot approve this addGuardian");
+  if (countApprovingGuardians(validKeys, stateBefore.guardians) < required) return invalid("REQ-7-6: addGuardian requires enough guardian approvals per membership");
   return VALID;
 }
 
-/** REQ-7-4/REQ-7-12/REQ-7-13/REQ-7-14/REQ-7-15: removeGuardian. Evidence's own validity (REQ-7-14, a deactivate operation hash in the removed guardian's log) is checked by verifyLog.ts; this function only reads whether `evidence` is present. */
-export function checkRemoveGuardianApprovals(op: Extract<Operation, { type: "removeGuardian" }>, stateBefore: State, signers: ValidSigners): ShapeResult {
-  if (!stateBefore.guardians.includes(op.guardian)) return invalid("REQ-7-13: guardian must be a current guardian");
+/** REQ-7-6/REQ-7-15: updateGuardian. */
+export function checkUpdateGuardianApprovals(op: Extract<Operation, { type: "updateGuardian" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  const namedEntry = stateBefore.successor?.did === op.guardian ? stateBefore.successor : stateBefore.guardians.find((g) => g.did === op.guardian);
+  if (!namedEntry) return invalid("REQ-7-15: guardian must be the DID of a current guardian or of the successor");
+  if (!allApprove(validKeys, op.keys)) return invalid("REQ-7-6: updateGuardian requires a proof of possession for every key in keys");
+  if (entryApproves(validKeys, namedEntry)) return VALID;
+  if (!oneCurrentKey(validKeys, stateBefore)) return invalid("REQ-7-6: updateGuardian requires a key in the named entry, or one current key together with one other guardian");
+  const others = stateBefore.guardians.filter((g) => g.did !== op.guardian);
+  if (others.some((g) => entryApproves(validKeys, g))) return VALID;
+  return invalid("REQ-7-6: updateGuardian requires a key in the named entry, or one current key together with one other guardian");
+}
 
-  const hasEvidence = op.evidence !== undefined;
-  const allowed = new Set<string>(hasEvidence ? [...stateBefore.keys, ...stateBefore.guardians] : stateBefore.guardians);
-  const allowedCheck = onlyAllowedSigners(signers, allowed);
-  if (!allowedCheck.valid) return allowedCheck;
+/** REQ-7-6/REQ-7-17: removeGuardian. */
+export function checkRemoveGuardianApprovals(op: Extract<Operation, { type: "removeGuardian" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  const removed = stateBefore.guardians.find((g) => g.did === op.guardian);
+  if (!removed) return invalid("REQ-7-17: guardian must be the DID of a current guardian");
 
-  if (signers.dids.has(op.guardian)) return VALID; // the removed guardian's own approval
-
-  if (hasEvidence && (approved(signers, stateBefore.keys).length > 0 || approved(signers, stateBefore.guardians).length > 0)) return VALID;
-
-  const others = stateBefore.guardians.filter((g) => g !== op.guardian);
   const n = stateBefore.guardians.length;
+  if (n >= 2 && entryApproves(validKeys, removed)) return VALID;
+
+  const others = stateBefore.guardians.filter((g) => g.did !== op.guardian);
   const e = n - 1;
   const required = requiredApprovals("removal", stateBefore.policy.removal ?? DEFAULT_POLICY.removal, n, e);
-  if (!guardiansCanApprove(required, e)) {
-    return invalid(hasEvidence ? "REQ-7-4: removeGuardian requires the removed guardian's approval, or (with evidence) one current key or one guardian" : "REQ-6-7: guardians cannot approve this removeGuardian");
-  }
-  if (approved(signers, others).length >= required) return VALID;
+  if (guardiansCanApprove(required, e) && countApprovingGuardians(validKeys, others) >= required) return VALID;
 
-  return invalid("REQ-7-4: removeGuardian requires the removed guardian's approval, enough guardian approvals per removal, or (with evidence) one current key or one guardian");
+  const hasEvidence = op.evidence !== undefined;
+  if (hasEvidence && oneCurrentKey(validKeys, stateBefore)) return VALID;
+
+  if (n === 1 && stateBefore.successor && oneCurrentKey(validKeys, stateBefore) && entryApproves(validKeys, stateBefore.successor)) return VALID;
+
+  return invalid(
+    "REQ-7-6: removeGuardian requires the removed guardian's approval (N >= 2), enough guardian approvals per removal, one current key with evidence, or (N = 1, with a successor) one current key together with the successor",
+  );
 }
 
-/** REQ-7-4/REQ-7-16/REQ-7-17: setPolicy. */
-export function checkSetPolicyApprovals(_op: Extract<Operation, { type: "setPolicy" }>, stateBefore: State, signers: ValidSigners): ShapeResult {
+/** REQ-7-6/REQ-7-20: setPolicy. */
+export function checkSetPolicyApprovals(op: Extract<Operation, { type: "setPolicy" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  if (!oneCurrentKey(validKeys, stateBefore)) return invalid("REQ-7-6: setPolicy requires one current key");
   const n = stateBefore.guardians.length;
-  const allowed = new Set<string>([...stateBefore.keys, ...(n > 0 ? stateBefore.guardians : [])]);
-  const allowedCheck = onlyAllowedSigners(signers, allowed);
-  if (!allowedCheck.valid) return allowedCheck;
-
-  if (approved(signers, stateBefore.keys).length === 0) return invalid("REQ-7-4: setPolicy requires one current key");
-  if (n === 0) return VALID;
-
-  const e = n;
-  const required = requiredApprovals("membership", stateBefore.policy.membership ?? DEFAULT_POLICY.membership, n, e);
-  if (!guardiansCanApprove(required, e)) return invalid("REQ-6-7: guardians cannot approve this setPolicy");
-  if (approved(signers, stateBefore.guardians).length < required) return invalid("REQ-7-4: setPolicy requires enough guardian approvals per membership when there are guardians");
+  if (n > 0) {
+    const e = n;
+    const required = requiredApprovals("membership", stateBefore.policy.membership ?? DEFAULT_POLICY.membership, n, e);
+    if (!guardiansCanApprove(required, e)) return invalid("REQ-6-9: guardians cannot approve this setPolicy");
+    if (countApprovingGuardians(validKeys, stateBefore.guardians) < required) return invalid("REQ-7-6: setPolicy requires enough guardian approvals per membership when there are guardians");
+  }
+  const successorChanged = op.successor !== null && op.successor.did !== stateBefore.successor?.did;
+  if (op.successor !== null && successorChanged && !allApprove(validKeys, op.successor.keys)) {
+    return invalid("REQ-7-6: setPolicy requires a proof of possession for every key in successor, when it names a new successor");
+  }
   return VALID;
 }
 
-/** REQ-7-4/REQ-7-18/REQ-7-19: deactivate. */
-export function checkDeactivateApprovals(_op: Extract<Operation, { type: "deactivate" }>, stateBefore: State, signers: ValidSigners): ShapeResult {
+function checkRecoveryGated(op: { type: string }, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  if (oneCurrentKey(validKeys, stateBefore)) return VALID;
+  const n = stateBefore.guardians.length;
+  const e = n;
+  const required = requiredApprovals("recovery", stateBefore.policy.recovery ?? DEFAULT_POLICY.recovery, n, e);
+  if (guardiansCanApprove(required, e) && countApprovingGuardians(validKeys, stateBefore.guardians) >= required) return VALID;
+  return invalid(`REQ-7-6: ${op.type} requires one current key or enough guardian approvals per recovery`);
+}
+
+/** REQ-7-6/REQ-7-22: acceptWard. */
+export function checkAcceptWardApprovals(op: Extract<Operation, { type: "acceptWard" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  if (stateBefore.wards.some((w) => w.did === op.ward.did)) return invalid("REQ-7-23: the DID of ward must not already be in wards");
+  return checkRecoveryGated(op, stateBefore, validKeys);
+}
+
+/** REQ-7-6/REQ-7-25: releaseWard. */
+export function checkReleaseWardApprovals(op: Extract<Operation, { type: "releaseWard" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
+  if (!stateBefore.wards.some((w) => w.did === op.ward)) return invalid("REQ-7-25: ward must be the DID of a record in wards");
+  return checkRecoveryGated(op, stateBefore, validKeys);
+}
+
+/** REQ-7-6/REQ-7-27: deactivate. */
+export function checkDeactivateApprovals(_op: Extract<Operation, { type: "deactivate" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
   const n = stateBefore.guardians.length;
   if (n === 0) {
-    const allowedCheck = onlyAllowedSigners(signers, new Set(stateBefore.keys));
-    if (!allowedCheck.valid) return allowedCheck;
-    if (approved(signers, stateBefore.keys).length === 0) return invalid("REQ-7-4: deactivate requires one current key when there are no guardians");
-    return VALID;
+    return oneCurrentKey(validKeys, stateBefore) ? VALID : invalid("REQ-7-6: deactivate requires one current key when there are no guardians");
   }
 
   const deactivation = stateBefore.policy.deactivation ?? DEFAULT_POLICY.deactivation;
   const e = n;
   const required = requiredApprovals("deactivation", deactivation.threshold, n, e);
-  const oneKey = () => approved(signers, stateBefore.keys).length > 0;
-  const guardianThreshold = () => guardiansCanApprove(required, e) && approved(signers, stateBefore.guardians).length >= required;
+  const oneKey = oneCurrentKey(validKeys, stateBefore);
+  const guardianThreshold = guardiansCanApprove(required, e) && countApprovingGuardians(validKeys, stateBefore.guardians) >= required;
 
-  if (deactivation.by === "self") {
-    const allowedCheck = onlyAllowedSigners(signers, new Set(stateBefore.keys));
-    if (!allowedCheck.valid) return allowedCheck;
-    return oneKey() ? VALID : invalid("REQ-7-4: deactivate requires one current key (policy.deactivation.by: self)");
-  }
-  if (deactivation.by === "guardians") {
-    const allowedCheck = onlyAllowedSigners(signers, new Set(stateBefore.guardians));
-    if (!allowedCheck.valid) return allowedCheck;
-    return guardianThreshold() ? VALID : invalid("REQ-7-4: deactivate requires enough guardian approvals per deactivation.threshold (policy.deactivation.by: guardians)");
-  }
-  const allowedCheck = onlyAllowedSigners(signers, new Set([...stateBefore.keys, ...stateBefore.guardians]));
-  if (!allowedCheck.valid) return allowedCheck;
-  if (deactivation.by === "either") {
-    return oneKey() || guardianThreshold() ? VALID : invalid("REQ-7-4: deactivate requires one current key or enough guardian approvals (policy.deactivation.by: either)");
-  }
+  if (deactivation.by === "self") return oneKey ? VALID : invalid("REQ-7-6: deactivate requires one current key (policy.deactivation.by: self)");
+  if (deactivation.by === "guardians") return guardianThreshold ? VALID : invalid("REQ-7-6: deactivate requires enough guardian approvals per deactivation.threshold (policy.deactivation.by: guardians)");
+  if (deactivation.by === "either") return oneKey || guardianThreshold ? VALID : invalid("REQ-7-6: deactivate requires one current key or enough guardian approvals (policy.deactivation.by: either)");
   // "both"
-  if (!oneKey()) return invalid("REQ-7-4: deactivate requires one current key (policy.deactivation.by: both)");
-  if (!guardianThreshold()) return invalid("REQ-7-4: deactivate requires enough guardian approvals per deactivation.threshold (policy.deactivation.by: both)");
+  if (!oneKey) return invalid("REQ-7-6: deactivate requires one current key (policy.deactivation.by: both)");
+  if (!guardianThreshold) return invalid("REQ-7-6: deactivate requires enough guardian approvals per deactivation.threshold (policy.deactivation.by: both)");
   return VALID;
 }
 
-/** REQ-7-4: dispatches to the rule for `op.type`. */
-export function checkApprovals(op: Operation, stateBefore: State, signers: ValidSigners): ShapeResult {
+/** REQ-7-6: dispatches to the rule for `op.type`. `validKeys` is every key with a valid proof on this operation (REQ-5-14/REQ-5-16). */
+export function checkApprovals(op: Operation, stateBefore: State, validKeys: Set<Key>): ShapeResult {
   switch (op.type) {
     case "create":
-      return checkCreateApprovals(op, signers);
+      return checkCreateApprovals(op, validKeys);
     case "update":
-      return checkUpdateApprovals(op, stateBefore, signers);
+      return checkUpdateApprovals(op, op.keys, stateBefore, validKeys);
     case "addGuardian":
-      return checkAddGuardianApprovals(op, stateBefore, signers);
+      return checkAddGuardianApprovals(op, stateBefore, validKeys);
+    case "updateGuardian":
+      return checkUpdateGuardianApprovals(op, stateBefore, validKeys);
     case "removeGuardian":
-      return checkRemoveGuardianApprovals(op, stateBefore, signers);
+      return checkRemoveGuardianApprovals(op, stateBefore, validKeys);
     case "setPolicy":
-      return checkSetPolicyApprovals(op, stateBefore, signers);
+      return checkSetPolicyApprovals(op, stateBefore, validKeys);
+    case "acceptWard":
+      return checkAcceptWardApprovals(op, stateBefore, validKeys);
+    case "releaseWard":
+      return checkReleaseWardApprovals(op, stateBefore, validKeys);
     case "deactivate":
-      return checkDeactivateApprovals(op, stateBefore, signers);
+      return checkDeactivateApprovals(op, stateBefore, validKeys);
   }
 }
