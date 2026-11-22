@@ -3,6 +3,17 @@ layout: docs-sidebar
 title: "Sign in via custom OIDC"
 description: "Register an OAuth client against a registrar's standard OpenID Connect provider, and use a Guardian ID to sign in anywhere that accepts a custom OIDC identity provider."
 ---
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Sign in via custom OIDC",
+  "description": "Register an OAuth client against a registrar's standard OpenID Connect provider, and use a Guardian ID to sign in anywhere that accepts a custom OIDC identity provider.",
+  "url": "https://guardianspec.org/docs/how-to/custom-oidc-login/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # Sign in via custom OIDC
 
 Any did:guardian registrar runs as a standard OpenID Connect provider. A relying party that accepts a custom or generic OIDC identity provider -- Tailscale, Grafana, and many self-hosted tools all have an option like this -- works against it the same way it would against any other provider.

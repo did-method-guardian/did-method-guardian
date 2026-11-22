@@ -9,6 +9,15 @@ did:guardian merges did:plc's operation log and key-rotation model with did:web'
 - [Guide](https://guardianspec.org/docs/): plain-language introduction -- what did:guardian is, why it exists, how guardianship works, use cases, and an orientation to the rest of the project.
 - [Formal specification](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method -- identifier syntax, the operation log, every operation and signature rule (each with a stable REQ-<section>-<n> id), security and privacy considerations.
 - [Registrar API](https://guardianspec.org/docs/registrar/): the reference registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint (standard OIDC provider, admin console, agent-identity API) this specific implementation adds.
+- [Prior art and comparisons](https://guardianspec.org/docs/prior-art/): how did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when one of those fits better.
+
+## How-to guides
+
+- [Get started](https://guardianspec.org/docs/how-to/): a CLI quickstart -- create an identity, resolve it, add a guardian.
+- [Self-host a registrar](https://guardianspec.org/docs/how-to/self-host/): deploy packages/server, the reference registrar, on your own domain.
+- [Sign in via custom OIDC](https://guardianspec.org/docs/how-to/custom-oidc-login/): register an OAuth client and use a Guardian ID to sign in anywhere that accepts a custom OIDC identity provider.
+- [Recover after a lost key](https://guardianspec.org/docs/how-to/recover-lost-key/): a guardian-initiated rotation replaces a ward's lost operational key.
+- [Give an AI agent an identity a human can revoke](https://guardianspec.org/docs/how-to/ai-agent-identity/): register an identity for an agent, make a human its guardian, and let that human authorize, recover, or shut it down.
 
 ## Code
 

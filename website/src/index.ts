@@ -8,10 +8,23 @@ export interface Env {
 // text/html gets the .md asset instead of the rendered page -- real
 // content negotiation, not just a predictable .md path to fetch directly
 // (which already works without this, as a plain static asset).
+//
+// WS-6.2 (audit): this list is generated FROM content/docs/**/index.md by
+// scripts/sync-md-twins.py every time it runs -- never hand-edit the set
+// below; a page added under content/docs without rerunning that script is
+// the exact silent-drift bug this generation closes.
 const MARKDOWN_TWIN_PATHS = new Set([
+  // MARKDOWN_TWIN_PATHS:BEGIN
   "/docs/",
   "/docs/did-guardian-spec-v0.2.0/",
+  "/docs/how-to/",
+  "/docs/how-to/ai-agent-identity/",
+  "/docs/how-to/custom-oidc-login/",
+  "/docs/how-to/recover-lost-key/",
+  "/docs/how-to/self-host/",
+  "/docs/prior-art/",
   "/docs/registrar/",
+  // MARKDOWN_TWIN_PATHS:END
 ]);
 
 function prefersMarkdown(acceptHeader: string | null): boolean {

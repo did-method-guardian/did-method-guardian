@@ -38,15 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Regenerate every derived file (md twins, schema copies, llms-full.txt)
+      - name: Regenerate every derived file (md twins, worker twin-path list, schema copies, llms-full.txt, sitemap.xml)
         working-directory: website
         run: |
           python3 scripts/sync-md-twins.py
           python3 scripts/sync-schemas.py
           python3 scripts/gen-llms-full.py
+          python3 scripts/gen-sitemap.py
       - name: Fail if regenerating any of them produced a diff
         run: |
-          git diff --exit-code -- website/static/docs website/static/schemas website/static/llms-full.txt || {
-            echo "::error::website/static/docs, website/static/schemas, or website/static/llms-full.txt is stale -- rerun the scripts in website/scripts/ and commit the result."
+          git diff --exit-code -- website/static/docs website/static/schemas website/static/llms-full.txt website/static/sitemap.xml website/src/index.ts || {
+            echo "::error::a website derived file (static/docs, static/schemas, llms-full.txt, sitemap.xml, or src/index.ts's MARKDOWN_TWIN_PATHS) is stale -- rerun the scripts in website/scripts/ and commit the result."
             exit 1
           }

@@ -3,6 +3,17 @@ layout: docs-sidebar
 title: "Self-host a registrar"
 description: "Deploy packages/server -- the reference registrar -- on your own domain: a D1 database, two secrets, and a wrangler deploy."
 ---
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Self-host a registrar",
+  "description": "Deploy packages/server -- the reference registrar -- on your own domain: a D1 database, two secrets, and a wrangler deploy.",
+  "url": "https://guardianspec.org/docs/how-to/self-host/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # Self-host a registrar
 
 `packages/server` is a self-hostable registrar: `packages/lib` plus an HTTP surface, an OIDC/OAuth2.1 identity provider, an account dashboard, an admin console, and an agent-identity API. This project's public registrar, guardianspec.org, is exactly this code, deployed to Cloudflare Workers.

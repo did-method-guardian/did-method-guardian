@@ -3,6 +3,17 @@ layout: docs-sidebar
 title: "Recover after a lost key"
 description: "A guardian-initiated custodial_rotate replaces a ward's lost operational key -- signed by enough guardians to meet recovery_threshold, never by the ward's now-inaccessible key."
 ---
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Recover after a lost key",
+  "description": "A guardian-initiated custodial_rotate replaces a ward's lost operational key -- signed by enough guardians to meet recovery_threshold, never by the ward's now-inaccessible key.",
+  "url": "https://guardianspec.org/docs/how-to/recover-lost-key/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
 # Recover after a lost key
 
 If a ward's operational key is lost, enough of its guardians (meeting whatever `recovery_threshold` its policy sets, `any` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.

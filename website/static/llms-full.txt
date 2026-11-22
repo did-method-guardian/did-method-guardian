@@ -1,25 +1,12 @@
 # did:guardian -- full text
-This file concatenates the three documents that make up did:guardian's own documentation, in full, for a single-fetch read. Each section below corresponds to one live page; the canonical URL for each is given in its own heading.
+This file concatenates every page under /docs/ in full, for a single-fetch read. Each section below corresponds to one live page; the canonical URL for each is given in its own heading.
 
 
 ---
 
-# Guide
+# did:guardian
 
 Canonical URL: https://guardianspec.org/docs/
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "TechArticle",
-  "headline": "did:guardian",
-  "description": "A distributed identity built around guardianship: a group of other identities with the power to recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance.",
-  "url": "https://guardianspec.org/docs/",
-  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
-}
-</script>
-
-# did:guardian
 
 **did:guardian is a distributed identity built around the concept of guardianship.** In most identity systems, control lives in a single keypair, and losing it means losing the identity for good. A did:guardian identity can have a group of guardians, which are other identities that have the power to recover, revoke, or transfer it. Guardianship is optional, and its exact rules for how the guardianship works are set by the identity's owner in advance.
 
@@ -142,22 +129,9 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 ---
 
-# Formal specification
+# DID Guardian Method Specification, v0.2.0
 
 Canonical URL: https://guardianspec.org/docs/did-guardian-spec-v0.2.0/
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "TechArticle",
-  "headline": "DID Guardian Method Specification, v0.2.0",
-  "description": "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements.",
-  "url": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/",
-  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
-}
-</script>
-
-# DID Guardian Method Specification
 
 `did:guardian` merges [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s own operation log and key-rotation model with [`did:web`](https://w3c-ccg.github.io/did-method-web/)'s domain-scoped, directory-free resolution, adding group guardianship on top of both -- a configurable, cryptographically-enforced set of parties able to recover, revoke, or transfer an identity.
 
@@ -557,22 +531,9 @@ A conformant implementation must replay and verify every fixture in [`interop_te
 
 ---
 
-# Registrar API
+# did:guardian Registrar API, v1 (the reference registrar)
 
 Canonical URL: https://guardianspec.org/docs/registrar/
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "TechArticle",
-  "headline": "did:guardian Registrar API, v1",
-  "description": "This reference registrar implementation's own HTTP surface -- the three method-required endpoints plus every convenience endpoint and signature-collection mechanism this specific implementation adds on top.",
-  "url": "https://guardianspec.org/docs/registrar/",
-  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
-}
-</script>
-
-# Registrar API (the reference registrar's own)
 
 **Version 1.** This document is a registrar profile, not the method: exactly one registrar implementation's HTTP surface -- `packages/server` in this repository, deployed as guardianspec.org's registrar. It is versioned and evolves independently of [the formal method specification](/docs/did-guardian-spec-v0.2.0/) -- adding, removing, or reshaping anything here never changes method conformance, and a different registrar implementation is free to expose none of it. Only [§1](#1-method-required-endpoints) restates an actual method requirement; everything else is this registrar's own operational choice. See the method spec's [Method and registrar profile](/docs/did-guardian-spec-v0.2.0/#method-and-registrar-profile) section for exactly where that line is drawn.
 
@@ -880,3 +841,332 @@ Fixes made while integrating this registrar with third-party OIDC relying partie
 - `/userinfo`'s `name` claim returned a literal empty string for the root identity, which failed at least one relying party's own validation. Fixed with the same domain fallback `agentCard.ts` already used elsewhere (§5.5).
 - The `email` claim originally asserted a ward's forwarding destination instead of its own canonical `name@domain` address, which both leaked where a ward's mail actually lands and caused a genuine identity-mismatch failure at a relying party that cross-checked `login_hint` against the returned `email`. Fixed (§5.5).
 - WebFinger (§11) never applied the `_` -> `""` translation every other root-identity path already used, so `acct:_@<domain>` 404'd. Fixed.
+
+
+---
+
+# Prior art and comparisons
+
+Canonical URL: https://guardianspec.org/docs/prior-art/
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Prior art and comparisons",
+  "description": "How did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when one of those fits better.",
+  "url": "https://guardianspec.org/docs/prior-art/",
+  "about": { "@type": "SoftwareSourceCode", "name": "did:guardian", "codeRepository": "https://github.com/did-method-guardian/did-method-guardian", "programmingLanguage": "TypeScript" }
+}
+</script>
+
+did:guardian's contribution is group guardianship as a first-class part of a DID method: a configurable group of other identities, with changeable membership, that can recover, revoke, transfer, or act on behalf of a ward, verified the same way any other operation in the method's log is. Four other projects cover related ground, each from a different angle. None of them do exactly this; some do something better for a narrower need.
+
+## did:webvh
+
+[did:webvh](https://identity.foundation/didwebvh/v1.0/) ("did:web with Verifiable History", formerly did:tdw) extends `did:web` with a self-certifying identifier, a verifiable hash-chained history of every DID document version, pre-rotation (committing to the next key's hash in advance, so a compromised current key can't redirect control to an attacker-chosen one), and optional third-party witnesses who attest they observed an update.
+
+**Comparable:** witnesses are a multi-party mechanism, closer in shape than most of the others here to did:guardian's group concept.
+
+**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that.
+
+## KERI delegated AIDs
+
+In [KERI](https://trustoverip.github.io/kswg-keri-specification/), a delegated identifier is established through mutual, cooperative seals -- both the delegator and the delegate cryptographically commit in their own key event logs, so neither can unilaterally impose or dissolve the relationship. Delegation composes recursively into trees (a root authority delegating to several others, each of those delegating further).
+
+**Comparable:** the mutual-consent requirement is philosophically close to did:guardian's "guardianship is explicit and consensual."
+
+**Different:** KERI delegation is structurally delegator-to-delegate, not a configurable M-of-N peer group. There's no native concept of several guardians, with changeable membership, jointly overseeing one identity under a threshold -- nesting builds a hierarchy, not a flat guardian set. If a hierarchical chain of authority (a root issuer delegating down through several tiers) is the actual shape you need, KERI's delegation model fits that directly; did:guardian's group model doesn't represent hierarchy at all.
+
+## The Sovrin Guardianship Task Force
+
+Sovrin's Guardianship Task Force published whitepapers (2019, a revised v2 in 2023) modeling guardianship -- specifically for people who can't act for themselves: children, people with cognitive disabilities, refugees without personal devices -- using **W3C Verifiable Credentials** issued on top of an existing DID method (`did:sov`/`did:indy`).
+
+**Comparable:** of everything here, this is the closest in motivation -- it's explicitly about guardianship for people who need someone else able to act on their behalf, the same case did:guardian is built around.
+
+**Different:** a guardianship credential is revocable and verifiable as a credential, but the underlying DID method has no native awareness of it -- enforcing it is up to whatever application checks the credential, not the method's resolution or operation log. If guardianship needs scoping per relationship into fine-grained categories (medical decisions, financial decisions, digital-account access, each a separate issuable credential type), a verifiable-credential layer like this is more flexible than did:guardian's single, uniform, method-level relationship -- did:guardian doesn't distinguish *what kind* of authority a guardian holds, only how many of them need to agree.
+
+## ERC-4337 social recovery wallets
+
+Ethereum's account abstraction standard lets a smart-contract wallet designate other addresses as guardians, with an M-of-N threshold of their approval able to replace the wallet's controlling key -- logic that lives in the contract, increasingly modularized under ERC-7579.
+
+**Comparable:** the M-of-N guardian-set mechanic is structurally close to a `GuardianPolicy` threshold.
+
+**Different:** this lives entirely at the smart-contract/application layer, tied to one chain's execution environment, not in a portable, method-level operation log -- a DID layered on top of such a wallet wouldn't inherit guardianship as a property of the DID method. If the identity in question *is* a crypto wallet, and on-chain enforcement of recovery logic matters more than portability across chains or off-chain use, this pattern fits that directly.
+
+## When did:guardian fits, and when it doesn't
+
+did:guardian fits when guardianship needs to be a property of the identity -- portable, verifiable by replaying a log, with no dependency on a specific credential issuer, smart contract platform, or application staying alive to enforce it. It doesn't fit as well when you need hierarchical delegation (KERI), fine-grained per-relationship authority types (a verifiable-credential layer), on-chain enforcement tied to one execution environment (ERC-4337), or nothing more than a tamper-evident document history with no multi-party oversight at all (did:webvh).
+
+
+---
+
+# Get Started
+
+Canonical URL: https://guardianspec.org/docs/how-to/
+
+For an introduction to the method, see the [guide](/docs/) first -- this page assumes you already know what a ward and a guardian are, and gets straight to running things.
+
+## Quickstart
+
+Create an identity, resolve it, and add a guardian, using [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli):
+
+```text {linenos=false}
+npm install -g @did-guardian/cli
+```
+
+**Create an identity:**
+
+```text {linenos=false}
+did-guardian register alice --registrar guardianspec.org
+```
+
+```text {linenos=false}
+Created did:guardian:guardianspec.org:alice
+
+Login secret (shown once -- save it now, there's no recovery path if you lose it):
+<secret>
+```
+
+**Resolve it.** No authentication needed -- this works for anyone, anywhere:
+
+```text {linenos=false}
+did-guardian resolve did:guardian:guardianspec.org:alice
+```
+
+```text {linenos=false}
+L3 (Live). First resolution of did:guardian:guardianspec.org:alice -- pinned anchor <cid> and registrar key (did:guardian:guardianspec.org).
+{ "...": "an ordinary W3C DID Core document" }
+```
+
+That pin is the CLI's record that this is the same `alice` it saw before -- a later resolution with a different anchor gets reported loudly, not silently accepted (spec [§12](/docs/did-guardian-spec-v0.2.0/#12-authority-and-trust-model)).
+
+**Add a guardian.** Register a second identity for whoever's becoming the guardian, log in as them, and adopt:
+
+```text {linenos=false}
+did-guardian register bob --registrar guardianspec.org
+did-guardian login did:guardian:guardianspec.org:bob --login-secret <bob's secret>
+did-guardian guardian adopt did:guardian:guardianspec.org:alice
+```
+
+This is the session-based path (the registrar API's `.../adopt`): the caller is the *incoming guardian*, logged in, and the registrar produces both halves of the `guardian_add` signature since it still holds both keys. It's also the one step a bare `curl` call can't do -- a guardian relationship exists only when that guardian's key actually signs for it, and here that signature comes from an authenticated session, not a key you typed into a request body.
+
+Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.well-known/guardian/alice`, `POST /guardian-login` + `POST .../adopt`) -- see the [registrar API doc](/docs/registrar/) for the exact requests, or run any `did-guardian` command with the registrar's domain in your browser's network tab to watch them happen.
+
+### Holding a key yourself instead
+
+Everything above leaves the registrar holding both keys, encrypted. If you'd rather hold a key yourself from the start:
+
+```text {linenos=false}
+did-guardian key take-custody did:guardian:guardianspec.org:alice
+```
+
+ends the registrar's custody of `alice`'s key -- `did-guardian guardian add`/`recover`/`tombstone` then sign and submit directly with keys you hold, no session needed. Refuses without `--force` if `alice` has no guardian yet, since losing a self-held key with nothing to recover it is unrecoverable by anyone, ever.
+
+For a brand-new identity, `did-guardian create <name> --registrar <domain>` builds a genesis operation with a key you generate yourself and never hand to any registrar, then submits it for real -- genesis submission is part of the method now (formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), not a registrar-specific convenience, so this works against any conformant registrar's `.../operations` endpoint, not just one that happens to support it. `create <name> --domain <domain>` (no `--registrar`) builds the same operation fully offline instead, with no network call at all -- useful for understanding the mechanics or embedding [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, but the result is a draft until something actually accepts it.
+
+See the CLI's README for the full command list, including `verify` (offline, against a pinned anchor) and `--save-log-head`/`--log-head` (offline freshness, spec §12.2's L2).
+
+## How-to guides
+
+Each of these walks through one specific task, start to finish, with commands you can run directly.
+
+- [Give an AI agent an identity a human can revoke](/docs/how-to/ai-agent-identity/)
+- [Sign in via custom OIDC](/docs/how-to/custom-oidc-login/)
+- [Self-host a registrar](/docs/how-to/self-host/)
+- [Recover after a lost key](/docs/how-to/recover-lost-key/)
+
+
+---
+
+# Give an AI agent an identity a human can revoke
+
+Canonical URL: https://guardianspec.org/docs/how-to/ai-agent-identity/
+
+An agent gets an identity, with a key. A human (or a team) becomes its guardian, with the power to authorize things the agent can't approve alone, recover it if its key is compromised, and shut it down when it's retired. Neither of those actions requires the guardian to hold, or ever see, the agent's key. Commands below use [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) (`npm install -g @did-guardian/cli`); see the [registrar API doc](/docs/registrar/) for the plain HTTP underneath any of them.
+
+## Register the agent's identity
+
+```text {linenos=false}
+did-guardian register support-bot-7 --registrar guardianspec.org
+```
+
+```text {linenos=false}
+Created did:guardian:guardianspec.org:support-bot-7
+
+Login secret (shown once -- store it with the agent, not with the human guardian):
+<secret>
+```
+
+## Make a human its guardian
+
+A guardian can also be established directly at registration now (REQ-7.1-1, v0.3), via `create --guardian <did> --guardian-key <label>` -- but that needs the agent's key held locally, which `register` (above) deliberately avoids. The ordinary path below works regardless of who holds what, and is the one `register`-based setups need: a separate, signed `guardian_add`, needing both the agent's key and the incoming guardian's key to agree. The human guardian needs a did:guardian identity too -- register one if they don't already have one:
+
+```text {linenos=false}
+did-guardian register priya --registrar guardianspec.org
+```
+
+Then log in as the human and adopt the agent:
+
+```text {linenos=false}
+did-guardian login did:guardian:guardianspec.org:priya --login-secret <priya's secret>
+did-guardian guardian adopt did:guardian:guardianspec.org:support-bot-7
+```
+
+`adopt` is session-based (the registrar API's `.../adopt`): the caller is the *incoming guardian*, and since the registrar still holds both the agent's and the human's keys, it produces both signatures once the human is authenticated. Nobody outside the registrar ever sees either private key.
+
+**If you'd rather hold a key yourself** for one or both parties -- the agent, say, if you don't want the registrar able to sign on its behalf at all -- `did-guardian key take-custody <did>` ends the registrar's custody of that identity's key, and `did-guardian guardian add <agent-did> <guardian-did> --ward-key <label> --guardian-key <label> --submit` signs and submits the same `guardian_add` directly, once both parties hold keys locally.
+
+## What the guardian can do afterward
+
+**Recover it, if its key is lost or compromised.** A guardian-initiated `custodial_rotate`, signed with the guardian's key (never the agent's) -- see [Recover after a lost key](/docs/how-to/recover-lost-key/) for the exact steps; the same mechanics apply whether the ward is a person or an agent.
+
+**Shut it down.** `custodial_tombstone`, signed by enough of the guardian set to meet `tombstone_threshold` (`any` by default, so a single guardian suffices unless configured otherwise). There's no one-call convenience endpoint for *a guardian* to tombstone a ward it guards the way there is for a ward tombstoning itself, so which command to run depends on whether the human guardian holds a key directly:
+
+- **Guardian took custody of a key** (see above): sign and submit directly --
+  ```
+  did-guardian guardian tombstone did:guardian:guardianspec.org:support-bot-7 did:guardian:guardianspec.org:priya --guardian-key <label> --submit
+  ```
+- **Guardian still registrar-held**: use the asynchronous proposal flow (`.../propose` then `.../pending/<id>/sign-as-self`, logged in as the guardian) -- see the [registrar API doc](/docs/registrar/)'s §3. `tombstone_threshold`'s default of `any` means this reaches `satisfied`, and finalizes, the moment the guardian signs.
+
+Either way this deactivates the agent's identity permanently -- its log stays public and readable, but no further operation on it is accepted. If you want the agent's authority limited more narrowly than "the guardian can shut the whole thing down," set a `GuardianPolicy` with a higher `tombstone_threshold` (requiring more than one guardian to agree) at registration, or with a later `policy_update`.
+
+## Short-lived agents
+
+A long-lived guardian managing a fleet of agents that come and go doesn't need a human name for each one -- a generated name like `"agent-$(openssl rand -hex 3)"` (or any generator producing a valid one, REQ-2-1) works fine. Naming the fleet's guardian directly at creation, in the same call, needs `create --registrar <domain> --guardian <guardian-did> --guardian-key <label>` (above) instead of `register` -- the guardian's key has to be held locally to co-sign genesis, which `register`'s server-generated keys deliberately avoid. Either way, this replaces a separate `guardian_add` per agent with one call.
+
+Retiring one is the same `custodial_tombstone` described above, signed by the guardian -- there's no bulk-retirement operation, each agent is tombstoned individually. Names and logs are permanent by design (REQ-9-1/9-2): a retired agent's name is never freed for reuse, and its full history stays resolvable forever, even deactivated. This isn't optional cleanup debt -- a guardian's historical keys have to stay verifiable for as long as anything it ever signed might need checking, which means nothing it guarded can be deleted out from under that either. Running many short-lived agents through one registrar does mean that registrar's storage grows without bound; that's the cost of this design, not a bug to work around.
+
+
+---
+
+# Sign in via custom OIDC
+
+Canonical URL: https://guardianspec.org/docs/how-to/custom-oidc-login/
+
+Any did:guardian registrar runs as a standard OpenID Connect provider. A relying party that accepts a custom or generic OIDC identity provider -- Tailscale, Grafana, and many self-hosted tools all have an option like this -- works against it the same way it would against any other provider.
+
+## Register an OAuth client
+
+Dynamic client registration ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)) needs no prior account on the registrar:
+
+```text {linenos=false}
+curl -X POST https://guardianspec.org/oauth/register-client \
+  -H "Content-Type: application/json" \
+  -d '{"redirect_uris": ["https://your-app.example.com/oauth/callback"], "client_name": "My App"}'
+```
+
+```json {linenos=false}
+{
+  "client_id": "...",
+  "client_secret": "...",
+  "redirect_uris": ["https://your-app.example.com/oauth/callback"],
+  "client_name": "My App",
+  "token_endpoint_auth_method": "client_secret_basic",
+  "registration_access_token": "...",
+  "registration_client_uri": "https://guardianspec.org/oauth/register-client/..."
+}
+```
+
+Use `client_id` and `client_secret` wherever the relying party asks for them. The issuer is the registrar's domain (`https://guardianspec.org`); its discovery document is at the standard `/.well-known/openid-configuration` path.
+
+## Prompt behavior
+
+If the relying party asks which `prompt` values to request (some expose this as checkboxes in their setup screen): `consent` alone is enough for an ordinary sign-in. `login` forces re-authentication even if a session already exists; `select_account` is only meaningful for a provider showing a multi-account picker, which a registrar doesn't -- one Guardian ID signs in, with nothing to pick between. `none` suppresses any interactive prompt entirely and fails if one turns out to be required.
+
+## Signing in as the root identity
+
+Some relying parties force a `name@domain` shape on their login field and never give a way to type a bare domain. If you're signing in as a registrar's bare-domain root identity rather than a named ward, `_@<your-domain>` is the one form that still gets through a form like that -- `_` is root's reserved local part everywhere a named ward would use its name.
+
+## If the relying party validates claims strictly
+
+A registrar's `id_token`/`userinfo` claims stay minimal and privacy-preserving: `email` (when the ward has verified forwarding set up) always asserts the ward's canonical Guardian-ID-based address, never wherever that mail actually forwards to. If a relying party's validation expects something a registrar doesn't assert by default, check the [registrar API doc](/docs/registrar/)'s section on `/userinfo` and the id_token for exactly what's included.
+
+
+---
+
+# Recover after a lost key
+
+Canonical URL: https://guardianspec.org/docs/how-to/recover-lost-key/
+
+If a ward's operational key is lost, enough of its guardians (meeting whatever `recovery_threshold` its policy sets, `any` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.
+
+This assumes the ward already has at least one guardian. If it doesn't, there's nothing that can help: without a guardian, there is no recovery path, full stop -- a lost key with no guardian is unrecoverable by anyone, ever. did:guardian deliberately works this way instead of `did:plc`'s ordered recovery-key list: a guardian can be a person, a committee, or another identity entirely, not just a second key you happen to hold.
+
+That last option -- a guardian that is another identity you control, rather than a separate person -- is the usual answer when there's no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s guardian covers exactly this case, with no second party involved at all. [Set one up](/docs/how-to/ai-agent-identity/) while you still have the chance -- either the ordinary way afterward (`guardian add`/`adopt`), or directly at genesis with `create --guardian <cold-storage-did> --guardian-key <label>` if you're creating `alice` for the first time and already hold both keys.
+
+## The recovery itself
+
+```text {linenos=false}
+did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --submit
+```
+
+This needs `bob` (the guardian) to hold a key [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) can sign with directly -- if bob is still registrar-held, run `did-guardian key take-custody did:guardian:example.com:bob` first, or use the asynchronous proposal flow (`.../propose` then `.../pending/<id>/sign-as-self`, logged in as bob) described in the [registrar API doc](/docs/registrar/)'s §3 instead. Without `--submit`, the command prints the signed operation and stops there -- useful for checking it before it goes live, or for collecting more signatures by hand if `recovery_threshold` needs more than just bob.
+
+A fresh operational key is generated and saved automatically (as `<ward-did>-recovered`); pass `--new-key <label>` to install one you already hold instead.
+
+## If the lost key was already used by whoever took it
+
+A key that's lost to theft, not just misplaced, might already have been used to rotate the identity before a guardian ever gets involved. The same guardian-signed `custodial_rotate` above still works -- but within 72 hours of that fraudulent rotation (the nullification window), `--prev <cid>` can point it at the cid immediately *before* the fraudulent rotation instead of the current head, specifically undoing it and rolling back to the state just before, rather than just adding another rotation on top of a compromised one:
+
+```text {linenos=false}
+did-guardian guardian recover did:guardian:example.com:alice did:guardian:example.com:bob --guardian-key bob --prev <cid-before-the-fraudulent-rotation> --submit
+```
+
+The registrar's replay logic (REQ-6-8/6-9) handles the rest. Past 72 hours, that specific undo is no longer available -- only an ordinary forward rotation is, which still replaces the compromised key, just without erasing it from the log's history.
+
+## After recovering
+
+The ward's guardian set is untouched by this -- `custodial_rotate` only ever replaces keys, never guardianship (REQ-7.2-2). Nothing else needs to change.
+
+
+---
+
+# Self-host a registrar
+
+Canonical URL: https://guardianspec.org/docs/how-to/self-host/
+
+`packages/server` is a self-hostable registrar: `packages/lib` plus an HTTP surface, an OIDC/OAuth2.1 identity provider, an account dashboard, an admin console, and an agent-identity API. This project's public registrar, guardianspec.org, is exactly this code, deployed to Cloudflare Workers.
+
+## Deploy
+
+```bash {linenos=false}
+git clone https://github.com/did-method-guardian/did-method-guardian
+cd did-method-guardian/packages/server
+npm install
+
+# Create a D1 database, then fill its id into wrangler.jsonc's
+# "database_id" (it ships as a placeholder, "REPLACE_ME").
+npx wrangler d1 create guardian-server
+
+npx wrangler d1 migrations apply guardian-server --remote
+
+# AES-GCM key, base64, 32 bytes -- encrypts custodied private keys at rest.
+npx wrangler secret put KEY_ENCRYPTION_KEY
+
+# Set REGISTRAR_DOMAIN in wrangler.jsonc's "vars" to your domain,
+# then deploy.
+npx wrangler deploy
+```
+
+That's a working registrar: anyone can `POST /register` and create an identity, OIDC endpoints are live, resolution works. A few things are opt-in from there, each documented inline in `wrangler.jsonc`'s comments:
+
+- **Rate limiting** on `/register` and `/guardian-login` (a KV namespace -- without it, these endpoints simply have no rate limiting, rather than failing).
+- **Outbound email** for forwarding and verification, either Cloudflare's native Email Sending binding or an external provider (MailChannels, Resend) via `EMAIL_PROVIDER` and an API key secret.
+- **Federated trust** (`FEDERATED_TRUSTED_ISSUERS`) if you want this registrar to also accept another registrar's access tokens at bearer-token-gated endpoints.
+
+## The bare-domain root identity
+
+Every deployment auto-provisions one identity with no name at all -- `did:guardian:<your-domain>` -- the first time anything resolves it. It attests every other ward's genesis operation and, once given a login credential, is a fully usable identity like any other.
+
+```bash {linenos=false}
+npx wrangler secret put ROOT_WARD_LOGIN_SECRET
+```
+
+Sign in with the name field left as `_`, your bare domain, `@your-domain`, or `_@your-domain` -- all four mean the same thing. There's no self-service recovery path for this one credential if you lose it; see [README.md](https://github.com/did-method-guardian/did-method-guardian/blob/main/README.md#self-hosting-the-bare-domain-root-identity) for the direct-database reset procedure.
+
+## Open vs. closed registration
+
+**Open** (the default, and how guardianspec.org runs): anyone can register. **Closed** (`REGISTRATION_MODE: "closed"` in `wrangler.jsonc`'s `vars`): public self-service is blocked, and the root identity creates accounts for specific people or agents instead, through the admin console (`/admin`, `/admin/create-account`) -- available on every deployment regardless of this setting, gated to a session authenticated as the root identity. This is the shape for an operator who controls the whole domain -- personally, or as a business -- and wants named accounts for their team or the agents they run, without an open door to the public.
+
+Full environment-variable reference: [`packages/server/src/env.ts`](https://github.com/did-method-guardian/did-method-guardian/blob/main/packages/server/src/env.ts).

@@ -6,12 +6,42 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://guardianspec.org/docs/did-guardian-spec-v0.2.0/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://guardianspec.org/docs/how-to/ai-agent-identity/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://guardianspec.org/docs/how-to/custom-oidc-login/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://guardianspec.org/docs/how-to/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://guardianspec.org/docs/how-to/recover-lost-key/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://guardianspec.org/docs/how-to/self-host/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://guardianspec.org/docs/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://guardianspec.org/docs/did-guardian-spec-v0.2.0/</loc>
+    <loc>https://guardianspec.org/docs/prior-art/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
