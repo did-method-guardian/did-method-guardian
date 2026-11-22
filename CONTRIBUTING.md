@@ -6,6 +6,7 @@ Thanks for taking a look at `did:guardian`. This is a young, early-stage project
 
 - `packages/lib` — the reference crypto/operations library (Web Crypto-based, portable across Workers/Node/browser). This is the actual implementation of the spec: operation validation, guardian threshold logic, signature verification, DID resolution.
 - `packages/server` — the reference registrar: a self-hostable Cloudflare Worker with an OIDC/OAuth provider, account dashboard, admin console, and the cross-registrar signature relay.
+- `packages/cli` — `@did-guardian/cli`, a command-line tool built on `packages/lib` for key management, registration, resolution/verification, and guardianship.
 - `interop_tests` — shared operation-log fixtures, for verifying an independent implementation against this one.
 - `website` — the spec, docs, and guardianspec.org site source (HyperTemplates).
 
@@ -24,9 +25,14 @@ npm test
 cd packages/server
 npx tsc --noEmit
 npm test
+
+# packages/cli: build + its own test suite
+cd packages/cli
+npm run build
+npm test
 ```
 
-Both suites need to pass before a PR will be considered. If you're changing anything in `packages/lib`, add or update a test referencing the relevant `REQ-*` identifier from the spec (see `website/content/docs/did-guardian-spec-v0.2.0/index.md`) — that's the convention the existing suite follows, and it's how a spec requirement and its test stay traceable to each other.
+All applicable suites need to pass before a PR will be considered. If you're changing anything in `packages/lib`, add or update a test referencing the relevant `REQ-*` identifier from the spec (see `website/content/docs/did-guardian-spec-v0.2.0/index.md`) — that's the convention the existing suite follows, and it's how a spec requirement and its test stay traceable to each other.
 
 `packages/server` is a Cloudflare Worker; `npx wrangler dev --config wrangler.jsonc` runs it locally against the generic template config. The live reference deployments (`zzmq.dev`, `guardianspec.org`) are not something a PR should need to touch directly.
 

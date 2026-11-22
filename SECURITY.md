@@ -9,7 +9,7 @@ Use GitHub's private vulnerability reporting: open the [Security tab](https://gi
 If you can't use that for some reason, open a GitHub issue asking for a private contact and a maintainer will follow up — please don't post vulnerability details publicly even in that initial issue.
 
 Please include:
-- The affected component (`packages/lib`, `packages/server`, or a specific deployed registrar)
+- The affected component (`packages/lib`, `packages/server`, `packages/cli`, or a specific deployed registrar)
 - Steps to reproduce, or a minimal proof of concept
 - What you believe the impact is (e.g., unauthorized operation signing, guardian-threshold bypass, impersonation, key material exposure)
 
@@ -18,6 +18,7 @@ Please include:
 In scope:
 - The `did:guardian` method itself (`packages/lib`) — operation validation, guardian threshold logic, signature verification, DID/document resolution
 - The reference registrar (`packages/server`) — authentication, session handling, OIDC/OAuth flows, the pending-operations signature-collection machine, cross-registrar relay
+- The reference CLI (`packages/cli`) — local key storage/handling, offline verification
 - The two live reference deployments, `zzmq.dev` and `guardianspec.org`
 
 Out of scope:

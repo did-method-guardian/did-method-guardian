@@ -12,13 +12,14 @@ npm install @did-guardian/lib
 
 ## What's in this package
 
-- `replay(did, log)` / `toDidDocument(state)` -- reconstruct current state from an operation log, and render it as an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document.
+- `verifyLog(did, log, resolve, opts)` -- the one complete verifier: recomputes every entry's content hash, checks the genesis attestation and every signer's threshold, and replays nullification -- everything this package's own lower-level pieces do, in the order the formal spec's §12.2 "L0, consistent" level requires. Start here if you just want to know whether a log is valid.
+- `replay(did, log)` / `toDidDocument(state)` -- reconstruct current state from an operation log, and render it as an ordinary [W3C DID Core](https://www.w3.org/TR/did-core/) document, without re-verifying anything (`verifyLog` already trusts a log that passed it; call this directly only once you've verified some other way, or deliberately want the lower-level, non-verifying primitive).
 - `generateKeypair()` / `signPayload()` / `verifyPayload()` -- P-256 ECDSA key operations (`src/crypto.ts`). Every public key this library produces or accepts, at every boundary, is already a [Multikey](https://www.w3.org/TR/cid-1.0/#Multikey) multibase string -- the legacy SPKI format is purely an internal WebCrypto import/export detail.
 - `createProof()` / `verifyPop()` / `verifySignerProof()` -- [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proofs (`ecdsa-jcs-2019`), the signed envelope every operation type uses (`src/operations.ts`).
 - Threshold and guardian-policy verification rules (`src/rules.ts`) matching the formal spec's §5 and §7.
 - `schemas/` -- JSON Schemas for `GuardianPolicy` and every operation type, matching this package's own `src/types.ts`.
 
-This package implements the method itself. For a runnable, self-hostable server built on top of it (OIDC provider, account dashboard, admin console), see [`@did-guardian/server`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/server) in the same repository.
+This package implements the method itself. For a runnable, self-hostable server built on top of it (OIDC provider, account dashboard, admin console), see [`@did-guardian/server`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/server); for a command-line tool built on it instead (key management, registration, resolution/verification, guardianship), see [`@did-guardian/cli`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli) -- both in the same repository.
 
 ## License
 

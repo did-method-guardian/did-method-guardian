@@ -8,6 +8,7 @@ A single Cloudflare Worker implementing:
 - **The registrar**: `GET /.well-known/guardian/:name[/log][/log-head]`, `POST /.well-known/guardian/:name/operations` -- the method-required surface every conformant registrar exposes (formal spec REQ-8-2) -- plus `POST /register`, this registrar's own convenience for a server-generated key (a registrar-profile feature, not part of the method itself).
 - **An OIDC provider**: authorization code + mandatory PKCE, refresh tokens, revocation, JWT ID tokens, JWKS, discovery, and self-service dynamic client registration (`POST /oauth/register-client`, RFC 7591) -- "Sign in with did:guardian" for any relying party.
 - **An account dashboard** (`GET /account`): a real page for a person to log in and manage their own identity directly -- activity, guardians, connected apps, key rotation, deactivation.
+- **An admin console** (`GET /admin`): for the root identity specifically -- lists every account on this deployment, creates new ones (with an optional initial guardian), and manages registered OAuth clients. Useful on any deployment, but the only way to create accounts on a **closed** one (`REGISTRATION_MODE=closed`), which blocks anonymous public self-service at `/register`.
 - **Email proxying**: receive-and-forward (not mailbox hosting) for `name@your-domain`, plus outbound transactional send (verification links, pending-operation notifications) via a configurable provider -- never locked to one vendor (see §5 below).
 
 ## Setting up your own instance
