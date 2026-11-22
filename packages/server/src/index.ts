@@ -33,6 +33,22 @@ function error(message: string, status: number): Response {
   return json({ error: message }, status);
 }
 
+/**
+ * WS-1.13 (audit): the shared tail of every route's own try/catch --
+ * RegistrarError already carried the right status (unchanged); anything
+ * else fell straight through to a bare 500 "internal error," which is
+ * exactly wrong for a SyntaxError from `request.json()` on a malformed
+ * body -- that's the CALLER's mistake (400), not this registrar's own
+ * failure. Still logs and 500s for anything that genuinely isn't one of
+ * these two recognized, client-caused shapes.
+ */
+function errorFrom(e: unknown, logLabel: string): Response {
+  if (e instanceof RegistrarError) return error(e.message, e.status);
+  if (e instanceof SyntaxError) return error("malformed JSON in request body", 400);
+  console.error(`${logLabel}:`, e);
+  return error("internal error", 500);
+}
+
 function html(body: string, status = 200): Response {
   return new Response(`<!doctype html><meta charset="utf-8"><title>did:guardian</title>${body}`, { status, headers: { "content-type": "text/html; charset=utf-8" } });
 }
@@ -41,7 +57,48 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    try {
+      return await route(request, env, url, path);
+    } catch (e) {
+      // WS-1.13 (audit): fetch() itself had no catch at all -- every page
+      // handler below (accountPage.ts, adminPage.ts, registerPage.ts,
+      // relaySign.ts, votingPage.ts) re-throws anything that isn't its
+      // own RegistrarError rather than swallowing it, on the reasonable
+      // assumption that SOMETHING upstream would turn it into a clean
+      // response. Nothing did: an uncaught SyntaxError from a malformed
+      // request body (or any other unexpected error) propagated straight
+      // out of this Worker's own fetch handler, to whatever raw, platform-
+      // level 500 Cloudflare's own runtime produces for an unhandled
+      // exception -- never this registrar's own error shape, HTML or
+      // JSON. This is the one backstop everything else funnels through;
+      // it does not replace catching errors closer to where they're
+      // actually meaningful to explain (e.g. RegistrarError's own
+      // messages), it only guarantees SOME clean response when nothing
+      // closer already produced one.
+      if (e instanceof SyntaxError) {
+        const accept = request.headers.get("accept") ?? "";
+        if (accept.includes("text/html")) return html(`<h1>Bad request</h1><p class="error">The request body isn't valid JSON.</p>`, 400);
+        return error("malformed JSON in request body", 400);
+      }
+      if (e instanceof RegistrarError) return error(e.message, e.status);
+      console.error("unhandled route error:", e);
+      const accept = request.headers.get("accept") ?? "";
+      if (accept.includes("text/html")) return html(`<h1>Something went wrong</h1><p class="error">An unexpected error occurred handling this request.</p>`, 500);
+      return error("internal error", 500);
+    }
+  },
 
+  async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
+    await handleEmail(message, env);
+  },
+
+  /** Daily reminder sweep for still-collecting proposals -- see pendingOps.ts's own sendDailyReminders. Cron schedule set in each deployment's own wrangler config (triggers.crons). */
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    await sendDailyReminders(env);
+  },
+};
+
+async function route(request: Request, env: Env, url: URL, path: string): Promise<Response> {
     // Cross-registrar signature relay (registrar API spec §13): the
     // receiving half of pendingOps.ts's pushRelayNotify, called by a WARD's
     // own registrar to tell THIS registrar one of its own wards is a
@@ -303,9 +360,7 @@ export default {
           return json({ ok: true, did: result.did, document: result.document });
         }
       } catch (e) {
-        if (e instanceof RegistrarError) return error(e.message, e.status);
-        console.error("well-known guardian route error:", e);
-        return error("internal error", 500);
+        return errorFrom(e, "well-known guardian route error");
       }
       return error("not found", 404);
     }
@@ -392,9 +447,7 @@ export default {
           }
         }
       } catch (e) {
-        if (e instanceof RegistrarError) return error(e.message, e.status);
-        console.error("pending operation error:", e);
-        return error("internal error", 500);
+        return errorFrom(e, "pending operation error");
       }
       return error("not found", 404);
     }
@@ -568,9 +621,7 @@ export default {
         const result = await registerWard(env, body.name, guardianDid, body.password, guardianDid);
         return json(result, 201);
       } catch (e) {
-        if (e instanceof RegistrarError) return error(e.message, e.status);
-        console.error("register error:", e);
-        return error("internal error", 500);
+        return errorFrom(e, "register error");
       }
     }
 
@@ -588,14 +639,4 @@ export default {
     }
 
     return error("not found", 404);
-  },
-
-  async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
-    await handleEmail(message, env);
-  },
-
-  /** Daily reminder sweep for still-collecting proposals -- see pendingOps.ts's own sendDailyReminders. Cron schedule set in each deployment's own wrangler config (triggers.crons). */
-  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    await sendDailyReminders(env);
-  },
-};
+}

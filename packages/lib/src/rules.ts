@@ -136,14 +136,24 @@ export function checkGenesisShape(op: {
   creator?: Did;
 }): ShapeResult {
   if (!op.did) return { valid: false, reason: "Fix 2: did must be present" };
+  // WS-1.13 (audit): a wire payload is untrusted JSON, not a value this
+  // type signature actually guarantees -- a missing or wrongly-typed
+  // `incoming`/`proof`/`operationalKeys` previously reached the `for`
+  // loop and `.some(...)` call below directly, throwing an uncaught
+  // TypeError ("X is not iterable"/"Cannot read properties of
+  // undefined") instead of the clean rejection every OTHER malformed
+  // field already got. Checked before anything iterates over them.
+  if (!Array.isArray(op.incoming)) return { valid: false, reason: "incoming must be an array" };
+  if (!Array.isArray(op.proof)) return { valid: false, reason: "proof must be an array" };
+  if (!Array.isArray(op.operationalKeys)) return { valid: false, reason: "REQ-7.1-3: operationalKeys must be an array" };
   for (const did of op.incoming) {
     if (!op.proof.some((p) => verificationMethodDid(p.verificationMethod) === did)) {
       return { valid: false, reason: `REQ-7.1-1: incoming guardian ${did} must co-sign genesis` };
     }
   }
   if (op.prev !== null) return { valid: false, reason: "REQ-7.1-2: genesis prev must be null" };
-  if (!op.operationalKeys || !op.services) {
-    return { valid: false, reason: "REQ-7.1-3: operationalKeys/services must be present" };
+  if (!op.services || typeof op.services !== "object") {
+    return { valid: false, reason: "REQ-7.1-3: services must be present" };
   }
   if (!op.creator) return { valid: false, reason: "REQ-7.1-4: creator must be present" };
   return { valid: true };

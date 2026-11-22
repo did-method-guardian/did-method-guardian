@@ -131,6 +131,26 @@ test("REQ-7.1-1/2/3/4: a conformant genesis (empty incoming, null prev, full key
   assert.equal(result.valid, true);
 });
 
+test("audit WS-1.13: checkGenesisShape rejects a missing proof field with a clean message, instead of throwing when something later iterates over it", () => {
+  const result = checkGenesisShape({
+    did: "did:guardian:acme.com:alice",
+    incoming: [],
+    proof: undefined as any, // a wire payload that simply omitted `proof` entirely
+    prev: null,
+    operationalKeys: ["pk"],
+    services: {},
+    creator: "did:guardian:acme.com",
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.reason!, /proof must be an array/);
+});
+
+test("audit WS-1.13: checkGenesisShape rejects a non-array incoming/operationalKeys the same way", () => {
+  const base = { did: "did:guardian:acme.com:alice" as Did, proof: [], prev: null, services: {}, creator: "did:guardian:acme.com" as Did };
+  assert.equal(checkGenesisShape({ ...base, incoming: "not-an-array" as any, operationalKeys: ["pk"] }).valid, false);
+  assert.equal(checkGenesisShape({ ...base, incoming: [], operationalKeys: "not-an-array" as any }).valid, false);
+});
+
 // --- REQ-2-1: name syntax ------------------------------------------------
 
 test("REQ-2-1: valid names", () => {

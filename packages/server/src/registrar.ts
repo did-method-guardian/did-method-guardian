@@ -256,7 +256,11 @@ export async function registerWard(
   const genesis = await signCustodialCreate(genesisPartial, {}, { [keypair.publicKey]: keypair.privateKey });
   const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
   const accepted = await acceptGenesis(env, name, genesis, privateKeyEnc);
-  if (!accepted.accepted) throw new RegistrarError(`registration failed: ${accepted.reason}`, 500);
+  // WS-1.13 (audit): acceptGenesis's own rejections (name taken, bad
+  // shape, failed verification) are all caller-caused, same convention
+  // as every other submitOperation/acceptGenesis result this file maps
+  // to a response -- this was the one site still using 500.
+  if (!accepted.accepted) throw new RegistrarError(`registration failed: ${accepted.reason}`, 400);
   const { cid } = accepted;
 
   // The login secret proves control of this ward to THIS registrar's own
@@ -286,7 +290,9 @@ export async function registerWard(
       );
       const result = await submitOperation(env, name, addOp);
       if (!result.accepted) {
-        throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 500);
+        // WS-1.13 (audit): same convention as every other submitOperation
+        // result mapped to a response -- 400, not 500.
+        throw new RegistrarError(`"${name}" was created, but establishing "${guardianDid}" as its guardian failed: ${result.reason}`, 400);
       }
     } else {
       // A foreign guardian (this registrar never holds a key it doesn't
@@ -397,7 +403,9 @@ export async function rotateWard(env: Env, name: string): Promise<{ did: string;
     { [newKeypair.publicKey]: newKeypair.privateKey },
   );
   const result = await submitOperation(env, name, op);
-  if (!result.accepted) throw new RegistrarError(`rotation failed: ${result.reason}`, 500);
+  // WS-1.13 (audit): same convention as every other submitOperation
+  // result mapped to a response -- 400, not 500.
+  if (!result.accepted) throw new RegistrarError(`rotation failed: ${result.reason}`, 400);
 
   const newPrivateKeyEnc = await encryptSecret(newKeypair.privateKey, env.KEY_ENCRYPTION_KEY);
   await updateWardKeys(env, ward.did, newKeypair.publicKey, newPrivateKeyEnc);
@@ -428,7 +436,9 @@ export async function tombstoneWard(env: Env, name: string): Promise<{ did: stri
   const ownKey = await decryptWardPrivateKey(env, ward);
   const op = await signCustodialTombstone({ type: "custodial_tombstone", prev: latestCid }, { [ward.did]: ownKey }, [ward.did]);
   const result = await submitOperation(env, name, op);
-  if (!result.accepted) throw new RegistrarError(`tombstone failed: ${result.reason}`, 500);
+  // WS-1.13 (audit): same convention as every other submitOperation
+  // result mapped to a response -- 400, not 500.
+  if (!result.accepted) throw new RegistrarError(`tombstone failed: ${result.reason}`, 400);
 
   const document = await resolveDocument(env, name);
   return { did: ward.did, document };
@@ -481,7 +491,9 @@ export async function relinquishWard(env: Env, name: string): Promise<{ did: str
 
   const op = await signGuardianRelinquish({ type: "guardian_relinquish", prev: latestCid }, signerKeys, signers);
   const result = await submitOperation(env, name, op);
-  if (!result.accepted) throw new RegistrarError(`relinquish failed: ${result.reason}`, 500);
+  // WS-1.13 (audit): same convention as every other submitOperation
+  // result mapped to a response -- 400, not 500.
+  if (!result.accepted) throw new RegistrarError(`relinquish failed: ${result.reason}`, 400);
 
   const document = await resolveDocument(env, name);
   return { did: ward.did, document };
@@ -668,7 +680,12 @@ export async function takeCustody(
   const authProof = await createProof(unsecuredDoc, `${ward.did}#key-0`, oldPrivateKey);
   const op = { ...partial, proof: [authProof, newKeyProof] };
   const result = await submitOperation(env, name, op);
-  if (!result.accepted) throw new RegistrarError(`take-custody failed: ${result.reason}`, 500);
+  // WS-1.13 (audit): submitOperation's own rejection reasons (a bad
+  // newKeyProof, a stale prev, ...) are the caller's own mistake, same
+  // as every other call site that maps this exact boolean+reason result
+  // to a response -- index.ts's /operations handler always uses 400 for
+  // it. This was the one place still using 500 instead.
+  if (!result.accepted) throw new RegistrarError(`take-custody failed: ${result.reason}`, 400);
 
   await takeCustodyOfWardKey(env, ward.did, publicKey);
 
