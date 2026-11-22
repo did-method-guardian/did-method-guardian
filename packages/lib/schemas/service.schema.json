@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/service.schema.json",
+  "title": "Service",
+  "description": "Formal spec REQ-6-6.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^#", "description": "REQ-6-6: # followed by a DID URL fragment." },
+    "type": { "type": "string" },
+    "serviceEndpoint": { "type": "string", "format": "uri", "description": "RFC 3986 URI." }
+  },
+  "required": ["id", "type", "serviceEndpoint"],
+  "additionalProperties": false
+}

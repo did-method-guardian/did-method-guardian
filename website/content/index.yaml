@@ -2,11 +2,11 @@ layout: home
 title: "did:guardian"
 description: |
   A distributed identity built around guardianship -- a configurable group
-  of other identities that can recover, revoke, transfer, or act on behalf
+  of other identities that can recover, deactivate, or act on behalf
   of an identity, under rules its owner sets in advance.
 
 hero:
   description: |
     Every identity needs its own keys. Some also need a second, distinct
-    kind of control: a group of guardians able to recover, revoke,
-    transfer, or act on its behalf, under rules it sets in advance.
+    kind of control: a group of guardians able to recover, deactivate,
+    or act on its behalf, under rules it sets in advance.

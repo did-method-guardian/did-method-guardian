@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/addGuardian.schema.json",
+  "title": "addGuardian",
+  "description": "Formal spec §7.5. Appends `entry` to `guardians` (REQ-7-14).",
+  "type": "object",
+  "properties": {
+    "type": { "const": "addGuardian" },
+    "entry": { "$ref": "../entry.schema.json", "description": "REQ-7-12/REQ-7-13: the guardian being added. Its DID MUST NOT already be a guardian." },
+    "prev": { "type": "string" },
+    "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: every key in `entry`; one current key; and guardians per `membership`, if N > 0." },
+    "extensions": { "type": "object", "description": "REQ-5-3: optional." }
+  },
+  "required": ["type", "entry", "prev", "proof"],
+  "additionalProperties": false
+}

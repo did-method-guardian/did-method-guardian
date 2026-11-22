@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/create.schema.json",
+  "title": "create",
+  "description": "Formal spec §7.3. The first operation of a did:guardian identity's log (REQ-7-3).",
+  "type": "object",
+  "properties": {
+    "type": { "const": "create" },
+    "did": { "type": "string", "description": "REQ-7-7/REQ-7-8: the DID of the identity this creates." },
+    "keys": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-8: sets the initial `keys`. Multikey strings." },
+    "guardians": { "type": "array", "items": { "$ref": "../entry.schema.json" }, "description": "REQ-7-8: sets the initial `guardians`." },
+    "successor": { "oneOf": [{ "$ref": "../entry.schema.json" }, { "type": "null" }], "description": "REQ-7-8: sets the initial `successor`." },
+    "policy": { "$ref": "../policy.schema.json", "description": "REQ-7-8: sets the initial `policy`." },
+    "services": { "type": "array", "items": { "$ref": "../service.schema.json" }, "description": "REQ-7-8: sets the initial `services`." },
+    "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-8: sets the initial `alsoKnownAs`." },
+    "prev": { "const": null, "description": "REQ-7-4: MUST be null." },
+    "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: every key in `keys`, every key in each entry in `guardians`, and every key in `successor` if it is an entry." },
+    "attestation": { "$ref": "../data-integrity-proof.schema.json", "description": "REQ-7-7/REQ-7-9: required unless `did` names a root identity, forbidden if it does. A looser proof shape -- see REQ-7-9." },
+    "critical": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "REQ-7-30: optional, non-empty, distinct extension names, each a member of `policy.extensions`." },
+    "extensions": { "type": "object", "description": "REQ-5-3/REQ-7-29: optional. Each member name is an absolute URI." }
+  },
+  "required": ["type", "did", "keys", "guardians", "successor", "policy", "services", "alsoKnownAs", "prev", "proof"],
+  "additionalProperties": false
+}

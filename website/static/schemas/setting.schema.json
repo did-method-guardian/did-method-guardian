@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/setting.schema.json",
+  "title": "Setting",
+  "description": "Formal spec REQ-6-11/REQ-6-12. The value of policy.recovery, policy.membership, policy.removal, or policy.deactivation.threshold.",
+  "oneOf": [
+    { "const": "any", "description": "M = 1 if N > 0, else unsatisfiable." },
+    { "const": "majority", "description": "M = floor(N/2) + 1." },
+    { "const": "all", "description": "M = N." },
+    { "type": "integer", "minimum": 0, "description": "M = this exact value." }
+  ]
+}

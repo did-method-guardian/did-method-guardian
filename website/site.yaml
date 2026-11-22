@@ -2,7 +2,7 @@ base_url: https://guardianspec.org
 title: "did:guardian"
 description: |
     A distributed identity built around guardianship -- a configurable group
-    of other identities that can recover, revoke, transfer, or act on behalf
+    of other identities that can recover, deactivate, or act on behalf
     of an identity, under rules its owner sets in advance.
 version: 1
 

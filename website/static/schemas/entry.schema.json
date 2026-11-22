@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/entry.schema.json",
+  "title": "Entry",
+  "description": "Formal spec REQ-6-2. A guardian or successor entry -- a snapshot of that identity's own log at the time it was recorded.",
+  "type": "object",
+  "properties": {
+    "did": { "type": "string", "description": "The guardian or successor's own did:guardian DID." },
+    "anchor": { "type": "string", "description": "The anchor of that DID's log at snapshot time." },
+    "keys": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 8, "description": "1 to 8 distinct Multikey strings, that DID's own keys at snapshot time." },
+    "consent": { "type": "string", "description": "The operation hash of an acceptWard in that DID's own log, naming the ward this entry belongs to." }
+  },
+  "required": ["did", "anchor", "keys", "consent"],
+  "additionalProperties": false
+}

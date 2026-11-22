@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/policy.schema.json",
+  "title": "Policy",
+  "description": "Formal spec §6.3. The configurable consensus thresholds governing a ward's guardians.",
+  "$comment": "REQ-5-3: `extensions` is the forward-compatibility member -- a verifier that doesn't recognize a given extension key ignores it, rather than refusing the whole policy.",
+  "type": "object",
+  "properties": {
+    "recovery": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of update, acceptWard and releaseWard. Allowed: \"any\", \"majority\", \"all\", integer k (REQ-6-13: 1-32). Default \"majority\"." },
+    "membership": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of addGuardian and setPolicy. Allowed: \"majority\", \"all\", integer k -- never \"any\" (REQ-6-13: 1-32). Default \"majority\"." },
+    "removal": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of removeGuardian. Allowed: \"any\", \"majority\", \"all\", integer k (REQ-6-13: 1-32). Default \"majority\"." },
+    "deactivation": {
+      "type": "object",
+      "description": "REQ-6-11/REQ-6-12: governs approval of deactivate. Default {\"by\": \"both\", \"threshold\": \"majority\"}.",
+      "properties": {
+        "by": { "enum": ["self", "guardians", "either", "both"] },
+        "threshold": { "oneOf": [{ "const": "majority" }, { "const": "all" }, { "type": "integer", "minimum": 1, "maximum": 32 }], "description": "REQ-6-12/REQ-6-13: \"majority\", \"all\", or an integer k (1-32) -- never \"any\"." }
+      },
+      "required": ["by", "threshold"],
+      "additionalProperties": false
+    },
+    "orphan": {
+      "enum": ["deactivate", "independent", "successor"],
+      "description": "REQ-6-11/REQ-6-14: the change applied by REQ-6-10 when a removeGuardian leaves `guardians` empty. MUST be \"successor\" if this identity's `successor` is an entry, and MUST NOT be \"successor\" if `successor` is null. Default \"deactivate\"."
+    },
+    "maxWards": { "type": "integer", "minimum": 1, "description": "REQ-6-11/REQ-6-15: the largest allowed size of `wards`. Absent means no limit." },
+    "extensions": { "type": "object", "description": "REQ-5-3: additional members a verifier that doesn't recognize them ignores." }
+  },
+  "additionalProperties": false
+}

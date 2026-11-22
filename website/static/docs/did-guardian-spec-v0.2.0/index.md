@@ -21,383 +21,605 @@ updated_at: '2026-11-22'
 }
 </script>
 
-# DID Guardian Method Specification
+# The did:guardian Method, v0.2.0
 
-`did:guardian` merges [`did:plc`](https://github.com/did-method-plc/did-method-plc)'s own operation log and key-rotation model with [`did:web`](https://w3c-ccg.github.io/did-method-web/)'s domain-scoped, directory-free resolution, adding group guardianship on top of both -- a configurable, cryptographically-enforced set of parties able to recover, revoke, or transfer an identity.
+Status: Draft, 2026-11-22.
 
-> The key words *MUST*, *MUST NOT*, *REQUIRED*, *SHALL*, *SHALL NOT*, *SHOULD*, *SHOULD NOT*, *RECOMMENDED*, *MAY*, and *OPTIONAL* in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
->
-> Each normative rule carries a stable requirement ID (`REQ-<section>-<n>`); an ID's meaning never changes once published, and neither does its number -- a rule added after a section's own IDs are already in use gets the next free number in that section regardless of where in the section it's placed, rather than renumbering anything already published. This is visible throughout the document wherever a rule's own number doesn't match its reading-order position -- REQ-7.2-11 (placed with `guardian_add`'s other rules despite sorting after REQ-7.2-10), REQ-7.1-9/7.1-10/7.1-11, and REQ-2-4, among others.
+## 1. Overview
 
-## 1. Target system
+This section is non-normative.
 
-A registrar: an HTTP server operating one or more `did:guardian` namespaces, one per domain it controls, resolved by domain ([§8](#8-resolution)) the same way `did:web` is -- unlike `did:plc`, there is no single central directory; each registrar operates independently.
+A did:guardian identity is a signed, hash-chained log of operations, hosted at a domain. The identity's keys control it. Guardians are other did:guardian identities that the identity names, and each guardian records the identities it guards in its log. Guardians can recover the identity and govern it, under a policy the identity sets. The registrar for a domain hosts the logs for that domain, decides the order of their operations, and attests each new identity.
 
-## 2. Identifier syntax
+Every proof on an operation verifies from the log that contains it. When an operation involves another identity, the registrar checks that identity's current log before it accepts the operation. Resolvers check attestations and the state of guardian relationships.
 
-```text {linenos=false}
-did-guardian-identifier = "did:guardian:" domain [ ":" name ]
-name         = 3*32(ALPHA / DIGIT / "-")
-domain       = domain-label *( "." domain-label )
-domain-label = 1*63(ALPHA / DIGIT / "-")
+did:guardian combines the hosting model of did:web, the signed log of did:plc, and guardianship.
+
+## 2. Conformance
+
+The key words MUST, MUST NOT, SHOULD and MAY are to be interpreted as described in BCP 14 (RFC 2119, RFC 8174) when they appear in all capitals.
+
+Sections 1, 12, 13 and Appendix A are non-normative. All other sections are normative.
+
+This specification defines requirements for identities, registrars and resolvers.
+
+## 3. Terminology
+
+**identity**
+: A DID of this method, and the log that defines it.
+
+**operation**
+: A JSON object that changes the state of an identity.
+
+**log**
+: The ordered list of all operations of an identity.
+
+**state**
+: The values that result from applying every operation of a log in order (Section 6).
+
+**key**
+: A P-256 public key.
+
+**guardian**
+: An identity named in another identity's `guardians`.
+
+**ward**
+: An identity that names a guardian.
+
+**successor**
+: An identity named in another identity's `successor`. It becomes the guardian when the last guardian is removed (Section 6.2).
+
+**entry**
+: The record of a guardian or a successor in a ward's state (REQ-6-2).
+
+**registrar**
+: The service that hosts the logs for a domain.
+
+**root identity**
+: The identity `did:guardian:<domain>`, which belongs to the registrar of that domain.
+
+**operation hash**
+: The hash of a complete operation (Section 5.2).
+
+**version**
+: The operation hash of an operation in a log. The version of a log is the operation hash of its last operation.
+
+**anchor**
+: The hash of parts of the first operation of a log (REQ-5-7).
+
+## 4. Identifier
+
+<a id="req-4-1"></a>**REQ-4-1.** A did:guardian DID MUST match one of these forms:
+
+```
+did:guardian:<domain>
+did:guardian:<domain>:<name>
 ```
 
-Domain-first, deliberately isomorphic to `did:web`'s own method-specific-id grammar (`did:web:<domain>:<path...>`) -- did:guardian is that same shape with at most one flat `name` segment, not a coincidence: it keeps a did:guardian identifier visually parallel to the equivalent `did:web:<domain>:<name>`, differing only in the method name, which matters if a future did:web-interop profile ever links the two.
+<a id="req-4-2"></a>**REQ-4-2.** `<domain>` MUST be a DNS hostname of two or more labels, in lowercase, at most 253 characters long. Each label MUST be 1 to 63 characters from `a`–`z`, `0`–`9` and `-`, and MUST begin and end with a letter or a digit. Internationalized names MUST use their A-label form. The last label MUST NOT consist only of digits.
 
-- <a id="req-2-1"></a>**REQ-2-1**: `name`, if present, *MUST* be lowercase ALPHA/DIGIT/"-" only, 3 to 32 characters, *MUST* start and end with ALPHA/DIGIT, and *MUST NOT* contain two consecutive "-" characters.
-- <a id="req-2-2"></a>**REQ-2-2**: `domain` *MUST* be written dot-joined, exactly as it appears in ordinary DNS usage (e.g. `acme.com`), never colon-joined.
-- <a id="req-2-4"></a>**REQ-2-4**: Names are scoped per registrar (per `domain`), not globally -- the same `name` *MAY* exist, as a wholly separate identity with no relationship implied, under two different domains.
+<a id="req-4-3"></a>**REQ-4-3.** `<name>` MUST be 3 to 32 characters from `a`–`z`, `0`–`9` and `-`. It MUST begin and end with a letter or a digit.
 
-### 2.1 The bare-domain identity
+<a id="req-4-4"></a>**REQ-4-4.** The form without `<name>` identifies the root identity of the domain.
 
-- <a id="req-2-3"></a>**REQ-2-3**: An identifier with zero colons after the method name denotes the bare-domain identity for that domain (no `name`).
-- <a id="req-2-5"></a>**REQ-2-5**: The bare-domain identity's reserved path segment, where a registrar's own resolution surface needs one, is the literal string `_`. A registrar *MUST* reject any attempt to register `_` as an ordinary `name`.
+<a id="req-4-5"></a>**REQ-4-5.** The path segment of an identity is its `<name>`, or `_` for the root identity.
 
-**The bare-domain identity's own lifecycle.** It is an ordinary identity under this method -- its own log, its own operations, its own key material -- with exactly one structural difference: it is also the attestation authority every other identity under that domain depends on ([REQ-7.1-5](#req-7.1-5)), so its own lifecycle events carry weight beyond its own control chain.
-- **Bootstrap**: its genesis self-attests ([Fix 7](#changelog), [REQ-7.1-5](#req-7.1-5)'s exception) -- there is no other party on a fresh deployment to vouch for it. Everything else about genesis ([§7.1](#71-create)) applies to it exactly as to any ward, proof of possession ([REQ-7.1-8](#req-7.1-8)) included.
-- **Rotation**: an ordinary `custodial_rotate` ([§7.2](#72-update)), no different from any ward's. The moment it's accepted, every attestation this registrar signs afterward -- new genesis acceptances, freshly-signed log-head statements ([§12.2](#122-verification-levels)) -- uses the new key; every attestation signed *before* the rotation remains verifiable against the old one, since [REQ-4-2](#req-4-2)'s own point-in-time key resolution already applies to a registrar-as-signer exactly as it does to a guardian-as-signer.
-- **Tombstone**: an ordinary `custodial_tombstone` ([§7.3](#73-deactivate)), but with a consequence [§7.3](#73-deactivate) doesn't otherwise have: a deactivated bare-domain identity can no longer produce a genesis attestation ([REQ-7.1-5](#req-7.1-5)) at all, so that domain can no longer accept *new* identities under it, even though every identity it already attested stays exactly as resolvable and verifiable as before ([REQ-9-1](#req-9-1)) -- deactivating the attestation authority doesn't retroactively un-attest anything it already signed.
+<a id="req-4-6"></a>**REQ-4-6.** Two DIDs are equal if their strings are equal.
 
-## 3. DID Document
+## 5. Encoding
 
-Resolving an identifier *MUST* yield a document conformant to [W3C DID Core](https://www.w3.org/TR/did-core/), containing:
+### 5.1 Values
 
-- <a id="req-3-1"></a>**REQ-3-1**: exactly one `verificationMethod` entry per entry in the ward's current `operationalKeys` ([§4](#4-key-material)), each of type `Multikey`, with `id` `<did>#key-<N>` where `N` is that key's own zero-based index in `operationalKeys` -- the same positional scheme [REQ-6-7](#req-6-7) uses to say which key signed a given proof.
-- <a id="req-3-2"></a>**REQ-3-2**: `authentication`, `assertionMethod`, and `capabilityInvocation` arrays referencing every such `verificationMethod` -- an operational key is exactly what invokes the capability to update the document (REQ-6-2 through REQ-6-11), the semantic `capabilityInvocation` itself names.
-- <a id="req-3-3"></a>**REQ-3-3**: The guardian tier, `GuardianPolicy`, and the full operation log *MUST NOT* appear in the presented document -- they are method-internal state used to derive it. The log itself has its own dedicated resolution endpoint ([REQ-8-2](#req-8-2)'s `.../log`); the guardian tier and `GuardianPolicy` do not have one of their own -- both are only resolvable by replaying that log, never fetched directly.
+<a id="req-5-1"></a>**REQ-5-1.** An operation MUST be an I-JSON message (RFC 7493).
 
-## 4. Key material
+<a id="req-5-2"></a>**REQ-5-2.** Every number in an operation MUST have an integer value between 0 and 2^53 − 1.
 
-- <a id="req-4-1"></a>**REQ-4-1**: `operationalKeys` is the ward's own, lowest-authority, self-rotatable tier. Any single current operational key suffices to authorize an ordinary rotation ([§7.2](#72-update)).
-- <a id="req-4-2"></a>**REQ-4-2**: The guardian tier is, at any point in the log, exactly the current guardian set as derived by replay -- a live reference, never a value fixed at the moment guardianship was established. A signature from a guardian DID *MUST* be checked against a key that was valid for that guardian's own identity at the time the signing operation was created -- determined by replaying the guardian's own operation log up to that point, not necessarily its currently-resolved key. Every key a guardian has ever rotated away from remains permanently present in its own log ([§9](#9-deactivation-and-data-permanence)), so this check is always independently verifiable, even after that key is no longer current.
-- <a id="req-4-3"></a>**REQ-4-3**: A guardian action *MUST* always be signed by the guardian's own distinct key, never the ward's.
-- <a id="req-4-4"></a>**REQ-4-4**: A guardian whose own identity is currently deactivated (REQ-6-5) *MUST* be excluded from the current guardian set for every purpose this document defines -- threshold eligibility (§5), and "is this DID a current guardian" checks (e.g. REQ-7.2-6). Exclusion is automatic, live (re-evaluated at the time of each new signature, same as REQ-4-2), and takes effect the moment that guardian's own `custodial_tombstone` is accepted; it is not equivalent to, and does not require, an explicit `guardian_remove` naming that guardian on the ward's own log. If this exclusion reduces a ward's effective guardian set to empty, the ward becomes guardian-less in exactly the same sense as after `guardian_relinquish` -- re-entering guardianship afterward follows the ordinary zero-to-one `guardian_add` rule (REQ-7.2-5).
+<a id="req-5-3"></a>**REQ-5-3.** An operation MUST contain exactly the members that Section 7 defines for its type, and MAY also contain the members `extensions` and `critical` (Section 7.11). Every object inside an operation MUST contain exactly the members that this specification defines for it. A policy object MAY also contain the member `extensions`.
 
-## 5. GuardianPolicy
+<a id="req-5-4"></a>**REQ-5-4.** The canonical form of a JSON value is its JSON Canonicalization Scheme serialization (RFC 8785).
 
-```json {linenos=false}
-{
-  "version": 1,
-  "recovery_threshold": "any",
-  "tombstone_threshold": "any",
-  "removal_threshold": "majority",
-  "addition_threshold": "majority",
-  "policy_threshold": "majority",
-  "min_guardian_count": 0,
-  "on_orphan": "sovereign"
-}
-```
+<a id="req-5-5"></a>**REQ-5-5.** Two lists of keys are equal if they contain the same keys, in any order.
 
-- <a id="req-5-1"></a>**REQ-5-1**: A threshold value *MUST* be one of: `"any"` (`M = 1`), `"majority"` (`M = floor(N/2) + 1`), `"unanimous"` (`M = N`), or `{"at_least": k}` where `k` *MUST* be an integer `>= 1` (a verifier *MUST* reject a policy whose `at_least` is not -- not merely treat it as 0 or clamp it); its own `M = k`. `N` is the size of the eligible set at evaluation time and `M` is the number of valid, distinct signatures required. **Every threshold kind is unsatisfiable at `N = 0`** -- not just `"any"`: `"majority"`'s naive `floor(0/2)+1 = 1` and `"unanimous"`'s naive `M = N = 0` would otherwise be met trivially (zero signers meeting a requirement of zero, or of one, signature nobody can produce against an empty eligible set is not authorization by anybody), so a verifier *MUST* treat `N = 0` as unsatisfiable for every kind uniformly, overriding whatever that kind's own formula would otherwise naively compute. `{"at_least": k}` is additionally unsatisfiable whenever `k > N`, the ordinary consequence of `M` exceeding the number of signers actually available to satisfy it, same as any other kind. Both `N` and `M` count distinct signer DIDs, never raw signatures or keys: two valid proofs naming the same signer DID (e.g. a ward presenting more than one current operational key, where the eligible set is a union including that ward, [REQ-7.3-1](#req-7.3-1)) count as one toward `M`, and that same DID counts as exactly one member of `N`, regardless of how many keys it currently has.
-- <a id="req-5-2"></a>**REQ-5-2**: `recovery_threshold` governs a guardian-initiated `custodial_rotate` ([§7.2](#72-update)). Default `any`.
-- <a id="req-5-3"></a>**REQ-5-3**: `tombstone_threshold` governs `custodial_tombstone` ([§7.3](#73-deactivate)). Default `any`.
-- <a id="req-5-4"></a>**REQ-5-4**: `removal_threshold` governs both a forced `guardian_remove` and `guardian_relinquish` ([§7.2](#72-update)). Default `majority`.
-- <a id="req-5-5"></a>**REQ-5-5**: `addition_threshold` governs `guardian_add` ([§7.2](#72-update)). Default `majority`.
-- <a id="req-5-6"></a>**REQ-5-6**: `policy_threshold` governs `policy_update` itself, evaluated against its own currently-effective value, never the proposed new one. Default `majority`.
-- <a id="req-5-7"></a>**REQ-5-7**: `min_guardian_count` (a non-negative integer, default `0` meaning no minimum) *MUST* be enforced on `guardian_remove` ([REQ-7.2-7a](#req-7.2-7a)/[REQ-7.2-7b](#req-7.2-7b)) only: a registrar *MUST* reject a `guardian_remove` that would leave the guardian set smaller than this value. It *MUST NOT* be enforced on `guardian_relinquish` -- full dissolution (REQ-7.2-8) remains available at any guardian-set size regardless of a stated minimum, since it is a deliberate choice by enough of the guardians to end the relationship entirely, not a departure the ward's own policy is positioned to second-guess.
-- <a id="req-5-8"></a>**REQ-5-8**: `on_orphan` (one of `"sovereign"`, `"tombstone"`, or `{"transfer_to": <DID>}`, default `"sovereign"`) states the ward's own standing preference for what should happen if its effective guardian set becomes empty other than through an explicit `guardian_relinquish` -- e.g. via REQ-4-4's own cascading exclusion when a sole guardian is deactivated. This field is declarative state only -- part of `GuardianPolicy`, replayed and exposed exactly like any other policy field, and nothing more; this document defines no operation, automatic or otherwise, that reads it and acts.
+### 5.2 Hashes
 
-  *(Non-normative -- what acting on each value actually takes, a consequence of REQ-7.2-4/7.2-5/7.3-1's existing signer rules applied to this specific scenario, not a new requirement.)* The three values are not equally reachable without outside help: `"sovereign"` needs no operation at all, since REQ-4-4's own exclusion rule already makes `replay()` compute an empty guardian set directly from the existing log. `"tombstone"` needs a new, signed `custodial_tombstone`, needing only the orphaned ward's own key (`tombstone_threshold` defaults to `any`, REQ-7.3-1). `{"transfer_to": <DID>}` needs a new, signed `guardian_add`; once the guardian set has actually reached empty, REQ-7.2-5 needs *two* parties' keys together (the named DID's own consent and the orphaned ward's own), but a `guardian_add` naming the fallback submitted *before* a sole guardian's own tombstone is accepted falls under the ordinary addition rule (REQ-7.2-4) instead, where the outgoing guardian's signature alone satisfies `addition_threshold` at `N=1` -- the same add-before-remove sequencing [§7.2](#72-update)'s own ordinary transfer already uses. Acting on either of the latter two needs an application layer that actually holds the relevant keys; see the registrar API specification (a registrar profile, not this method) for one way that might be offered.
-- <a id="req-5-9"></a>**REQ-5-9**: `GuardianPolicy` carries a `version` field (a positive integer, default `1`). A verifier *MUST* refuse to evaluate ANY operation governed by a policy whose `version` exceeds the highest version that verifier understands, rather than evaluating it against only the fields it happens to recognize. A field present that the policy's own stated `version` doesn't define at all (never mind a future, higher version) *MUST* be rejected outright -- a policy carrying one is malformed, not forward-compatible content to tolerate; this is the same downgrade risk this requirement already closes for an unrecognized higher version, applied to a field with no version that defines it at all. (Revised from "ignore unknown fields" -- see [REQ-5-9's Changelog note](#changelog) for why: silently ignoring a field it doesn't understand means a verifier can't tell whether some OTHER, more restrictive field it also doesn't recognize was supposed to govern that same decision, which is a silent downgrade, not graceful forward compatibility. A future version adding new policy fields bumps `version`; a verifier built against an earlier version correctly refuses to evaluate anything governed by it, rather than guessing.)
+<a id="req-5-6"></a>**REQ-5-6.** The hash of a JSON value is computed as follows:
 
-  A `policy_update` installing a policy whose `version` a verifier doesn't yet understand is a narrower case than evaluating an operation already governed by one: [REQ-7.2-9](#req-7.2-9) evaluates that `policy_update`'s own authorization against the *currently-effective* policy (whatever `version` that already is, necessarily one the verifier understands if it got this far) -- never against the new policy it's installing. A verifier *MAY* therefore still verify a `policy_update` that installs a policy version it doesn't understand, exactly as it would any other operation governed by the old policy; it simply *MUST* then report that it cannot fully verify anything *after* that point, since every later operation is governed by the new policy this requirement already bars it from evaluating.
-- <a id="req-5-10"></a>**REQ-5-10**: A `GuardianPolicy` field this identity's own log never set *MUST* resolve to exactly the default this section states (REQ-5-2 through REQ-5-8) -- the same value for every verifier, everywhere, computed by replaying the log alone. A verifier *MUST NOT* consult any registrar-specific configuration, deployment default, or other off-log source to fill an unset field, however that registrar's own UI might choose to pre-fill the field when a ward is first creating a policy: the field is either present in the log's own content, or it takes this section's stated default, with nothing in between. Two verifiers resolving the same log from different registrars who disagreed on an unset field's effective value would be disagreeing about what the identity's control chain actually requires -- a question this method answers from the log's content alone, not from however any one registrar happens to be configured.
+1. Serialize the value in canonical form.
+2. Compute the SHA-256 digest of the serialization.
+3. Prefix the digest with the multihash header bytes `0x12 0x20`.
+4. Encode the result as base58btc with the multibase prefix `z`.
 
-## 6. The operation log
+The operation hash of an operation is the hash of the complete operation.
 
-- <a id="req-6-1"></a>**REQ-6-1**: Every identity *MUST* be defined by an append-only, hash-chained, signed log of operations; the DID Document *MUST* always be derived by replaying this log, never stored or trusted directly.
-- <a id="req-6-2"></a>**REQ-6-2**: Every operation except genesis *MUST* name the CID of the immediately preceding operation (`prev`); a registrar *MUST* reject any operation whose `prev` does not equal the current log head for that identity, except as permitted by [REQ-6-8](#req-6-8) (nullification).
-- <a id="req-6-3"></a>**REQ-6-3**: Every identity has an *anchor*: the genesis operation's content hash (a CID, [REQ-6-4](#req-6-4)), computed the same way, by anyone, from the genesis operation alone. The anchor is a property of the log, not of the identifier -- it is never assigned independently by a registrar, and it exists regardless of whether anything ever pins or checks it ([§12.3](#123-pinning)). The identifier itself remains the location-bound `domain[:name]` string defined in [§2](#2-identifier-syntax), which a registrar does assign.
-- <a id="req-6-4"></a>**REQ-6-4**: Serialization, hashing, and signing: operation content is canonicalized per [JCS (RFC 8785)](https://www.rfc-editor.org/rfc/rfc8785); a CID (an operation's own anchor, `prev`, or `headCid`) is a bare [multihash](https://github.com/multiformats/multihash) (sha2-256, code `0x12`) of that canonical form, base58btc-encoded with a leading `z` ([multibase](https://github.com/multiformats/multibase)) -- "CID" here names this method's own content identifier by analogy with IPFS's term of art, never a [CIDv1](https://github.com/multiformats/cid) in the IPFS sense: there is no CIDv0/v1 version byte, no codec byte naming a content type (e.g. dag-pb, dag-cbor), and no base-encoding multibase-prefix convention beyond the one `z` this method already uses for every other multihash/Multikey it presents. A value from this method is never interchangeable with, or parseable as, an actual IPFS CID. Every public key, operation-internal or in a resolved DID Document alike, is encoded the same way as a [Multikey](https://www.w3.org/TR/cid-1.0/#Multikey) -- for P-256, the multicodec-tagged (`0x1200`, `p256-pub`) **compressed** point, exactly 33 bytes, base58btc-encoded with a leading `z` -- one encoding for every key this method ever presents, never a second, SPKI-shaped (uncompressed-point) one at any boundary a verifier has to handle. Signatures use ECDSA over P-256 (`secp256r1`); a signer *MUST* produce the canonical low-S form, and a verifier *MUST* reject (not silently renormalize) any signature presented in its high-S, equally-valid-but-malleable counterpart. This goes beyond what the underlying [ecdsa-jcs-2019 cryptosuite](https://www.w3.org/TR/vc-di-ecdsa/) itself requires -- that specification only *SHOULD*s low-S, as a general anti-malleability recommendation; this method makes it a *MUST*, specifically because [REQ-6-6](#req-6-6)'s replay and this requirement's own CID both need every verifier to agree on exactly one canonical encoding of "this operation was accepted," not merely on whether a given signature happens to verify. Low-S normalization does not, by itself, make ECDSA signing deterministic across repeated signing attempts over the same content -- the signer's own random per-signature nonce still varies each time, producing a different, equally valid `(r, s)` pair; what low-S guarantees is narrower, that for whichever `r` a given signing attempt actually produced, only one of the two otherwise-equally-valid `s` values (`s` or `n − s`) is ever accepted. **A CID is computed over the operation's content with every `proof` entry stripped** ([REQ-6-7](#req-6-7)) for exactly this reason -- not because any one signature attempt is malleable in a way low-S doesn't already close, but because an operation can validly carry several different, equally legitimate signatures (or the same key re-signing the same content later) without that changing what it means; stripping proofs keeps the anchor a function of content alone, deterministic and client-computable before submission, independent of which of the many equally-valid signatures over that content happened to be produced.
-- <a id="req-6-5"></a>**REQ-6-5**: Once an identity's `deactivated` state is true ([§7.3](#73-deactivate)), a registrar *MUST* reject every subsequent operation against it.
-- <a id="req-6-6"></a>**REQ-6-6**: A registrar (or any independent verifier) *MUST* derive current state only by replaying the full log from genesis, verifying every operation's signatures against whichever keys/guardians had authority at that point in the log, and applying [REQ-6-8](#req-6-8)'s nullification rule where it occurs.
-- <a id="req-6-7"></a>**REQ-6-7**: Every operation carries a `proof` array of one or more [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proofs (`cryptosuite: "ecdsa-jcs-2019"`), each naming its own signer via `verificationMethod` -- `<did>#key-<N>` for an ordinary signer (ward, guardian, or registrar), where `N` *MUST* be that exact key's own zero-based index within that signer's current `operationalKeys` array at the time of signing (the same positional scheme [REQ-3-1](#req-3-1) uses for a resolved document's own `verificationMethod` entries); or a self-contained `did:key:<multikey>#<multikey>` for an operational key proving possession of itself ([REQ-7.1-8](#req-7.1-8)/[REQ-7.2-12](#req-7.2-12)), needing no resolution at all. A proof's `#key-<N>` fragment *MUST* name the actual key it was produced with -- a verifier *MUST* check it against exactly the key at that index (resolution consults the fragment, not only the DID portion, correcting an earlier version of this requirement which said otherwise), and *MUST* reject the proof outright if `N` doesn't parse as a non-negative integer or names an index past the end of that signer's own key array, never falling back to trying every key in it. Which array `N` indexes, and as of when, follows [REQ-4-2](#req-4-2)'s point-in-time resolution exactly: the ward's own signature is checked against the ward's own state as replayed up to (but not including) this operation's own `prev` -- the state this operation is itself an update to, not any later one -- and a guardian's or the registrar's signature is checked against that DID's own state as of this operation's acceptance time. Multiple independent proofs over the same operation form a *proof set*, each checked on its own against the document with every proof (not just itself) stripped -- never a chain where one proof signs over another. Each proof *MUST* be checked against its named signer's own independently-resolved key, never the ward's, and *MUST* cover the operation's full unsecured content ([REQ-6-4](#req-6-4)), binding it to this exact operation.
-- <a id="req-6-8"></a>**REQ-6-8** (nullification): A guardian-signed `custodial_rotate` meeting `recovery_threshold` ([§7.2](#72-update)) *MAY* name a `prev` earlier than the current log head, provided the operation immediately following the named `prev` (the operation being nullified) was accepted by the registrar less than the recovery window ([REQ-6-9](#req-6-9)) ago.
-- <a id="req-6-9"></a>**REQ-6-9** (recovery window): The recovery window is 72 hours, matching `did:plc`'s own value.
-- <a id="req-6-10"></a>**REQ-6-10**: Once a nullifying operation ([REQ-6-8](#req-6-8)) is accepted, every operation that followed the named `prev` in the now-superseded branch *MUST* be excluded from replay ([REQ-6-6](#req-6-6)); the nullifying operation becomes the new log head, and [REQ-6-2](#req-6-2) applies normally from that point forward.
-- <a id="req-6-11"></a>**REQ-6-11**: A nullifying operation *MAY* itself later be nullified by a further guardian-signed recovery rotation, under [REQ-6-8](#req-6-8), evaluated against its own acceptance time -- a reversal is the same mechanism applied again, not a distinct operation type. Concretely, this means naming the *same* `prev` the nullification being reversed itself named, not the `prev` of whatever that nullification superseded -- once superseded, an operation's own content is no longer reachable by naming its cid ([REQ-6-10](#req-6-10)); a guardian wanting that exact prior state back has to recreate it as new operation content, the same way any other operation is created.
-- <a id="req-6-12"></a>**REQ-6-12** (WS-5.4, DECIDED): a proof's `proofPurpose` *MUST* be `capabilityInvocation` when it authorizes an operation -- a ward's, guardian's, or installed key's own signature over any of [§7](#7-operations)'s operation types, proof of possession included, since the key it names is exactly what [REQ-3-2](#req-3-2) already lists under `capabilityInvocation` in the resolved document. It *MUST* be `assertionMethod` when the accepting registrar instead signs a *statement about* the log rather than an action against it: the genesis attestation ([REQ-7.1-5](#req-7.1-5)), an acceptance receipt, or a log-head statement ([§12.2](#122-verification-levels)). No other `proofPurpose` value is valid anywhere in this method.
-- <a id="req-6-13"></a>**REQ-6-13** (WS-5.8, DECIDED): `custodial_create` and `custodial_rotate` *MAY* carry an optional `alsoKnownAs: string[]` -- a declarative list of other identifiers this one claims a relationship with, the mechanism [§9](#9-deactivation-and-data-permanence)'s "link, don't move" domain-migration guidance depends on, surfaced verbatim into the resolved document's own `alsoKnownAs` ([§3](#3-did-document)). On `custodial_create` it initializes the value (absent means none declared yet, the same as an empty array). On `custodial_rotate` it follows the opposite convention from `operationalKeys`/`services` specifically because it's optional where those are required: *present* replaces the prior value wholesale, *absent* leaves the prior value untouched -- an ordinary rotation with no reason to touch `alsoKnownAs` at all is never forced to restate it just to avoid silently clearing it. This field carries no signature requirement beyond whatever already-required signer set authorizes that operation -- declaring a relationship with another identifier here is not itself a claim that identifier reciprocates; a verifier treating it as mutual without separately checking the other identifier's own `alsoKnownAs` is trusting an unverified assertion, same as any other one-sided link.
+<a id="req-5-7"></a>**REQ-5-7.** The anchor of a log is the hash of its first operation with the `proof`, `attestation`, `guardians` and `successor` members removed.
+
+### 5.3 Keys
+
+<a id="req-5-8"></a>**REQ-5-8.** A key MUST be a P-256 public key encoded as a Multikey: the bytes `0x80 0x24` (the unsigned-varint encoding of multicodec `0x1200`), followed by the 33-byte compressed point, encoded as base58btc with the multibase prefix `z`.
+
+<a id="req-5-9"></a>**REQ-5-9.** The compressed point MUST decode to a point on the P-256 curve.
+
+### 5.4 Proofs
+
+<a id="req-5-10"></a>**REQ-5-10.** An operation's `proof` member MUST be an array of Data Integrity proofs, sorted by `verificationMethod` in code-point order. Each proof secures the operation independently.
+
+<a id="req-5-11"></a>**REQ-5-11.** Each proof MUST contain exactly these members:
+
+| Member | Value |
+|---|---|
+| `type` | `"DataIntegrityProof"` |
+| `cryptosuite` | `"ecdsa-jcs-2019"` |
+| `verificationMethod` | `did:key:<key>#<key>` |
+| `proofPurpose` | `"capabilityInvocation"` |
+| `proofValue` | the signature |
+
+<a id="req-5-12"></a>**REQ-5-12.** Proofs MUST be created and verified with the `ecdsa-jcs-2019` cryptosuite (W3C Data Integrity ECDSA Cryptosuites v1.0), as follows:
+
+1. The secured document is the operation with the `proof` and `attestation` members removed.
+2. The proof configuration is the proof with the `proofValue` member removed.
+3. The signed data is the SHA-256 digest of the canonical proof configuration, followed by the SHA-256 digest of the canonical secured document.
+4. The signature is an ECDSA P-256 signature over the signed data, using SHA-256.
+5. `proofValue` is the 64-byte signature value, R followed by S, encoded as base58btc with the multibase prefix `z`.
+
+<a id="req-5-13"></a>**REQ-5-13.** The signature MUST use the low-S form. A verifier MUST reject a signature whose S value is greater than half the order of the P-256 curve.
+
+<a id="req-5-14"></a>**REQ-5-14.** The signer of a proof is the key in its `verificationMethod`. A proof is valid if its signature verifies with that key.
+
+<a id="req-5-15"></a>**REQ-5-15.** An operation MUST NOT contain two proofs from the same key.
+
+<a id="req-5-16"></a>**REQ-5-16.** A key approves an operation if the operation contains a valid proof from that key. A guardian or successor approves an operation if at least one key in its entry approves it.
+
+## 6. State
+
+<a id="req-6-1"></a>**REQ-6-1.** The state of an identity consists of:
+
+| Field | Value |
+|---|---|
+| `keys` | a list of 1 to 8 distinct keys |
+| `guardians` | a list of 0 to 32 entries with distinct DIDs |
+| `successor` | an entry, or `null` |
+| `wards` | a list of ward records with distinct DIDs |
+| `policy` | a policy object (Section 6.3) |
+| `services` | a list of 0 to 32 services with distinct `id` values |
+| `alsoKnownAs` | a list of 0 to 32 distinct URIs (RFC 3986) |
+| `deactivated` | `true` or `false` |
+| `critical` | a list of distinct extension names (Section 7.11) |
+
+<a id="req-6-2"></a>**REQ-6-2.** An entry MUST contain exactly the members `did`, `anchor`, `keys` and `consent`. `did` is a did:guardian DID. `anchor` is the anchor of that DID's log. `keys` is a list of 1 to 8 distinct keys. `consent` is the operation hash of an `acceptWard` in that DID's log.
+
+<a id="req-6-3"></a>**REQ-6-3.** A key MUST NOT appear more than once across `keys`, the `keys` of every entry in `guardians`, and the `keys` of `successor`.
+
+<a id="req-6-4"></a>**REQ-6-4.** A ward record MUST contain exactly the members `did` and `anchor`. `did` is a did:guardian DID. `anchor` is the anchor of that DID's log.
+
+<a id="req-6-5"></a>**REQ-6-5.** The DID of an identity MUST NOT appear in its `guardians`, its `successor` or its `wards`. The DID of `successor` MUST NOT appear in `guardians`.
+
+<a id="req-6-6"></a>**REQ-6-6.** A service MUST contain exactly the members `id`, `type` and `serviceEndpoint`. `id` MUST be `#` followed by a DID URL fragment. `type` MUST be a string. `serviceEndpoint` MUST be a URI (RFC 3986).
+
+<a id="req-6-7"></a>**REQ-6-7.** After each operation, the state MUST conform to REQ-6-1 through REQ-6-6 and Section 6.3.
+
+### 6.1 Required approvals
+
+<a id="req-6-8"></a>**REQ-6-8.** Let N be the number of guardians in the state before an operation. Let E be the number of guardians eligible to approve it. E equals N − 1 for `removeGuardian`, and N for every other operation. For a setting value v, the number of guardian approvals required is computed as follows:
+
+1. Start with a base value: 1 for `"any"`, floor(E / 2) + 1 for `"majority"`, E for `"all"`, and the smaller of k and E for an integer k.
+2. If v is not `"any"` and N is at least 2, raise the value to at least 2.
+3. For `membership` and for the `threshold` of `deactivation`, raise the value to at least floor(N / 2) + 1.
+
+<a id="req-6-9"></a>**REQ-6-9.** A clause of REQ-7-6 that requires guardians per a setting cannot be met if E is 0 or if the required number is greater than E.
+
+### 6.2 Orphaning
+
+<a id="req-6-10"></a>**REQ-6-10.** When a `removeGuardian` leaves `guardians` empty, the state changes according to `policy.orphan`:
+
+| `orphan` | Change |
+|---|---|
+| `"deactivate"` | `deactivated` becomes `true` |
+| `"independent"` | no change |
+| `"successor"` | the `successor` entry becomes the only entry in `guardians`, `successor` becomes `null`, and `orphan` becomes `"deactivate"` |
+
+### 6.3 Policy
+
+<a id="req-6-11"></a>**REQ-6-11.** A policy object MAY contain these members. A member that is absent takes its default value.
+
+| Member | Governs | Allowed values | Default |
+|---|---|---|---|
+| `recovery` | guardian approval of `update`, `acceptWard` and `releaseWard` | `"any"`, `"majority"`, `"all"`, integer k | `"majority"` |
+| `membership` | guardian approval of `addGuardian` and `setPolicy` | `"majority"`, `"all"`, integer k | `"majority"` |
+| `removal` | guardian approval of `removeGuardian` | `"any"`, `"majority"`, `"all"`, integer k | `"majority"` |
+| `deactivation` | approval of `deactivate` | a deactivation object (REQ-6-12) | `{"by": "both", "threshold": "majority"}` |
+| `orphan` | the change when the last guardian is removed (REQ-6-10) | `"deactivate"`, `"independent"`, `"successor"` | `"deactivate"` |
+| `maxWards` | the largest allowed size of `wards` | integer k ≥ 1 | no limit |
+
+<a id="req-6-12"></a>**REQ-6-12.** A deactivation object MUST contain exactly the members `by` and `threshold`. `by` MUST be one of `"self"`, `"guardians"`, `"either"` or `"both"`. `threshold` MUST be `"majority"`, `"all"` or an integer k.
+
+<a id="req-6-13"></a>**REQ-6-13.** An integer k in `recovery`, `membership`, `removal` or `threshold` MUST be between 1 and 32.
+
+<a id="req-6-14"></a>**REQ-6-14.** `orphan` MUST be `"successor"` if `successor` is an entry, and MUST NOT be `"successor"` if `successor` is `null`.
+
+<a id="req-6-15"></a>**REQ-6-15.** If `maxWards` is present, `wards` MUST NOT contain more than `maxWards` records.
 
 ## 7. Operations
 
-### 7.1 Create
+### 7.1 Common members
 
-```json {linenos=false}
+<a id="req-7-1"></a>**REQ-7-1.** Every operation MUST contain the members `type`, `prev` and `proof`.
+
+<a id="req-7-2"></a>**REQ-7-2.** `type` MUST be one of `create`, `update`, `addGuardian`, `updateGuardian`, `removeGuardian`, `setPolicy`, `acceptWard`, `releaseWard` or `deactivate`.
+
+<a id="req-7-3"></a>**REQ-7-3.** The first operation of a log MUST be a `create`. A later operation MUST NOT be a `create`.
+
+<a id="req-7-4"></a>**REQ-7-4.** In a `create`, `prev` MUST be `null`. In every other operation, `prev` MUST be the operation hash of the preceding operation.
+
+### 7.2 Approval rules
+
+In the following rules:
+- "one current key" means approval by at least one key in `keys` in the state before the operation;
+- "guardians per s" means approvals from the number of current guardians that REQ-6-8 requires for setting s;
+- "every key in X" means approval by every key in the list X in the operation.
+
+For a `create`, the state before the operation is empty and N is 0.
+
+<a id="req-7-5"></a>**REQ-7-5.** Every proof on an operation MUST come from one of these keys: a key in `keys`, in an entry in `guardians`, or in `successor`, in the state before the operation; or a key in a list of keys in the operation.
+
+<a id="req-7-6"></a>**REQ-7-6.** An operation MUST have the approvals that the following table requires.
+
+| Type | Required approvals |
+|---|---|
+| `create` | every key in `keys`; every key in each entry in `guardians`; every key in `successor`, if it is an entry |
+| `update` | every key in `keys`; and either one current key or guardians per `recovery` |
+| `addGuardian` | every key in `entry`; one current key; and guardians per `membership`, if N > 0 |
+| `updateGuardian` | every key in `keys`; and either a key in the named entry, or one current key together with one guardian other than the named one |
+| `removeGuardian` | one of: the removed guardian, if N ≥ 2; guardians per `removal`, from the guardians other than the removed one; one current key, if `evidence` is present; or one current key together with the successor, if N = 1 and `successor` is an entry |
+| `setPolicy` | one current key; guardians per `membership`, if N > 0; and every key in `successor`, if it is an entry that differs from the current `successor` |
+| `acceptWard` | one current key, or guardians per `recovery` |
+| `releaseWard` | one current key, or guardians per `recovery` |
+| `deactivate` | if N = 0, one current key; otherwise, as `policy.deactivation.by` specifies: `self`, one current key; `guardians`, guardians per `deactivation.threshold`; `either`, one of the two; `both`, both |
+
+### 7.3 create
+
+<a id="req-7-7"></a>**REQ-7-7.** A `create` MUST contain the members `type`, `did`, `keys`, `guardians`, `successor`, `policy`, `services`, `alsoKnownAs`, `prev` and `proof`. The `create` of an identity other than a root identity MUST contain the member `attestation`. The `create` of a root identity MUST NOT contain it.
+
+<a id="req-7-8"></a>**REQ-7-8.** `did` is the DID of the identity. `keys`, `guardians`, `successor`, `policy`, `services` and `alsoKnownAs` set the initial state. `wards` is empty and `deactivated` is `false`.
+
+<a id="req-7-9"></a>**REQ-7-9.** `attestation` MUST be a Data Integrity proof as in REQ-5-11, except that its `cryptosuite` may be any string and its `verificationMethod` is `did:guardian:<domain>?versionId=<version>#key-<n>`, where `<domain>` is the domain of `did`, `<version>` is a version of the root identity's log, and `<n>` is a decimal integer without leading zeros. It secures the same document as the other proofs (REQ-5-12). Section 11 defines how it is verified.
+
+### 7.4 update
+
+<a id="req-7-10"></a>**REQ-7-10.** An `update` MUST contain the members `type`, `keys`, `services`, `alsoKnownAs`, `prev` and `proof`.
+
+<a id="req-7-11"></a>**REQ-7-11.** `update` replaces `keys`, `services` and `alsoKnownAs` in the state.
+
+### 7.5 addGuardian
+
+<a id="req-7-12"></a>**REQ-7-12.** An `addGuardian` MUST contain the members `type`, `entry`, `prev` and `proof`. `entry` is an entry (REQ-6-2).
+
+<a id="req-7-13"></a>**REQ-7-13.** The DID of `entry` MUST NOT already be a guardian.
+
+<a id="req-7-14"></a>**REQ-7-14.** `addGuardian` appends `entry` to `guardians`.
+
+### 7.6 updateGuardian
+
+<a id="req-7-15"></a>**REQ-7-15.** An `updateGuardian` MUST contain the members `type`, `guardian`, `keys`, `prev` and `proof`. `guardian` is the DID of a current guardian or of the successor.
+
+<a id="req-7-16"></a>**REQ-7-16.** `updateGuardian` replaces the `keys` of the entry for `guardian`.
+
+### 7.7 removeGuardian
+
+<a id="req-7-17"></a>**REQ-7-17.** A `removeGuardian` MUST contain the members `type`, `guardian`, `prev` and `proof`. It MAY contain the member `evidence`. `guardian` is the DID of a current guardian.
+
+<a id="req-7-18"></a>**REQ-7-18.** If present, `evidence` is the operation hash of a `deactivate`, or of a `releaseWard` whose `ward` is this identity, in the log of `guardian`.
+
+<a id="req-7-19"></a>**REQ-7-19.** `removeGuardian` removes the entry for `guardian`, and then applies REQ-6-10.
+
+### 7.8 setPolicy
+
+<a id="req-7-20"></a>**REQ-7-20.** A `setPolicy` MUST contain the members `type`, `policy`, `successor`, `prev` and `proof`. `successor` is an entry or `null`.
+
+<a id="req-7-21"></a>**REQ-7-21.** `setPolicy` replaces `policy` and `successor` in the state.
+
+### 7.9 acceptWard and releaseWard
+
+<a id="req-7-22"></a>**REQ-7-22.** A `acceptWard` MUST contain the members `type`, `ward`, `prev` and `proof`. `ward` is a ward record (REQ-6-4).
+
+<a id="req-7-23"></a>**REQ-7-23.** The DID of `ward` MUST NOT already be in `wards`.
+
+<a id="req-7-24"></a>**REQ-7-24.** `acceptWard` appends `ward` to `wards`. It records that the identity consents to be a guardian or successor of that ward.
+
+<a id="req-7-25"></a>**REQ-7-25.** An `releaseWard` MUST contain the members `type`, `ward`, `prev` and `proof`. `ward` is the DID of a record in `wards`.
+
+<a id="req-7-26"></a>**REQ-7-26.** `releaseWard` removes the record for `ward` from `wards`. It records that the identity withdraws its consent.
+
+### 7.10 deactivate
+
+<a id="req-7-27"></a>**REQ-7-27.** A `deactivate` MUST contain the members `type`, `prev` and `proof`.
+
+<a id="req-7-28"></a>**REQ-7-28.** `deactivate` sets `deactivated` to `true`.
+
+### 7.11 Extensions
+
+<a id="req-7-29"></a>**REQ-7-29.** `extensions` is an object. Each member name is an extension name, and each value is defined by that extension. An extension name MUST be an absolute URI.
+
+<a id="req-7-30"></a>**REQ-7-30.** `critical` is a non-empty list of distinct extension names. Only a `create` or a `setPolicy` MAY contain `critical`. Each name in `critical` MUST be a member of the `extensions` of the operation's `policy`. The configuration of a critical extension is held only in `policy.extensions`.
+
+<a id="req-7-31"></a>**REQ-7-31.** An extension affects whether an operation is valid only while its name is in the state's `critical`.
+
+<a id="req-7-32"></a>**REQ-7-32.** An operation adds each name in its `critical` to the state's `critical`, if it is not already there. A name in the state's `critical` remains there for every later operation of the log.
+
+<a id="req-7-33"></a>**REQ-7-33.** An extension MAY add requirements to operations. An extension MUST NOT remove or weaken a requirement of this specification.
+
+<a id="req-7-34"></a>**REQ-7-34.** A verifier MUST ignore every extension whose name is not in the state's `critical`, whether or not it implements that extension. Ignored extensions remain part of the operation hash and the secured document. The contents of an extension value are defined by the extension, not by REQ-5-3.
+
+<a id="req-7-35"></a>**REQ-7-35.** An extension defines how its configuration changes. A change to an extension's configuration requires the approvals that this specification requires for the operation that makes it.
+
+## 8. Verification
+
+<a id="req-8-1"></a>**REQ-8-1.** A verifier MUST verify the log of a DID by the following steps, and report one of three results. An operation is **unsupported** if the state's `critical` before it, or the operation's `critical`, names an extension that the verifier does not implement, or if its `type`, or the `cryptosuite` of one of its proofs, has a value that the verifier does not implement. The verifier processes operations in order and stops at the first operation that is unsupported or that fails a step. Within one operation, the unsupported conditions are checked before the steps. It reports **unsupported** or **invalid** for that operation, or **valid** if no operation stops it. A verifier MUST NOT treat an unsupported log as valid.
+
+1. The log is a non-empty array of operations.
+2. The first operation is a `create` whose `did` equals the DID.
+3. Each later operation's `prev` equals the operation hash of the operation before it.
+4. No operation follows a state in which `deactivated` is `true`.
+5. For each operation in order:
+   1. The operation conforms to Sections 5 and 7.
+   2. Every proof is valid (REQ-5-14) and comes from a permitted key (REQ-7-5).
+   3. The approvals meet the rule in REQ-7-6, evaluated against the state before the operation.
+   4. Apply the operation to the state, and check that the result conforms to Section 6.
+
+<a id="req-8-2"></a>**REQ-8-2.** Verification of a log depends only on that log. It does not depend on other logs or on the time of verification.
+
+## 9. DID document
+
+<a id="req-9-1"></a>**REQ-9-1.** The DID document of an identity is derived from its state after the last operation of its log.
+
+<a id="req-9-2"></a>**REQ-9-2.** If the state is not deactivated, the DID document MUST contain exactly:
+
+| Member | Value |
+|---|---|
+| `@context` | `["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"]` |
+| `id` | the DID |
+| `verificationMethod` | for each key at index n of `keys`: `{"id": "<did>#key-<n>", "type": "Multikey", "controller": "<did>", "publicKeyMultibase": "<key>"}` |
+| `authentication`, `assertionMethod`, `capabilityInvocation` | the `id` of every verification method |
+| `service` | the services, each with its `id` prefixed by the DID; an empty list if there are none |
+| `alsoKnownAs` | the `alsoKnownAs` list, if it is not empty |
+
+<a id="req-9-3"></a>**REQ-9-3.** If the state is deactivated, the DID document MUST contain exactly `@context` and `id`.
+
+<a id="req-9-4"></a>**REQ-9-4.** DID document metadata MUST include `versionId`, the version of the log, and `anchor`, the anchor of the log. If the state is deactivated, DID document metadata MUST include `"deactivated": true`.
+
+<a id="req-9-5"></a>**REQ-9-5.** Resolving a DID URL with the parameter `versionId=<version>` yields the DID document derived from the state after the operation whose operation hash is `<version>`. Only the log up to and including that operation needs to verify.
+
+## 10. Registrar
+
+### 10.1 Resources
+
+<a id="req-10-1"></a>**REQ-10-1.** The registrar for a domain MUST serve these resources over HTTPS at `https://<domain>/.well-known/guardian/<segment>`, where `<segment>` is the path segment of the identity (REQ-4-5):
+
+| Method and path | Response |
+|---|---|
+| `GET .../<segment>/log` | the log, as a JSON array in log order |
+| `GET .../<segment>` | the DID document |
+| `POST .../<segment>/operations` | accepts one operation as the request body |
+
+<a id="req-10-2"></a>**REQ-10-2.** A `GET` request MUST NOT change any state.
+
+<a id="req-10-3"></a>**REQ-10-3.** A registrar MUST NOT serve two logs for one DID where neither is a prefix of the other.
+
+<a id="req-10-4"></a>**REQ-10-4.** A registrar MUST respond to a rejected operation with HTTP status 400 and a JSON object with an `error` member that describes the reason.
+
+### 10.2 Accepting operations
+
+<a id="req-10-5"></a>**REQ-10-5.** A registrar MUST accept an operation only if all of these hold:
+
+1. Its `prev` equals the version of the log, or it is a `create` for a path segment that has no log.
+2. The log, with the operation appended, is valid (Section 8). An unsupported result is a rejection.
+3. Every check in REQ-10-7 that applies to the operation holds.
+
+<a id="req-10-6"></a>**REQ-10-6.** An entry has standing for an identity if the current log of the entry's `did` verifies and, in that log:
+
+1. the anchor equals the entry's `anchor`;
+2. the state is not deactivated;
+3. the state's `keys` equal the entry's `keys`;
+4. `consent` is an `acceptWard` whose `ward` names the identity's DID and anchor;
+5. the state's `wards` contains that record.
+
+<a id="req-10-7"></a>**REQ-10-7.** Before accepting an operation, a registrar MUST fetch the current log of each other identity that the operation involves, and check:
+
+| Case | Check |
+|---|---|
+| an operation adds or replaces an entry | the new entry has standing |
+| a guardian or successor approves an operation | its entry has standing, except for item 3 when the operation is an `updateGuardian` for that guardian or successor |
+| an `updateGuardian` | the new `keys` equal the `keys` in the current state of `guardian` |
+| a `removeGuardian` with `evidence` | in the log of `guardian`, the anchor equals the entry's `anchor`; `evidence` is a `deactivate`, or a `releaseWard` whose `ward` is this identity, and it follows the entry's `consent`; and the entry does not have standing because of item 2 or item 5 of REQ-10-6 |
+| a `removeGuardian` that promotes the successor (REQ-6-10) | the successor's entry has standing |
+| an `acceptWard` | if the ward's DID has a log, the `ward` record names its anchor |
+
+<a id="req-10-8"></a>**REQ-10-8.** A registrar MUST accept at most one operation for each value of `prev`.
+
+<a id="req-10-9"></a>**REQ-10-9.** For a `create`, the registrar MUST also require that the DID's domain is its domain and that the name is unused (REQ-10-12). It MUST add the `attestation`, using a key of its root identity and the current version of the root identity's log, before it applies REQ-10-5.
+
+<a id="req-10-10"></a>**REQ-10-10.** A registrar MUST create its root identity before it accepts any other `create`.
+
+<a id="req-10-11"></a>**REQ-10-11.** A registrar MUST NOT remove or alter an accepted operation. A registrar MUST continue to serve the log of a deactivated identity.
+
+<a id="req-10-12"></a>**REQ-10-12.** A name, once used, MUST NOT be used for another identity.
+
+### 10.3 Held keys
+
+<a id="req-10-13"></a>**REQ-10-13.** A registrar that holds a private key for an identity MUST create a proof with that key only in response to a request authenticated as that identity.
+
+<a id="req-10-14"></a>**REQ-10-14.** Apart from the `attestation`, one request MUST NOT cause a registrar to create proofs for more than one identity.
+
+## 11. Resolution
+
+<a id="req-11-1"></a>**REQ-11-1.** To resolve a DID, a resolver MUST:
+
+1. fetch the log from the registrar of the DID's domain;
+2. verify the log (Section 8);
+3. verify the `attestation` of its `create`, unless the DID is a root identity (REQ-11-2);
+4. derive the DID document (Section 9).
+
+<a id="req-11-2"></a>**REQ-11-2.** A resolver that does not implement the `cryptosuite` of an `attestation` MUST report the attestation as unsupported. Otherwise, an `attestation` is valid if the log of the root identity of the DID's domain contains the operation named by `versionId`, that log up to and including that operation verifies, the state after that operation is not deactivated and has a key at index `<n>`, and the signature verifies with that key.
+
+<a id="req-11-3"></a>**REQ-11-3.** A resolver SHOULD record the anchor and the version of each log it fetches.
+
+<a id="req-11-4"></a>**REQ-11-4.** If a later fetch of a log yields a different anchor, the resolver MUST report that the DID refers to a different identity. If it yields a log that does not contain the recorded version, the resolver MUST report that the log was rolled back or forked.
+
+<a id="req-11-5"></a>**REQ-11-5.** For each entry in `guardians` and `successor`, a resolver MAY fetch the log of the entry's `did` and report the first result in this table whose condition holds:
+
+| Result | Condition |
+|---|---|
+| unavailable | the log cannot be fetched or does not verify |
+| different identity | the log's anchor differs from the entry's `anchor` |
+| deactivated | the state is deactivated |
+| withdrawn | `consent` is not an `acceptWard` that names this identity's DID and anchor, or `wards` does not contain that record |
+| keys out of date | the state's `keys` differ from the entry's `keys` |
+| mutual | none of the above |
+
+<a id="req-11-6"></a>**REQ-11-6.** For each record in `wards`, a resolver MAY fetch the log of the record's `did` and report the first result whose condition holds: unavailable, if the log cannot be fetched or does not verify; different identity, if its anchor differs from the record's `anchor`; guardian, if its `guardians` has an entry for this identity; successor, if its `successor` is an entry for this identity; otherwise, not related.
+
+<a id="req-11-7"></a>**REQ-11-7.** A resolver MUST NOT present a guardianship as mutual unless REQ-11-5 reports mutual or keys out of date.
+
+<a id="req-11-8"></a>**REQ-11-8.** A resolver MAY verify a log that another party presents. A presented log is current only as of its version.
+
+## 12. Security considerations
+
+This section is non-normative.
+
+**Order of operations.** Every proof is verifiable from its log, but the registrar decides the order in which operations are accepted. A verifier relies on the registrar for that order, as with did:web and did:plc.
+
+**Checks at acceptance.** The checks in REQ-10-7 compare an operation with other logs at the time of acceptance. A verifier does not repeat them. A resolver can compare current logs (REQ-11-5), but cannot tell what another log contained at the time of acceptance. Removal with `evidence` depends on these checks; it also requires one current key, so a registrar alone cannot use it.
+
+**Joining and leaving.** A guardian records `acceptWard` before the ward adds it, because REQ-10-7 requires the consent to exist. A guardian that leaves SHOULD remove itself from the ward before it records `releaseWard`. A guardian that records `releaseWard` first, or that deactivates, loses standing, so a registrar rejects its approvals for that ward (REQ-10-7), and the ward can remove it with `evidence`. Evidence counts only if it follows the guardian's current consent, so a `releaseWard` from an earlier period of guardianship cannot be reused.
+
+**Guardian keys.** A ward's entry holds a copy of the guardian's keys. When a guardian replaces its keys, it updates each of its entries with `updateGuardian`; its `wards` lists them. Until then, a registrar rejects approvals made with the old keys (REQ-10-7). A successor's entry is updated with `updateGuardian` or `setPolicy`. A resolver reports entries whose keys are out of date (REQ-11-5).
+
+**Stolen guardian key.** A party that holds a guardian's current key can act as that guardian in every ward until each ward removes the entry or the guardian replaces its keys.
+
+**Lost guardian key.** A guardian that loses its key recovers its identity through its guardians. Each ward then updates the entry with one current key and one other guardian (REQ-7-6). A ward whose only guardian lost its key cannot update the entry; its successor, if any, can replace that guardian.
+
+**Sole guardian.** A sole guardian that leaves SHOULD first approve the addition of a replacement, then remove itself. A sole guardian that dies or withdraws without a replacement cannot be replaced by the ward's keys alone, because the ward cannot add a guardian, name a successor or change `orphan` without its guardians. The ward can then only remove the guardian with `evidence`, which applies `orphan`. A successor refreshes its entry with `updateGuardian`.
+
+**Mutual guardians.** If two identities are each other's only guardian, one stolen key gives control of both: the holder replaces the keys of one identity, then uses it as guardian to replace the keys of the other. Give each identity at least one guardian outside such a pair.
+
+**Stolen key.** A party that holds a stolen key can act as the identity until the guardians replace the key. Those operations remain in the log.
+
+**Unilateral settings.** `recovery: "any"` lets one guardian replace the keys. `removal: "any"` lets one guardian remove another; with two guardians, either can remove the other. `deactivation.by: "self"` or `"either"` lets anyone who holds a key end the identity. Choose these settings deliberately.
+
+**Two guardians.** With two guardians and `removal` other than `"any"`, neither guardian can remove the other. Use three or more guardians, or set `removal: "any"`.
+
+**Orphaning.** Every way to remove the last guardian requires one current key. Under the default `orphan: "deactivate"`, the identity is then deactivated, and deactivation is permanent. To lower the risk, use guardians on more than one domain, or name a successor.
+
+**Unavailable guardians.** A registrar cannot check the standing of a guardian whose log cannot be fetched, so it cannot accept that guardian's approvals or changes to its entry, or a removal with `evidence`. If no guardian can approve, operations that need guardians cannot be accepted. A successor can act only when there is one guardian.
+
+**Successor.** A successor and one current key can replace a sole guardian, and the successor then becomes the guardian. Name only a successor you trust with that power.
+
+**One-sided records.** Any identity can record `acceptWard` for any ward. A guardianship is mutual only when REQ-11-5 reports it.
+
+**Unsupported operations.** A registrar, or a party that presents a log, can append an operation with an unknown `type` or `cryptosuite`. A verifier then reports the log as unsupported. This has the same effect as withholding the log, and resolvers detect it by the recorded version (REQ-11-4).
+
+**Forks.** Any party that holds the keys can sign two different operations with the same `prev`. Any party can also remove an unneeded proof from an operation, which produces a different operation hash. A registrar accepts only one operation for each `prev` (REQ-10-8). Resolvers detect a fork by the recorded version (REQ-11-4).
+
+**Anchor.** The anchor does not cover the initial `guardians` and `successor`. Two `create` operations that differ only in those members have the same anchor; a registrar accepts one of them.
+
+**Extensions.** A verifier that does not implement a critical extension reports the log as unsupported, never valid. An extension that is not listed in `critical` has no effect on validity for any verifier, so an extension that changes who may approve an operation must be made critical. Only `create` and `setPolicy` can make an extension critical, so adding one requires the same approvals as a policy change. A critical extension cannot be removed from a log, so every later verifier must implement it.
+
+**Hostile registrar.** A registrar cannot forge proofs. It can refuse operations, serve an outdated or forged log to a resolver that has not seen the identity before, or skip the checks in REQ-10-7. Resolvers detect a replaced, rolled-back or forked log by its anchor and recorded version (REQ-11-4). A registrar that serves a forged log for a guardian on its domain can mislead a ward that adds that guardian; the ward detects this if it knows the guardian's anchor. A registrar that skips the checks in REQ-10-7 lets a party with one current key remove guardians with false `evidence`, and lets retired or withdrawn guardian keys approve operations.
+
+**Root identity.** The root identity's key attests every `create` on its domain. A party with that key, or with an old root key, can attest a forged `create` for an unused name. Recorded anchors protect identities that a resolver has seen before.
+
+**Domain transfer.** A new owner of a domain controls its registrar. The new owner cannot produce logs that match recorded anchors.
+
+**Registrar-held keys.** A registrar that holds an identity's key can create proofs as that identity. REQ-10-13 and REQ-10-14 limit when it may do so, but no other party can check that limit.
+
+**Checking a registrar.** Registrar requirements fall into three groups:
+
+| Group | Who can check | Requirements |
+|---|---|---|
+| Provable from logs | anyone, by fetching and verifying logs | REQ-10-5 (items 1 and 2), REQ-10-11, REQ-10-12 |
+| Testable | an operator, against a test deployment | REQ-10-1, REQ-10-2, REQ-10-4, REQ-10-8, REQ-10-9, REQ-10-10 |
+| Trusted | no other party | REQ-10-3, REQ-10-7, REQ-10-13, REQ-10-14 |
+
+## 13. Privacy considerations
+
+This section is non-normative.
+
+Logs are public and permanent. Every key, guardian relationship, ward, policy, service and alias that an identity has ever had is visible to anyone. A guardian's `wards` lists every identity it guards. Do not put personal data in names, services or `alsoKnownAs`.
+
+## Appendix A. Examples
+
+This appendix is non-normative. Hashes, keys and signatures are shortened with `…`, and proofs are abbreviated to their `verificationMethod`.
+
+Bob agrees to guard Alice. Alice's client computes the anchor of her `create`, which does not depend on her guardians (REQ-5-7). Bob records `acceptWard` in his log:
+
+```json
 {
-  "type": "custodial_create",
+  "type": "acceptWard",
+  "ward": {"did": "did:guardian:acme.com:alice", "anchor": "zQmAliceAnchor…"},
+  "prev": "zQmBob1…",
+  "proof": [{"verificationMethod": "did:key:zDnaeBob…#zDnaeBob…", "…": "…"}]
+}
+```
+
+Bob's `acceptWard` has operation hash `zQmBobAccept…`. Alice's `create` names Bob as a guardian:
+
+```json
+{
+  "type": "create",
   "did": "did:guardian:acme.com:alice",
-  "name": "alice",
-  "operationalKeys": ["zDnae..."],
-  "services": {},
-  "outgoing": [],
-  "creator": "did:guardian:acme.com",
-  "incoming": [],
+  "keys": ["zDnaeAlice…"],
+  "guardians": [
+    {
+      "did": "did:guardian:acme.com:bob",
+      "anchor": "zQmBobAnchor…",
+      "keys": ["zDnaeBob…"],
+      "consent": "zQmBobAccept…"
+    }
+  ],
+  "successor": null,
+  "policy": {},
+  "services": [],
+  "alsoKnownAs": [],
   "prev": null,
   "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:key:zDnae...#zDnae...", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." },
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:acme.com#key-0", "proofPurpose": "assertionMethod", "created": "...", "proofValue": "..." }
-  ]
+    {"verificationMethod": "did:key:zDnaeAlice…#zDnaeAlice…", "…": "…"},
+    {"verificationMethod": "did:key:zDnaeBob…#zDnaeBob…", "…": "…"}
+  ],
+  "attestation": {"verificationMethod": "did:guardian:acme.com?versionId=zQmRoot…#key-0", "…": "…"}
 }
 ```
 
-Fields: `type` (literal); `did`; `name` (`null` for the bare-domain identity, [§2.1](#21-the-bare-domain-identity)); `operationalKeys` (Multikey strings, [REQ-6-4](#req-6-4)); `services` (a map, [below](#services-shape)); `outgoing` (always `[]` at genesis -- nothing to remove yet, present for shape uniformity with [`custodial_rotate`](#72-update) rather than a field only some operations carry); `creator`; `incoming`; `policy` (optional); `alsoKnownAs` (optional, [REQ-6-13](#req-6-13)); `incomingAnchors` (optional, [REQ-7.1-11](#req-7.1-11)); `prev` (always `null`); `proof`.
+Bob replaces the key in his log, then updates his entry in Alice's log. In this example, `zDnaeBob…` sorts before `zDnaeBobNew…`; real keys sort by their full encoded values (REQ-5-10):
 
-<a id="services-shape"></a>**`services`** is a map from an arbitrary caller-chosen key to `{"type": string, "endpoint": string}`. Deriving a resolved document's own `service` array (`id`: `<did>#<key>`; `type`: carried through unchanged; `serviceEndpoint`: `endpoint`'s value, renamed to match [W3C DID Core](https://www.w3.org/TR/did-core/#services)'s own field name for it) is the one place this operation-level shape and the presented document's shape diverge, and only in naming -- the map key becomes the fragment, and `endpoint` becomes `serviceEndpoint`, never a structural change beyond that. This method does not constrain `type` or `endpoint`'s own values beyond their being strings -- interpreting either is entirely up to whatever consumes the resolved document.
-
-- <a id="req-7.1-1"></a>**REQ-7.1-1**: `incoming` *MAY* name one or more guardians directly at genesis (relaxed from always-`[]`, [Changelog](#changelog)) -- each named DID *MUST* co-sign genesis, as one of the proofs in `proof`. A verifier *MUST* reject a genesis naming an incoming guardian with no corresponding, valid proof. Establishing a guardian later instead, via `guardian_add` ([§7.2](#72-update)), remains available and is unaffected by this -- genesis establishing one directly is an additional option, not a replacement for it.
-- <a id="req-7.1-9"></a>**REQ-7.1-9**: A registrar *MUST* reject a genesis naming the identity's DID in `incoming` -- same reasoning as [REQ-7.2-11](#req-7.2-11): a ward is never its own guardian, at genesis or afterward.
-- <a id="req-7.1-11"></a>**REQ-7.1-11** (WS-5.11): genesis *MAY* carry an optional `incomingAnchors: Record<Did, string>`, mapping any subset of `incoming`'s own DIDs to that guardian's anchor ([REQ-6-3](#req-6-3)) -- the same pinning convenience [REQ-12-4](#req-12-4) offers `guardian_add`, extended to cover genesis establishing one or more guardians directly ([REQ-7.1-1](#req-7.1-1)). Not required, covers no signature requirement of its own beyond whatever already-required proof covers the rest of genesis, and a key named here that doesn't appear in `incoming` at all is simply ignored, never an error.
-- <a id="req-7.1-2"></a>**REQ-7.1-2**: `prev` *MUST* be `null`.
-- <a id="req-7.1-3"></a>**REQ-7.1-3**: `did`/`operationalKeys`/`services` *MUST* be present. `name` *MUST* equal exactly the name component of `did` (`null` for the bare-domain identity, [§2.1](#21-the-bare-domain-identity)) -- it is not an independently-trusted field (WS-5.9): a verifier *MUST* derive the expected name from `did` itself ([REQ-7.1-10](#req-7.1-10) already binds `did` to this accepting registrar's own domain) and reject a genesis where `name` states anything else, rather than trusting `name` on its own say-so.
-- <a id="req-7.1-10"></a>**REQ-7.1-10**: `did` *MUST* equal the full DID this genesis would resolve to under the accepting registrar's own domain (`did:guardian:<domain>[:<name>]`). A registrar *MUST* reject a genesis whose `did` names a different domain, a different name, or is otherwise malformed -- without this, a public genesis accepted at one registrar could be resubmitted verbatim at a different registrar under the same free name, since nothing in the signed content bound it to where it was actually meant to live.
-- <a id="req-7.1-4"></a>**REQ-7.1-4**: `creator` *MUST* be present -- the DID of whichever party initiated this registration. It carries no signature requirement and makes no guardianship or consent claim. A registrar accepting a self-service signup with no other initiating party *MUST* set `creator` to its own bare-domain identity.
-- <a id="req-7.1-5"></a>**REQ-7.1-5**: `proof` *MUST* include an attestation from the accepting registrar's own key (`verificationMethod` naming the registrar's own DID), one more independent proof in the same set as every other signer's. The registrar DID this attestation is checked against is never read from the proof's own `verificationMethod` as an independently-trusted value -- it *MUST* be `did:guardian:<domain-of-did>`, the bare-domain identity structurally derived from `did`'s own domain component (the same value [REQ-7.1-10](#req-7.1-10) already binds `did` to), computed by the verifier itself and only then resolved to a key. A verifier *MUST* reject a genesis operation carrying no registrar attestation at all, and *MUST* check a present one against that derived DID's resolved key -- **except** when `did` names that same bare-domain registrar DID (the root identity attesting its own genesis -- see [§2.1](#21-the-bare-domain-identity) for its fuller lifecycle): there is no other party on that deployment to vouch for the one identity it bootstraps on its own, so its own proof of possession ([REQ-7.1-8](#req-7.1-8)), already required and already checked, stands in for the attestation. (Tightened from `MAY`/checked-only-if-present in an earlier version's [Changelog](#changelog) -- [REQ-12-1](#req-12-1)'s L1 anchoring depends on every genesis actually carrying one.)
-- <a id="req-7.1-6"></a>**REQ-7.1-6**: A name's own validity ([REQ-2-1](#req-2-1)) and availability within the accepting registrar's own namespace *MUST* both hold for the operation to be accepted.
-- <a id="req-7.1-7"></a>**REQ-7.1-7**: `policy` *MAY* be present -- a full or partial `GuardianPolicy` ([§5](#5-guardianpolicy)) the creator proposes for this ward from genesis, carrying no signature requirement of its own (same standing as `creator`, REQ-7.1-4: a fact about how this ward was set up, not a guardian-tier consent claim). Any field left unset *MUST* resolve to this document's own stated default ([§5](#5-guardianpolicy), [REQ-5-10](#req-5-10)) -- never a registrar's own configured creation-time default, which an earlier version of this requirement allowed and which [REQ-5-10](#req-5-10) now rules out generally, not just here. A registrar's own creation UI is free to *pre-fill* a proposed, explicit value in `policy` for the creator to review before signing (that value then becomes part of the signed content, not a silent default), but it cannot supply one that the log itself never states.
-- <a id="req-7.1-8"></a>**REQ-7.1-8**: `proof` *MUST* include, for every entry in `operationalKeys`, a self-contained proof of possession: a proof whose `verificationMethod` is `did:key:<key>#<key>` for that exact key (no DID resolution needed -- the key being proved is embedded in the verification method itself), checked against that same key directly. A verifier *MUST* reject a genesis operation missing a valid proof of possession for any declared operational key -- specifically, for *that* key, not merely some valid-looking proof elsewhere in the set (an operational key the DID Document presents is never trusted merely because some other party vouches for it). Control ([§12.1](#121-the-three-authorities)) is otherwise whatever the registrar's naming attestation asserts it to be, with nothing self-certifying behind it; this closes that gap at the one point where the control chain begins.
-
-### 7.2 Update
-
-**`custodial_rotate`** -- replaces `operationalKeys`/`services` wholesale.
-
-```json {linenos=false}
+```json
 {
-  "type": "custodial_rotate",
-  "operationalKeys": ["zDnbe..."],
-  "services": {},
-  "prev": "zQm...",
+  "type": "updateGuardian",
+  "guardian": "did:guardian:acme.com:bob",
+  "keys": ["zDnaeBobNew…"],
+  "prev": "zQmAliceCreate…",
   "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:key:zDnbe...#zDnbe...", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." },
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:acme.com:alice#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." }
+    {"verificationMethod": "did:key:zDnaeBob…#zDnaeBob…", "…": "…"},
+    {"verificationMethod": "did:key:zDnaeBobNew…#zDnaeBobNew…", "…": "…"}
   ]
 }
 ```
 
-Fields: `type`; `operationalKeys` (the new set, wholesale -- not a diff against the old one); `services` (likewise wholesale, [§7.1](#71-create)'s shape); `alsoKnownAs` (optional, [REQ-6-13](#req-6-13) -- unlike `operationalKeys`/`services`, absent means "leave it as it was," not "clear it"); `prev`; `proof` (one proof of possession per new key, [REQ-7.2-12](#req-7.2-12), plus the authorizing signature, [REQ-7.2-1](#req-7.2-1): the ward's own current key shown here, or enough guardians' instead when guardian-initiated).
+Required guardian approvals under the default policy:
 
-- <a id="req-7.2-1"></a>**REQ-7.2-1**: *MUST* be signed by either (a) any single current operational key, or (b) enough current guardians to meet `recovery_threshold`.
-- <a id="req-7.2-2"></a>**REQ-7.2-2**: *MUST NOT* modify the guardian tier or `GuardianPolicy`.
-- <a id="req-7.2-12"></a>**REQ-7.2-12**: `proof` *MUST* include, for every entry in `operationalKeys` (the new keys being installed), a self-contained proof of possession -- the same `did:key:<key>#<key>` shape and the same checked-against-that-exact-key requirement as genesis ([REQ-7.1-8](#req-7.1-8)), applied every time a key is installed, not just at genesis. Required whether the rotation is authorized by (a) or (b) above -- either way a new key is being added to the document, and REQ-7.2-1's signer requirement authorizes the change, not the new key's possession of itself.
+| Guardians (N) | `recovery` | `membership` | `removal` | `deactivation` (guardian part) |
+|---|---|---|---|---|
+| 1 | 1 | 1 | not possible | 1 |
+| 2 | 2 | 2 | not possible | 2 |
+| 3 | 2 | 2 | 2 | 2 |
+| 5 | 3 | 3 | 3 | 3 |
 
-**`guardian_add`** -- adds exactly one new guardian, named in `incoming`.
-
-```json {linenos=false}
-{
-  "type": "guardian_add",
-  "incoming": "did:guardian:example.org:board-c",
-  "anchor": "zQm...",
-  "prev": "zQm...",
-  "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-c#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." },
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-b#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." }
-  ]
-}
-```
-
-Fields: `type`; `incoming` (the single DID being added); `anchor` (optional, [REQ-12-4](#req-12-4)); `prev`; `proof` (`incoming`'s own consent, plus enough current guardians to meet `addition_threshold` -- or, at zero current guardians, the ward's own current key instead, [REQ-7.2-5](#req-7.2-5)).
-
-- <a id="req-7.2-3"></a>**REQ-7.2-3**: A registrar *MUST* reject this operation if `incoming` is already a current guardian.
-- <a id="req-7.2-4"></a>**REQ-7.2-4**: When the current guardian set is non-empty, required signers are `incoming`'s own key, and enough current guardians to meet `addition_threshold`.
-- <a id="req-7.2-5"></a>**REQ-7.2-5**: When the current guardian set is empty, required signers are `incoming`'s own key, and the ward's own current operational key.
-- <a id="req-7.2-11"></a>**REQ-7.2-11**: A registrar *MUST* reject this operation if `incoming` names the ward's own identity. A ward is never its own guardian: aside from the confusion of a ward appearing in both roles at once, an effectively-guarded ward's own guardian set must never be allowed to look non-empty when no independent, external oversight actually exists -- which matters directly for `on_orphan` (REQ-5-8), since that safety net is only ever consulted once the guardian set becomes empty.
-
-**`guardian_remove`** -- removes exactly one current guardian, named in `outgoing`.
-
-```json {linenos=false}
-{
-  "type": "guardian_remove",
-  "outgoing": "did:guardian:example.org:board-a",
-  "prev": "zQm...",
-  "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-a#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." }
-  ]
-}
-```
-
-Fields: `type`; `outgoing` (the single DID being removed); `prev`; `proof` (`outgoing`'s own signature alone for a voluntary removal, [REQ-7.2-7a](#req-7.2-7a) -- shown here; enough of the *other* current guardians to meet `removal_threshold` instead for a forced one, [REQ-7.2-7b](#req-7.2-7b)).
-
-- <a id="req-7.2-6"></a>**REQ-7.2-6**: A registrar *MUST* reject this operation if `outgoing` is not a current guardian, or is the only current guardian (use `guardian_relinquish` to end the relationship entirely).
-- <a id="req-7.2-7a"></a>**REQ-7.2-7a**: A voluntary `guardian_remove` -- `outgoing` removing itself -- requires only `outgoing`'s own key, alone.
-- <a id="req-7.2-7b"></a>**REQ-7.2-7b**: A forced `guardian_remove` -- removing a different current guardian -- requires enough of the *other* current guardians (current minus `outgoing`) to meet `removal_threshold`, *evaluated against the full current guardian set's own size*, the same `N` `guardian_relinquish` (REQ-7.2-8) uses, never against the smaller remaining-guardians pool those signers are drawn from. At exactly two current guardians this makes REQ-7.2-7b unreachable: `majority` of `N=2` is `2`, and only one other guardian is ever available to draw from. This is deliberate, not an oversight -- see [§10](#10-security-considerations). A registrar *MUST* additionally reject either path (REQ-7.2-7a or REQ-7.2-7b) if it would bring the guardian count below `min_guardian_count` ([REQ-5-7](#req-5-7)).
-
-**`guardian_relinquish`** -- sets the guardian set to `[]`.
-
-```json {linenos=false}
-{
-  "type": "guardian_relinquish",
-  "prev": "zQm...",
-  "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-a#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." },
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-b#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." }
-  ]
-}
-```
-
-Fields: `type`; `prev`; `proof` (enough current guardians to meet `removal_threshold`, [REQ-7.2-8](#req-7.2-8) -- no `outgoing`/`incoming` field at all, unlike `guardian_add`/`guardian_remove`, since this always empties the whole set rather than naming one DID).
-
-- <a id="req-7.2-8"></a>**REQ-7.2-8**: Required signers: enough current guardians to meet `removal_threshold`, evaluated against the full current guardian set.
-
-**`policy_update`** -- replaces `GuardianPolicy` wholesale.
-
-```json {linenos=false}
-{
-  "type": "policy_update",
-  "policy": { "version": 1, "recovery_threshold": "majority", "tombstone_threshold": "any", "removal_threshold": "majority", "addition_threshold": "majority", "policy_threshold": "unanimous", "min_guardian_count": 2, "on_orphan": "sovereign" },
-  "prev": "zQm...",
-  "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-a#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." },
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:example.org:board-b#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." }
-  ]
-}
-```
-
-Fields: `type`; `policy` (a *complete* `GuardianPolicy`, [§5](#5-guardianpolicy) -- wholesale replacement, not a partial merge the way genesis's own optional `policy` is); `prev`; `proof` (enough current guardians to meet the *currently-effective* `policy_threshold`, [REQ-7.2-9](#req-7.2-9) -- the threshold this operation is replacing, not the one it proposes).
-
-- <a id="req-7.2-9"></a>**REQ-7.2-9**: Required signers: enough current guardians to meet the currently-effective `policy_threshold`.
-- <a id="req-7.2-10"></a>**REQ-7.2-10**: A registrar *MUST* reject a `policy_update` submitted while the current guardian set is empty.
-
-### 7.3 Deactivate
-
-`custodial_tombstone` -- deactivates the identity (`deactivated = true`; [§6](#6-the-operation-log)).
-
-```json {linenos=false}
-{
-  "type": "custodial_tombstone",
-  "prev": "zQm...",
-  "proof": [
-    { "type": "DataIntegrityProof", "cryptosuite": "ecdsa-jcs-2019", "verificationMethod": "did:guardian:acme.com:alice#key-0", "proofPurpose": "capabilityInvocation", "created": "...", "proofValue": "..." }
-  ]
-}
-```
-
-Fields: `type`; `prev`; `proof` (enough of the ward's own key(s) and/or the current guardian set, together, to meet `tombstone_threshold`, [REQ-7.3-1](#req-7.3-1) -- the ward's own current key shown here, satisfying the default `any`).
-
-- <a id="req-7.3-1"></a>**REQ-7.3-1**: Required signers: enough of (the ward's own operational key(s) ∪ the current guardian set) to meet `tombstone_threshold`.
-
-## 8. Resolution
-
-- <a id="req-8-1"></a>**REQ-8-1**: Resolution *MUST* split the identifier on its first colon after the method name: no colon denotes the bare-domain identity; one colon denotes `domain` then `name`.
-- <a id="req-8-2"></a>**REQ-8-2**: A conformant registrar *MUST* expose, for each identity it hosts, reachable under `https://<domain>/.well-known/guardian/<name>` (or `.../guardian/_` for the bare-domain identity): `GET` the current derived document; `GET` the full operation log; `GET` a freshly-signed log-head statement ([§12.2](#122-verification-levels)'s L2 -- a method requirement as of this revision, not merely a registrar-profile convenience); `POST` one new signed operation. `POST` at a `<name>` this registrar does not yet host *MUST* accept a valid `custodial_create` establishing it -- one meeting every requirement [§7.1](#71-create) states, not merely "self-signed" in some narrower sense (it may also carry co-signing guardians, [REQ-7.1-1](#req-7.1-1)) -- genesis submission is part of the method ([Changelog](#changelog)), not a registrar-specific convenience, and `.../operations` is the one surface every conformant registrar already exposes for every other operation type. The registrar checks name validity and availability ([REQ-7.1-6](#req-7.1-6)) and the submitted proof of possession ([REQ-7.1-8](#req-7.1-8)), then adds its attestation ([REQ-7.1-5](#req-7.1-5)) before storing it -- the client can never produce that attestation on its own. A registrar *MAY* expose additional surface; this specification does not constrain it.
-
-## 9. Deactivation and data permanence
-
-- <a id="req-9-1"></a>**REQ-9-1**: The full operation log *MUST* remain permanently, publicly resolvable after `custodial_tombstone`.
-- <a id="req-9-2"></a>**REQ-9-2**: A name, once registered, *MUST NOT* be returned to the available pool within its registrar after deactivation.
-
-**Ephemeral identities are a normal use, not a special case.** An agent fleet that comes and goes needs no human-chosen name per member -- a generated one (`agent-7f3k2q`, say) satisfies REQ-2-1 like any other. Retiring one is an ordinary `custodial_tombstone`, same as any ward's. REQ-9-1/9-2 still apply in full, by design, not as an oversight: a guardian's historical keys have to stay verifiable for as long as anything it signed might ever need checking, which means nothing it guarded can be deleted out from under that either. A registrar hosting many short-lived identities takes on storage that only grows, never shrinks, as the cost of this.
-
-**Domain migration is out of scope for this version.** An identifier's `domain` ([§2](#2-identifier-syntax)) is fixed for the life of that identifier -- this document defines no operation that changes it, and none is planned for v0.x. Moving to a different domain means creating a new identifier there and linking the two, not relocating the existing one:
-
-1. Register the new identifier on the new domain.
-2. Add `alsoKnownAs` entries on each pointing at the other, so a resolver following either arrives at both.
-3. Re-establish guardianship on the new identifier -- either directly at genesis ([REQ-7.1-1](#req-7.1-1)) if the same operator holds both keys, or afterward via `guardian_add`; nothing carries over automatically from the old one.
-4. Tombstone the old identifier, or leave it resolvable as a historical record -- either is conformant; REQ-9-1 requires its log stay resolvable regardless.
-
-This keeps the anchor and pinning model ([§12.3](#123-pinning)) useful even without migration: an attacker who takes over an abandoned or expired domain gets a blank slate under that domain, never control of an identifier a verifier had already pinned elsewhere.
-
-## 10. Security considerations
-
-- **Trust model**: a registrar is trusted to order operations and resist denial-of-service against its own log; it is not trusted to forge history, since the log is self-certifying and independently replayable by anyone.
-- **Key generation and storage** are a registrar-implementation concern, out of this method's own scope -- this document specifies rotation (REQ-6-2 through REQ-6-11, REQ-7.2-1) and revocation (`guardian_remove`, `guardian_relinquish`, `custodial_tombstone`) precisely; how a given registrar generates or custodies the private key material behind an `operationalKeys`/guardian entry is that registrar's own concern, same as it is for `did:web`.
-- **Guardian-claim forgery**: a ward cannot be made to falsely name an unwilling party as its guardian ([REQ-7.2-4](#req-7.2-4)/[REQ-7.2-5](#req-7.2-5) structurally require that party's own signature). A party cannot name itself guardian of an already-guarded ward it doesn't already co-guard ([REQ-7.2-4](#req-7.2-4) requires cooperation from enough of the existing guardian set).
-- **Registrar-claim forgery**: a forged registrar attestation proof ([REQ-7.1-5](#req-7.1-5)) fails verification the same way any other forged signature does.
-- **Guardian key compromise**: a single compromised guardian key cannot act alone in a guardian set held to anything stricter than `any`. `guardian_remove`'s voluntary path ([REQ-7.2-7a](#req-7.2-7a)) only ever lets a compromised key remove that same guardian, never another. A compromised sole guardian, or a guardian set deliberately held at `any`, is an unmitigated risk. Tombstoning a guardian whose own key is known to be compromised cuts it off from every ward it guards immediately (REQ-4-4), which helps every one of those wards, not just the compromised identity itself.
-- **Two-guardian deadlock, deliberate**: at exactly two current guardians, forced `guardian_remove` is unreachable (REQ-7.2-7b) -- there is no safe way to let one of two guardians unilaterally eject the other without that same power being available to a bad actor in the same seat. A ward wanting protection against one uncooperative or compromised co-guardian needs a third guardian. A two-guardian ward that loses trust in one party has exactly two remedies, both requiring a party *other than* the distrusted one to act first: `guardian_relinquish` (dissolving entirely, needing both guardians' signatures -- the distrusted one included, so this only works if it's still cooperating), or adding a third guardian first (an ordinary `guardian_add`, REQ-7.2-4, needing the incoming guardian's own signature plus enough of the *current* two to meet `addition_threshold` -- itself unreachable without the distrusted guardian's cooperation unless `addition_threshold` is looser than `unanimous`) and only then forcing the distrusted guardian's removal (REQ-7.2-7b, now reachable at three). The trusted guardian voluntarily stepping down instead (`guardian_remove`, REQ-7.2-7a) achieves the opposite of the intent: it leaves the *distrusted* guardian as the ward's sole remaining guardian, not removed from it.
-- **Circular and mutual guardianship**: nothing prevents a ward from guarding its own guardian, directly or in a longer cycle. Mechanically this is safe in the ordinary case (each party's own current key is independently verifiable per REQ-4-2), but it concentrates two risks worth naming: a circular pair that is secretly operated by a single party is Sybil risk (see below) wearing a specific shape, and a circular pair's own operational availability is more likely to be correlated (shared operator, shared infrastructure) than two genuinely independent parties', which matters because recovery of one from the other only works if the other's own key is actually reachable when needed.
-- **Nullification window**: for 72 hours after any operation ([REQ-6-9](#req-6-9)), a verifier *SHOULD* treat current state as provisional, not final -- a guardian-signed recovery rotation can still rewrite history back to that point. A compromised guardian set that also meets `recovery_threshold` can itself abuse nullification within the same window; this is the same class of risk as any other guardian-key compromise (above), not a new one.
-- **Name squatting**: names are permanent within a registrar ([§9](#9-deactivation-and-data-permanence)); claiming a name ahead of its likely owner is possible, bounded to one registrar's own namespace.
-- **Sybil creation**: nothing in this method limits how many identities one party may register, within a registrar or across many -- circular/mutual guardianship (above) is one concrete shape this risk can take.
-- **Log forgery and stale snapshots**: a self-certifying log is not the same thing as a self-authenticating name. Anyone can construct an internally-consistent log, with valid signatures all the way through, for a `domain[:name]` they do not control -- [REQ-12-1](#req-12-1)'s L0 proves only that a log agrees with itself. A stale but genuinely-once-accepted log is a narrower version of the same problem: still fully self-consistent, just missing whatever has happened since. [§12](#12-authority-and-trust-model) exists because of exactly this gap.
-- **Domain takeover or expiry**: whoever controls a domain at the DNS/TLS level controls that registrar's key material going forward, and can mint a new, equally self-consistent log under identifiers that domain previously hosted. A freshly-fetched registrar key from a domain already taken over is the attacker's key, not the original operator's -- this is exactly why [REQ-12-2](#req-12-2) requires a pinned anchor or registrar key to have come from a *prior* L3 resolution or an out-of-band channel, never from whatever the domain serves right now.
-- **Equivocation**: nothing in this document stops a dishonest or compromised registrar from serving two different verifiers two different, both internally-valid, forked continuations of the same log. Detecting this needs an independent witness or mirror comparing what a registrar served different parties at the same time -- out of scope for this version of the method; a registrar that wants to foreclose it today can publish its log somewhere independently auditable, but nothing here requires that yet. Signed log heads ([§12.2](#122-verification-levels)'s L2) make equivocation *provable* once two parties happen to compare notes, even without a standing witness: two registrar-signed statements naming the same `seq` but different `headCid` values is direct evidence of a split, since both carry the registrar's signature. A ward's guardians are natural watchers for this in practice -- another registrar hosting one, or simply having a stake in catching it -- without this document requiring anything of them beyond what [§7.2](#72-update) already does. A future version may formalize witnesses named in `GuardianPolicy`, along the lines of `did:webvh`'s witness threshold -- that addition would bump `GuardianPolicy.version`, and [REQ-5-9](#req-5-9) ensures a verifier that doesn't yet understand witnesses refuses to evaluate anything a witness-requiring policy governs, rather than silently evaluating it as if witnesses didn't exist.
-- **Operational-key swap via an unverified document claim (Fix 1)**: a DID Document's own presented key ([§3](#3-did-document)) is never trusted merely because some other signer vouches for it -- [REQ-7.1-8](#req-7.1-8)/[REQ-7.2-12](#req-7.2-12) require a self-contained proof of possession checked against *that specific key*, not merely a valid-looking proof present somewhere in the operation's proof set. A verifier that instead resolved "is there any valid proof attached" independently of "is there a valid proof *for this exact key*" would accept a victim's key in the document while an attacker, holding only a different key, supplied the possession proof for that different key instead.
-- **Genesis replay across registrars (Fix 2)**: without [REQ-7.1-10](#req-7.1-10)'s domain binding, a genesis operation carries no cryptographic link to where it was actually meant to live -- a public genesis accepted at one registrar, resubmitted verbatim at a different registrar under the same free name, would be indistinguishable from a legitimate registration there, since every signature on it (the ward's, any co-signing guardians', even the original registrar's own attestation) still verifies; only the attesting registrar's *identity* would differ from the one now accepting it, and nothing before this fix checked that against anything.
-- **Signature malleability and anchor determinism (Fix 3)**: for whichever nonce a given ECDSA-over-P-256 signing attempt actually used, the resulting signature has an equally valid "high-S" counterpart (`s` vs `n − s`) -- accepting both would mean that one attempt's signature has two bit-distinct valid forms. [REQ-6-4](#req-6-4) requires a signer produce only the low-S form and a verifier reject the other outright, going beyond the underlying cryptosuite's own `SHOULD`. This closes the narrower, per-attempt malleability, but not the broader fact that the same (message, key) pair can validly produce many different signatures across repeated signing attempts (ECDSA's own random nonce varies every time) -- which is the real reason a cid is computed with every proof stripped rather than relying on signatures being unique at all: independent of which, or how many, of the many equally-valid signatures over that content happen to be attached, and computable by a client *before* submission, offline, with none of them needed yet.
-- **Custody disclosure is a declaration, not a proof**: whether an identity's operational key is held by its registrar or by the ward itself ([§12.4](#124-key-custody-modes)) is useful context for a verifier but is not independently checkable from the log alone -- a party can claim self-custody and still, in fact, have handed the key to someone else entirely. The one case with any independent weight is a key a ward supplied itself through a registrar's take-custody-style flow, visible as a `custodial_rotate` the ward's prior key signed, to a new key the registrar never generated.
-- **Cross-registrar guardian history**: nothing in this method requires a guardian to be hosted on the same registrar as the ward it guards -- [REQ-4-2](#req-4-2)'s point-in-time key resolution for a guardian signature means replaying *that guardian's own* log, wherever it actually lives, not anything the ward's own registrar stores or caches. A guardian hosted elsewhere transitively imports whatever that other registrar's own trust properties happen to be -- its own honesty, availability, and susceptibility to equivocation ([§10](#10-security-considerations), above) all become inputs to the ward's own security the moment that guardian's signature matters, with no way for the ward's registrar, or a verifier resolving the ward alone, to see or control any of it. A restriction here (same-registrar guardians only, or some additional cross-registrar bar) was considered and deliberately not added: it would foreclose the ordinary case of two independent parties -- a person and a business they trust, say, each with their own registrar -- guarding each other exactly as this method otherwise intends, in exchange for a guarantee the restriction wouldn't even fully deliver (a same-registrar guardian is still a *different* identity with its own independent key history on that same registrar, not a stronger one). A verifier that cares about this exposure can always resolve the guardian's own identity to whatever verification level ([§12.2](#122-verification-levels)) it would apply to any other identity it depends on.
-- **Name non-reuse relies on the registrar, not the log**: [REQ-9-2](#req-9-2) (a deactivated name never returns to the available pool) is a registrar obligation -- nothing in a tombstoned identity's own log structurally prevents a dishonest or compromised registrar from violating it and handing that name to someone else anyway, since the new identity's own genesis would be an ordinary, internally-valid log with no cryptographic trace of the name's prior occupant. A verifier with no independent memory of the name's history has no way to detect this from a fresh resolution alone. The only real protection is exactly [REQ-12-2](#req-12-2)'s first-contact rule applied here too: a verifier who already pinned the original identity's anchor notices immediately that a later resolution of the same `domain:name` returns a genesis with a different anchor entirely -- the same mechanism that protects against domain takeover (above) covers this for free, since both are "this name now resolves to a log I never saw before."
-
-## 11. Privacy considerations
-
-- **Data permanence**: the full log stays public forever ([§9](#9-deactivation-and-data-permanence)) -- nothing in `services` should be anything that shouldn't be permanently, publicly linkable to this identity.
-- **Key reuse (correlation risk)**: reusing an operational or guardian key across more than one identity can leak a relationship between them that was never meant to be public.
-- **Cross-registrar identity unification**: two `did:guardian` identities under different registrars are never provably the same party by this method alone, including when they share a name -- this method makes no correlation between them possible by default.
-
-## 12. Authority and trust model
-
-Everything normative about operations and signatures is already stated in [§4](#4-key-material) through [§9](#9-deactivation-and-data-permanence); nothing in this section changes any of it. What this section adds is a name for three things a verifier is implicitly relying on every time it checks those rules, plus a scale for how much of that reliance a given check actually earned.
-
-### 12.1 The three authorities
-
-- **Control** -- who may change or sign as the identity. Held by the identity's key material and `GuardianPolicy`, enforced entirely by the signatures a log entry carries. Fully self-certifying: anyone holding the log can check this offline, no registrar involved in the check -- including at the root, where [REQ-7.1-8](#req-7.1-8) requires genesis to carry proof that the declared keys are held, not merely asserted by the registrar's naming attestation.
-- **Naming** -- which log a given `domain[:name]` string actually refers to. Held by whichever registrar accepted genesis, attested by its signature there ([REQ-7.1-5](#req-7.1-5)). Checkable offline only against a registrar key or anchor a verifier already has reason to trust ([§12.3](#123-pinning)) -- a first encounter has no such reason yet.
-- **Currency** -- whether a given state is the latest, and what time it is for the 72-hour windows ([REQ-6-9](#req-6-9)). Held by whichever registrar orders operations for that identity. How fresh a verifier can trust this to be depends entirely on how the timestamp backing it reached them ([§12.2](#122-verification-levels)) -- there is no way to check "is this current" purely from a log already in hand, only "was this once current as of some point."
-
-### 12.2 Verification levels
-
-- <a id="req-12-1"></a>**REQ-12-1**: A verifier *MUST* report, alongside any claim about an identity's state, which level below it actually reached -- never an unqualified "valid" with no level attached.
-  - **L0 (Consistent)**: the log in hand replays, and every signature and threshold it claims checks out ([REQ-6-6](#req-6-6), [REQ-6-7](#req-6-7)). Proves only that this log agrees with itself -- not that it is the log this identifier currently resolves to, nor that nothing has superseded it since. *MUST NOT* be treated as proof of identity by itself.
-  - **L1 (Anchored)**: L0, plus either this log's genesis anchor ([REQ-6-3](#req-6-3)) matches a value the verifier already had reason to trust, or its registrar attestation ([REQ-7.1-5](#req-7.1-5)) verifies against a registrar key the verifier already had reason to trust. Proves this is the same identity seen before, or the one a known registrar actually created -- not that it is current.
-  - **L2 (Fresh as of t)**: L1, plus a registrar-signed statement naming the log head and a timestamp `t`, where the verifier's maximum acceptable age exceeds *now − t*. Every conformant registrar exposes this as a log-head statement at `.../log-head` (REQ-8-2) -- `{did, anchor, headCid, seq, logHash, timestamp, registrar, proof}`, where `proof` is one [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proof ([REQ-6-7](#req-6-7)), `ecdsa-jcs-2019`, signed with the same key [REQ-7.1-5](#req-7.1-5)'s genesis attestation uses -- never an array; a log-head statement has exactly one signer by construction. `headCid`/`anchor` deliberately exclude every proof, same as any other cid ([REQ-6-4](#req-6-4)) -- `logHash` ([Fix 5](#changelog)) separately commits to the full log, proofs included, specifically so a registrar can't later re-sign an identical entry under a different proof `created` timestamp with no way for a verifier to detect it. `seq` is the log's full stored length, counting every entry a nullification ([REQ-6-8](#req-6-8)) ever superseded -- not just the currently-active chain's own length -- so it only ever grows, letting a verifier catch a registrar replaying a stale statement regardless of how many forks the log has accumulated.
-  - **L3 (Live)**: L0, resolved directly from the registrar, right now, over a channel the verifier trusts (e.g. TLS to the expected domain) -- "live" names how the log was obtained, not a reason to skip checking that what came back actually replays.
-- <a id="req-12-2"></a>**REQ-12-2** (first contact): A verifier's first resolution of a given identifier *MUST* reach L3. An anchor or registrar key *MAY* be pinned from that resolution, or from another channel the verifier already trusts out-of-band, for later L1 checks -- *MUST NOT* be pinned from a resolution that only reached L1 or below, which would just be trusting the claim it was supposed to check.
-- <a id="req-12-3"></a>**REQ-12-3**: Authentication, authorization, or any decision sensitive to revocation *MUST* use L3, or L2 with a maximum acceptable age measured in minutes -- never L1 alone. A log that is internally consistent and correctly anchored can still be missing a revocation that has already happened live; L1 says nothing about how long ago it was last true.
-
-### 12.3 Pinning
-
-- <a id="req-12-4"></a>**REQ-12-4**: A `guardian_add` operation *SHOULD* record the incoming guardian's anchor ([REQ-6-3](#req-6-3)) in its optional `anchor` field, alongside its DID, so that a later L1 check of that specific guardian relationship has something to pin against without a separate L3 resolution first. Not required -- a verifier *MUST* still accept a `guardian_add` carrying no `anchor` at all, and the anchor is covered by the same signatures as every other field (there's no separate signature requirement for it). A registrar that already has independent knowledge of the incoming guardian's anchor (e.g. because it also hosts that guardian itself) *MAY* populate this field automatically rather than requiring the caller to supply it by hand; a relying party receiving a `guardian_add` with no anchor at all gets the same pinning effect by storing `{did, anchor}` itself the first time it resolves that guardian at L3 -- the same pattern as storing a `sub` from an OIDC provider. A verifier that is independently able to check a *present* `anchor` against that guardian's own actual anchor (because it has, through some other channel, already resolved that guardian at L1 or above) *MUST* reject the `guardian_add` if they disagree, rather than silently accepting the mismatch -- a wrong anchor here is exactly the kind of claim [REQ-12-2](#req-12-2)'s first-contact rule exists to catch. (This check depends on the verifier separately resolving the named guardian at all; nothing about `guardian_add`'s own acceptance requires it, and this reference implementation does not currently perform it end-to-end -- noted as an open item, not a requirement this document walks back.) Genesis's own `incoming` ([REQ-7.1-1](#req-7.1-1)) has the equivalent anchor slot, `incomingAnchors` ([REQ-7.1-11](#req-7.1-11)), for the same reason and on the same optional footing.
-
-### 12.4 Key custody modes
-
-Non-normative. Nothing in this section is a requirement; [§4](#4-key-material) and [§7](#7-operations) already say everything required about keys and signatures regardless of who holds them. This section exists because [§10](#10-security-considerations)'s custody-disclosure point and [§12.1](#121-the-three-authorities)'s "control" authority both read differently depending on which of two shapes actually holds for a given identity's operational key:
-
-- **Registrar-held**: the registrar generated the operational key and still holds it, encrypted, able to sign ordinary rotations and other self-contained operations on the ward's behalf via whatever login mechanism it offers. Nothing about the method distinguishes this from any other client holding a key -- the registrar is simply acting as the key-holding client here, not exercising some separate, method-level authority. Convenient, and the only shape self-service registration produces. The registrar's trustworthiness is now part of what "control" rests on for that identity, not just naming and currency.
-- **Self-held**: the ward holds its operational key, and the registrar holds nothing usable -- not even an encrypted copy. A registrar offering a transition from the first shape to the second, after registration, is documented as "take-custody" in the registrar API specification; nothing here requires a registrar to offer it, and this document defines no new operation type for it, since the result is an ordinary guardian- or ward-signed `custodial_rotate` either way.
-
-Neither shape changes which signatures [§7](#7-operations) requires -- it only changes who is capable of producing the ward's half of them, and who a verifier is trusting when a registrar's convenience endpoint produces a signature "on a ward's behalf."
-
-## Method and registrar profile
-
-Everything normative in [§1](#1-target-system) through [§12](#12-authority-and-trust-model) is **the method**: what any conformant registrar must do, and what any verifier can check against any conformant registrar, regardless of implementation. Concretely:
-
-- a hash-chained log whose genesis is self-signed by its declared keys (REQ-7.1-8) and attested by the accepting registrar (REQ-7.1-5)
-- operations signed according to the signer formulas [§7](#7-operations) states, governed by `GuardianPolicy`
-- registrar ordering, plus signed, timestamped heads (REQ-12-1's L2)
-- `GET` the document, the log, and the log head; `POST` one signed operation, including genesis (REQ-8-2)
-- optional guardianship -- a ward works the same with or without one, at genesis or afterward
-
-Everything else -- sessions, `/register` with server-side key generation, OIDC login, email-based account recovery, the asynchronous propose/sign-individual flow, `take-custody`, the Managed Identity API, A2A/MCP integration, cross-registrar relay -- is **registrar profile**: this reference registrar's operational choices, fully documented in the [registrar API specification](/docs/registrar/), which labels itself exactly that way. A different registrar is free to offer none of it, some other convenience surface entirely, or the bare method-required endpoints alone, and remain just as conformant. Where this document describes registrar-profile behavior at all (the examples above, [§12.4](#124-key-custody-modes)'s custody modes), it's a non-normative pointer to help a reader place it, never a requirement.
-
-## Conformance
-
-A conformant implementation must replay and verify every fixture in [`interop_tests/`](https://github.com/did-method-guardian/did-method-guardian/tree/main/interop_tests) the same way this reference implementation does -- accepting every fixture whose own `expect` is `accept`, rejecting every one whose `expect` is `reject`, each for the specific reason its own `note` states. [`requirements.json`](https://guardianspec.org/requirements.json) lists every requirement in this document by id, cross-referenced with the reference implementation's own tests that name it. [JSON Schemas](https://guardianspec.org/schemas/operation.schema.json) for `GuardianPolicy` and every operation type are also available, matching this document's own field-by-field requirements.
-
-**Accept:**
-
-- `genesis_two_guardians.json`: Genesis establishing a two-member guardian set, both consenting.
-- `guardian_relinquish_unanimous.json`: Both guardians sign off on full relinquishment -- meets the default majority (here, unanimous since n=2) threshold.
-- `rotate_then_guardian_add_remove.json`: Genesis, an ordinary operational-key rotation, then board-a steps down (voluntary `guardian_remove`) and board-c joins (`guardian_add`, needing board-b's own continuing approval) -- board-b itself is never removed or re-added.
-- `tombstone_any_single_key.json`: Guardian-less ward tombstoning itself via its own operational key (resolved under its own DID), meeting the default `any` tombstone_threshold.
-- `guardian_add_zero_to_one.json`: A standalone `guardian_add` establishing the first guardian for a previously guardian-less ward, with both the incoming guardian's and the ward's signatures present (REQ-7.2-5).
-- `root_genesis_self_attestation.json`: the bare-domain root identity's own genesis, attested only by its own proof of possession -- no separate registrar attestation exists or is needed (Fix 7, REQ-7.1-5).
-
-**Reject:**
-
-- `forged_guardian_claim.json`: 'board-a' is named as initial guardian but the proof was produced by a different, impostor key -- must fail verification against board-a's own resolved public key.
-- `relinquish_quorum_not_met.json`: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.
-- `unilateral_coguardian_removal.json`: troy attempts to remove jane from a two-guardian set, but the proof claimed as jane's was produced with troy's own key, not jane's.
-- `genesis_missing_registrar_attestation.json`: a genesis operation with no registrar attestation at all -- must fail REQ-7.1-5, not just a forged one.
-- `genesis_unsigned_incoming_guardian.json`: 'board-a' is named as an incoming guardian directly at genesis but carries no proof at all -- must fail REQ-7.1-1.
-- `guardian_add_missing_ward_signature.json`: a standalone `guardian_add` naming 'board-a' is signed by board-a alone -- the ward's required signature (REQ-7.2-5) is missing.
-- `genesis_pop_key_mismatch.json`: `operationalKeys` names a key the submitter does not hold -- the only proof of possession attached is for a different key the submitter actually controls (Fix 1, REQ-7.1-8).
-- `policy_version_gate_blocks_governed_op.json`: an otherwise fully and validly signed `guardian_add`, governed by a `GuardianPolicy` whose `version` exceeds what this verifier understands -- must be refused regardless (Fix 6, REQ-5-9).
+A sole guardian is removed with `evidence` and one current key, or by the successor and one current key. `orphan` then applies.
 
 ## Changelog
 
-- **v0.2.0** (2026-10-24, current): domain-first identifier grammar (`did:guardian:<domain>:<name>`, matching `did:web`'s own convention); the bare-domain identity as a first-class concept ([§2.1](#21-the-bare-domain-identity)); the nullification window ([REQ-6-9](#req-6-9)); every requirement given a stable `REQ-<section>-<n>` id.
-  - **2026-11-22**: five more spec-design gaps from the same external review, resolved per the user's own earlier decisions on each: added [REQ-5-10](#req-5-10) -- an unset `GuardianPolicy` field resolves to this document's own stated default only, never a registrar-configured one, and simplified [REQ-7.1-5](#req-7.1-5)/genesis-policy's wording ([REQ-7.1-7](#req-7.1-7)) to match (an earlier version of REQ-7.1-7 allowed a registrar-configured override at genesis specifically, contradicting the general rule this entry now states). Tightened [REQ-7.1-5](#req-7.1-5): the registrar DID a genesis attestation is checked against is now explicitly `did:guardian:<domain-of-did>`, structurally derived from `did` the same way [REQ-7.1-10](#req-7.1-10) already does, never read from the proof's own `verificationMethod` as an independently-trusted value (already true of the reference implementation's `expectedRegistrarDid`; this entry states it normatively). Added a root-identity lifecycle paragraph to [§2.1](#21-the-bare-domain-identity) covering bootstrap (self-attestation, Fix 7), rotation (an ordinary `custodial_rotate`, point-in-time key resolution per [REQ-4-2](#req-4-2) applying to a registrar-as-signer same as a guardian-as-signer), and tombstone (blocks *new* genesis acceptance under that domain without retroactively un-attesting anything already signed). Clarified [REQ-5-1](#req-5-1): `N`/`M` count distinct signer DIDs, never raw signatures or keys -- a ward presenting more than one operational key still counts as exactly one member of a union-based eligible set (already true of `quorum.ts`'s own `Set`-based counting; stated normatively). Added two [§10](#10-security-considerations) entries: cross-registrar guardian history (a guardian hosted elsewhere transitively imports that registrar's own trust properties, deliberately left unrestricted rather than add a same-registrar-only rule with its own edge cases) and name non-reuse ([REQ-9-2](#req-9-2)) relying on registrar honesty, detectable the same way domain takeover already is -- a pinned anchor from first contact ([REQ-12-2](#req-12-2)) catching a later resolution under the same `domain:name` returning a different log entirely.
-  - **2026-11-22**: [REQ-8-2](#req-8-2) now requires a log-head endpoint from every conformant registrar -- [L2](#122-verification-levels) freshness moves from a reference-registrar convenience to a method requirement, closing the gap where [Method and registrar profile](#method-and-registrar-profile)'s own summary already described it that way while the requirement's actual text hadn't caught up. The log-head statement's `sig` field (raw base64url, the one signature in this method that didn't follow [REQ-6-7](#req-6-7)'s own format) is replaced with `proof`, a single [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proof -- never an array, since a log-head statement has exactly one signer by construction. Also stated explicitly what the implementation already did: `seq` counts every entry the full stored log holds, superseded branches included, not just the currently-active chain, so it only ever grows. The reference library's `signLogHeadStatement`/`verifyLogHeadStatement` now use the same `createProof`/`verifyAgainstKeys` machinery every other signature in this method already uses, instead of the separate `signPayload`/`verifyPayload` raw scheme.
+- **v0.2.0** (2026-10-24, current):
+  - **2026-11-22**: REQ-5-2 now constrains a number's value, not how it is written. A standard JSON parser cannot distinguish `1` from `1.0` after parsing, so the earlier "written without a fraction or an exponent" wording checked nothing a conforming implementation could actually observe.
+  - **2026-11-22**: Replaced the specification again, after six rounds of independent clean-room verification against the previous replacement found a critical hole (guardians could not be required to approve anything when zero were eligible, REQ-6-9) and about 25 smaller gaps. Guardian and successor relationships now use snapshot entries (`{did, anchor, keys, consent}`); every proof is a `did:key` reference, so verifying a log depends only on that log (REQ-8-2) with no cross-log recursion or cycle rule. The operation hash now covers the complete operation including its proofs; only the anchor excludes `proof`, `attestation`, `guardians` and `successor`. The registrar's attestation moved to its own `attestation` member on `create`, verified during resolution (Section 11), not during verification (Section 8). Added `acceptWard`/`releaseWard` (a guardian records its own consent, and the relationship is checked for mutuality at resolution, never affecting validity), `updateGuardian` (refreshing a stale entry's keys), and orphan handling (`policy.orphan`: deactivate, independent or successor). Added an extension mechanism (Section 7.11) with a three-way valid/invalid/unsupported verification result. Removed the word "sovereign" throughout; the orphan value is `"independent"`.
+  - **2026-11-22**: Replaced the specification. Operations are `create`, `update`, `addGuardian`, `removeGuardian`, `setPolicy`, and `deactivate`. Verification depends only on logs, never on time. Removed nullification, the recovery window, receipts, the signed log head, and verification levels L0 through L3. Removed `creator`, `on_orphan`, and `guardian_transfer`. Entries dated before this one describe the removed design.
   - **2026-11-21**: a coordinated security rewrite, following an external review of this version's own proof-of-possession/registrar-attestation work above. Seven fixes, implemented together since several touch the same signed content:
     - **Fix 1 -- operational-key proof-of-possession, tightened ([REQ-7.1-8](#req-7.1-8)/[REQ-7.2-12](#req-7.2-12))**: the prior `verificationMethods` map (a separate, DID-indexed list of presented keys) is removed entirely -- a DID Document's `verificationMethod` entries are now derived directly from `operationalKeys` by position, with nothing else to desync from it. More importantly, proof-of-possession verification now checks that each operational key has its OWN matching proof, rather than merely that some valid proof exists somewhere in the set -- closing a real gap where an attacker could present a victim's key in the document while actually controlling, and only ever proving possession of, a different key.
     - **Fix 2 -- genesis bound to its own domain ([REQ-7.1-10](#req-7.1-10))**: genesis now carries a required `did` field, and a registrar must reject any genesis whose `did` doesn't match the identity it would actually create under that registrar's own domain. Closes cross-registrar genesis replay: before this, a public genesis accepted at one registrar carried no cryptographic link to where it was meant to live, and could be resubmitted verbatim at a different registrar under the same free name.

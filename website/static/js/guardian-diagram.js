@@ -101,25 +101,25 @@
     finish(450 * signers.length + 2200);
   }
 
+  // A simplified illustration of handing guardianship to a new party --
+  // the real method has no single "transfer" operation; it's an
+  // addGuardian (needing the incoming guardian's own signature too, not
+  // shown here) followed by a removeGuardian for the outgoing one.
   function transfer() {
     var act = active();
     var outgoing = act[0]; // oldest active guardian
-    // REQ-7.2-4: guardian_add's own required signers are the incoming
-    // guardian's OWN key, plus enough CURRENT guardians to meet
-    // addition_threshold -- the continuing guardians signing alone
-    // (what this used to show) is one signer short.
     var continuing = act.filter(function (g) { return g !== outgoing; }).map(function (g) { return g.name; });
     sign(continuing, function () {
       var incoming = makeGuardian(state.nextPoolIndex++);
       state.guardians.push(incoming);
       spread();
       render();
-      push("guardian_add", "sig: " + continuing.concat([incoming.name]).join(", "));
+      push("addGuardian", "sig: " + continuing.concat([incoming.name]).join(", "));
       at(1300, function () {
         outgoing.active = false;
         spread();
         render();
-        push("guardian_remove", "sig: " + outgoing.name);
+        push("removeGuardian", "sig: " + outgoing.name);
       });
     });
     finish(450 * signers.length + 400 + 3000);
@@ -134,10 +134,10 @@
     state.signed[g.name] = true;
     render();
     at(500, function () {
-      // REQ-4-3: a guardian action must always be signed by the
-      // guardian's OWN distinct key, never the ward's -- this is what
-      // actually gets rejected here, regardless of operation type.
-      push("custodial_rotate", "sig: " + g.name + ", as laura", "✕");
+      // A guardian action must always be signed by the guardian's own
+      // distinct key, never the ward's -- this is what actually gets
+      // rejected here, regardless of operation type.
+      push("update", "sig: " + g.name + ", as laura", "✕");
     });
     at(2200, function () {
       state.busy = false;
@@ -254,10 +254,10 @@
       // Operation type strings here match the formal spec's own §7
       // operation names exactly, not the button's own UI label --
       // "Recover" and "Revoke" are both guardian-initiated
-      // custodial_rotate/custodial_tombstone under the hood, same as
-      // the real method defines them.
-      if (action === "recover") run("custodial_rotate", [0, 1]);
-      else if (action === "revoke") run("custodial_tombstone", [0, active().length - 1]);
+      // update/deactivate under the hood, same as the real method
+      // defines them.
+      if (action === "recover") run("update", [0, 1]);
+      else if (action === "revoke") run("deactivate", [0, active().length - 1]);
       else if (action === "transfer") transfer();
       else if (action === "impersonate") impersonate();
     });

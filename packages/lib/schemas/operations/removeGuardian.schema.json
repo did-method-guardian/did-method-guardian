@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/removeGuardian.schema.json",
+  "title": "removeGuardian",
+  "description": "Formal spec §7.7. Removes the entry for `guardian`, then applies REQ-6-10's orphan handling.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "removeGuardian" },
+    "guardian": { "type": "string", "description": "REQ-7-17: the DID of a current guardian." },
+    "evidence": { "type": "string", "description": "REQ-7-17/REQ-7-18: optional. The operation hash of a `deactivate`, or of a `releaseWard` whose `ward` is this identity, in `guardian`'s own log." },
+    "prev": { "type": "string" },
+    "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: one of -- the removed guardian, if N >= 2; guardians per `removal` from the others; one current key, if `evidence` is present; or one current key together with the successor, if N = 1 and `successor` is an entry." },
+    "extensions": { "type": "object", "description": "REQ-5-3: optional." }
+  },
+  "required": ["type", "guardian", "prev", "proof"],
+  "additionalProperties": false
+}

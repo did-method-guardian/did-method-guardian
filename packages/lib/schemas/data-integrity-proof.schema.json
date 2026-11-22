@@ -2,16 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://guardianspec.org/schemas/data-integrity-proof.schema.json",
   "title": "DataIntegrityProof",
-  "description": "Formal spec REQ-6-7. One W3C Data Integrity proof (https://www.w3.org/TR/vc-data-integrity/), ecdsa-jcs-2019 cryptosuite. Every operation carries one or more of these in its own `proof` array -- a proof set, each checked independently against the operation's own unsecured content. `verificationMethod` is either `<did>#key-0` for an ordinary signer (ward, guardian, or registrar), or a self-contained `did:key:<multikey>#<multikey>` for an operational key proving possession of itself (REQ-7.1-8/REQ-7.2-12).",
+  "description": "Formal spec REQ-5-10/REQ-5-11. One W3C Data Integrity proof (https://www.w3.org/TR/vc-data-integrity/), ecdsa-jcs-2019 cryptosuite (REQ-5-12). Every operation carries one or more of these in its own `proof` array, sorted by `verificationMethod` in code-point order (REQ-5-10) -- a proof set, each checked independently against the operation's own unsecured content. `verificationMethod` is always `did:key:<key>#<key>` (REQ-5-14: the signer of a proof is the key named in this field).",
   "type": "object",
   "properties": {
     "type": { "const": "DataIntegrityProof" },
     "cryptosuite": { "const": "ecdsa-jcs-2019" },
-    "verificationMethod": { "type": "string" },
-    "proofPurpose": { "type": "string" },
-    "created": { "type": "string", "description": "ISO 8601, when this specific proof was produced." },
-    "proofValue": { "type": "string", "description": "Multibase base58btc ('z'-prefixed) encoding of the raw signature bytes." }
+    "verificationMethod": { "type": "string", "pattern": "^did:key:", "description": "did:key:<key>#<key>." },
+    "proofPurpose": { "const": "capabilityInvocation" },
+    "proofValue": { "type": "string", "description": "Multibase base58btc ('z'-prefixed) encoding of the raw, low-S signature bytes (REQ-5-13)." }
   },
-  "required": ["type", "cryptosuite", "verificationMethod", "proofPurpose", "created", "proofValue"],
+  "required": ["type", "cryptosuite", "verificationMethod", "proofPurpose", "proofValue"],
   "additionalProperties": false
 }

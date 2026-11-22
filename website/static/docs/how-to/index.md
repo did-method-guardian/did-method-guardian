@@ -37,8 +37,6 @@ Created did:guardian:guardianspec.org:alice
 
 Login secret (shown once -- save it now, there's no recovery path if you lose it):
 <secret>
-
-This identity has no guardian yet -- register a guardian the same way, log in as them, and run "did-guardian guardian adopt did:guardian:guardianspec.org:alice" (this registrar still holds both keys, so that's the one step a bare key can't do). See "did-guardian guardian adopt --help", or https://guardianspec.org/docs/how-to/ for the full walkthrough.
 ```
 
 **Resolve it.** No authentication needed -- this works for anyone, anywhere:
@@ -48,13 +46,13 @@ did-guardian resolve did:guardian:guardianspec.org:alice
 ```
 
 ```text {linenos=false}
-L3 (Live). First resolution of did:guardian:guardianspec.org:alice -- pinned anchor <cid> and registrar key (did:guardian:guardianspec.org).
+First resolution of did:guardian:guardianspec.org:alice -- pinned anchor <anchor>.
 { "...": "an ordinary W3C DID Core document" }
 ```
 
-That pin is the CLI's record that this is the same `alice` it saw before -- a later resolution with a different anchor gets reported loudly, not silently accepted (spec [§12](/docs/did-guardian-spec-v0.2.0/#12-authority-and-trust-model)).
+That pin is the CLI's own record that this is the same `alice` it saw before -- a later resolution with a different anchor gets reported loudly, not silently accepted.
 
-**Add a guardian.** Register a second identity for whoever's becoming the guardian, log in as them, and adopt:
+**Add a guardian.** Register a second identity for whoever's becoming the guardian, log in as them, and adopt -- two steps, each its own identity:
 
 ```text {linenos=false}
 did-guardian register bob --registrar guardianspec.org
@@ -62,9 +60,16 @@ did-guardian login did:guardian:guardianspec.org:bob --login-secret <bob's secre
 did-guardian guardian adopt did:guardian:guardianspec.org:alice
 ```
 
-Adopting a guardian this way is did:guardian's session-based path for establishing a `guardian_add` (the registrar API's `.../adopt`): the caller is the *incoming guardian*, logged in, and the registrar produces both halves of the required signature since it still holds both keys. It's also the one step in this walkthrough a bare `curl` call can't do -- a guardian relationship exists only when that guardian's key actually signs for it, and here that signature comes from an authenticated session, not a key you typed into a request body.
+That prints a pending id. Whoever controls `alice` (here, the same person, for this walkthrough) logs in as `alice` and finishes it:
 
-Every command above has a plain HTTP equivalent too (`POST /register`, `GET /.well-known/guardian/alice`, `POST /guardian-login` + `POST .../adopt`) -- see the [registrar API doc](/docs/registrar/) for the exact requests, or pass `--json` to any `did-guardian` command (or point it through a local HTTP proxy) to see exactly what it sent and got back.
+```text {linenos=false}
+did-guardian login did:guardian:guardianspec.org:alice --login-secret <alice's secret>
+did-guardian guardian confirm-adopt did:guardian:guardianspec.org:alice <pending id>
+```
+
+A guardian relationship exists only once both sides have signed for it -- `bob`'s own consent to take on the role, and `alice`'s own approval of `bob` as its guardian.
+
+Every command above has a plain HTTP equivalent too -- see the [registrar API doc](/docs/registrar/) for the exact requests, or pass `--json` to any `did-guardian` command (or point it through a local HTTP proxy) to see exactly what it sent and got back.
 
 ### Holding a key yourself instead
 
@@ -75,11 +80,11 @@ did-guardian login did:guardian:guardianspec.org:alice --login-secret <alice's s
 did-guardian key take-custody did:guardian:guardianspec.org:alice
 ```
 
-That `take-custody` command ends the registrar's custody of `alice`'s key -- `did-guardian guardian add`/`recover`/`tombstone` then sign and submit directly with keys you hold, no session needed. This still refuses without `--force` here, for a less obvious reason than "no guardian at all": `alice` already has a guardian (`bob`, from the step above), but the registrar still custodies `bob`'s key too, and `bob` alone already satisfies `alice`'s default `recovery_threshold` ("any") -- so this registrar could still rotate `alice`'s key at any time by signing as `bob` instead, even after `alice`'s own key moves to self-custody. The refusal is the CLI surfacing that real fact about the trust model, not a bug; `--force` proceeds once you've actually considered it. (A ward with literally no guardian refuses for the more familiar reason: losing a self-held key with nothing to recover it is unrecoverable by anyone, ever.)
+That `take-custody` command ends the registrar's custody of `alice`'s key for good -- `did-guardian guardian add`/`recover`/`deactivate` then sign and submit directly with keys you hold, no session needed.
 
-For a brand-new identity, `did-guardian create <name> --registrar <domain>` builds a genesis operation with a key you generate yourself and never hand to any registrar, then submits it for real -- genesis submission is part of the method now (formal spec [REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)), not a registrar-specific convenience, so this works against any conformant registrar's `.../operations` endpoint, not just one that happens to support it. `create <name> --domain <domain>` (no `--registrar`) builds the same operation fully offline instead, with no network call at all -- useful for understanding the mechanics or embedding [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, but the result is a draft until something actually accepts it.
+For a brand-new identity, `did-guardian create <name> --registrar <domain>` builds a create operation with a key you generate yourself and never hand to any registrar, then submits it for real. `create <name> --domain <domain>` (no `--registrar`) builds the same operation fully offline instead, with no network call at all -- useful for understanding the mechanics or embedding [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, but the result is a draft until something actually accepts it.
 
-See the CLI's README for the full command list, including `verify` (offline, against a pinned anchor) and `--save-log-head`/`--log-head` (offline freshness, spec §12.2's L2).
+See the CLI's README for the full command list, including `verify` (offline, §8 only) and `operation propose`/`operation sign` (the generic path for an operation needing more approvals than one command can produce).
 
 ## How-to guides
 

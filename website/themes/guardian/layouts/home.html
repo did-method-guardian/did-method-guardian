@@ -7,7 +7,7 @@
   "@context": "https://schema.org",
   "@type": "SoftwareSourceCode",
   "name": "did:guardian",
-  "description": "A distributed identity method built around guardianship: a configurable group of other identities that can recover, revoke, transfer, or act on behalf of an identity, under rules its owner sets in advance.",
+  "description": "A distributed identity method built around guardianship: a configurable group of other identities that can recover, deactivate, or act on behalf of an identity, under rules its owner sets in advance.",
   "codeRepository": "https://github.com/did-method-guardian/did-method-guardian",
   "programmingLanguage": "TypeScript",
   "license": ["https://opensource.org/licenses/MIT", "https://www.apache.org/licenses/LICENSE-2.0"],
@@ -73,7 +73,7 @@
       <div class='feature-field feature-ochre'>
         <i class='ph ph-users-three'></i>
         <h2>Group guardianship</h2>
-        <p>Any identity may be overseen by one or more guardians -- transferable, terminable, governed by configurable consensus thresholds. did:plc, did:web, and DID Core don't build this in; see <a href='/docs/prior-art/'>Prior art</a>.</p>
+        <p>Any identity may be overseen by one or more guardians -- addable, removable, governed by configurable consensus thresholds. did:plc, did:web, and DID Core don't build this in; see <a href='/docs/prior-art/'>Prior art</a>.</p>
       </div>
     </div>
     <div class='paper-frame tilt-2'>
@@ -94,7 +94,7 @@
           <ul>
             <li>proven operation log</li>
             <li>signing scheme</li>
-            <li>recovery-window mechanism</li>
+            <li>key-rotation model</li>
           </ul>
         </div>
         <div>

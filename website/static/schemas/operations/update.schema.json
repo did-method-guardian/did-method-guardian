@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/update.schema.json",
+  "title": "update",
+  "description": "Formal spec §7.4. Replaces `keys`, `services` and `alsoKnownAs` (REQ-7-11).",
+  "type": "object",
+  "properties": {
+    "type": { "const": "update" },
+    "keys": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-11: replaces the state's `keys`." },
+    "services": { "type": "array", "items": { "$ref": "../service.schema.json" }, "description": "REQ-7-11: replaces the state's `services`." },
+    "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-11: replaces the state's `alsoKnownAs`." },
+    "prev": { "type": "string", "description": "REQ-7-4: the operation hash of the preceding operation." },
+    "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: every key in `keys`; and either one current key or guardians per `recovery`." },
+    "extensions": { "type": "object", "description": "REQ-5-3: optional." }
+  },
+  "required": ["type", "keys", "services", "alsoKnownAs", "prev", "proof"],
+  "additionalProperties": false
+}

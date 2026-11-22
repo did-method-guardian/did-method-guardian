@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/deactivate.schema.json",
+  "title": "deactivate",
+  "description": "Formal spec §7.10. Sets `deactivated` to `true` (REQ-7-28). Permanent -- no later operation is accepted (REQ-8-1.4).",
+  "type": "object",
+  "properties": {
+    "type": { "const": "deactivate" },
+    "prev": { "type": "string" },
+    "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: if N = 0, one current key; otherwise as `policy.deactivation.by` specifies -- self, guardians, either, or both." },
+    "extensions": { "type": "object", "description": "REQ-5-3: optional." }
+  },
+  "required": ["type", "prev", "proof"],
+  "additionalProperties": false
+}

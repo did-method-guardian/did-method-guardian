@@ -2,14 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://guardianspec.org/schemas/operation.schema.json",
   "title": "Operation",
-  "description": "Formal spec §6/§7. Any entry's own op field in a did:guardian operation log. guardian_transfer (v0.1, superseded by guardian_add/guardian_remove) is deliberately not included here -- it's kept in the reference implementation only to replay already-accepted historical log entries, never to construct a new one.",
+  "description": "Formal spec §7. One entry in a did:guardian operation log (REQ-7-2's nine types).",
   "oneOf": [
-    { "$ref": "operations/custodial_create.schema.json" },
-    { "$ref": "operations/custodial_rotate.schema.json" },
-    { "$ref": "operations/guardian_add.schema.json" },
-    { "$ref": "operations/guardian_remove.schema.json" },
-    { "$ref": "operations/guardian_relinquish.schema.json" },
-    { "$ref": "operations/policy_update.schema.json" },
-    { "$ref": "operations/custodial_tombstone.schema.json" }
+    { "$ref": "operations/create.schema.json" },
+    { "$ref": "operations/update.schema.json" },
+    { "$ref": "operations/addGuardian.schema.json" },
+    { "$ref": "operations/updateGuardian.schema.json" },
+    { "$ref": "operations/removeGuardian.schema.json" },
+    { "$ref": "operations/setPolicy.schema.json" },
+    { "$ref": "operations/acceptWard.schema.json" },
+    { "$ref": "operations/releaseWard.schema.json" },
+    { "$ref": "operations/deactivate.schema.json" }
   ]
 }

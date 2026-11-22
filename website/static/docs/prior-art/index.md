@@ -16,7 +16,7 @@ description: "How did:guardian relates to did:webvh, did:plc, KERI's delegated A
 }
 </script>
 
-did:guardian's contribution is group guardianship as a first-class part of a DID method: a configurable group of other identities, with changeable membership, that can recover, revoke, transfer, or act on behalf of a ward, verified the same way any other operation in the method's log is. Five other projects cover related ground, each from a different angle. None of them do exactly this; some do something better for a narrower need.
+did:guardian's contribution is group guardianship as a first-class part of a DID method: a configurable group of other identities, with changeable membership, that can recover a lost key, remove itself, or deactivate a ward, verified the same way any other operation in the method's log is. Five other projects cover related ground, each from a different angle. None of them do exactly this; some do something better for a narrower need.
 
 ## did:webvh
 
@@ -24,13 +24,13 @@ did:guardian's contribution is group guardianship as a first-class part of a DID
 
 **Comparable:** witnesses are a multi-party mechanism, closer in shape than most of the others here to did:guardian's group concept.
 
-**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that. did:webvh's identifier is also self-certifying and portable in a way did:guardian's isn't: a did:webvh identifier can move to a new location (its own `#updateDomain` mechanism) without losing its identity, since the identifier's own hash is what anchors trust, not where it currently resolves. A did:guardian identifier is location-bound to the registrar's own domain for the life of the identifier -- domain migration is explicitly out of scope for this version (formal spec [§9](/docs/did-guardian-spec-v0.2.0/#9-deactivation-and-data-permanence)), with "link, don't move" (a new identifier plus mutual `alsoKnownAs`) as the documented alternative.
+**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that. did:webvh's identifier is also self-certifying and portable in a way did:guardian's isn't: a did:webvh identifier can move to a new location (its own `#updateDomain` mechanism) without losing its identity, since the identifier's own hash is what anchors trust, not where it currently resolves. A did:guardian identifier names its domain directly (formal spec [§4](/docs/did-guardian-spec-v0.2.0/#4-identifier)) and stays bound to it for the identifier's own life, with "link, don't move" (a new identifier plus mutual `alsoKnownAs`) as the documented alternative to migration.
 
 ## did:plc
 
-[did:plc](https://github.com/did-method-plc/did-method-plc) (Bluesky/AT Protocol's method) is the closest structural relative here: an append-only, hash-chained operation log, replayed to derive current state, with a two-tier key model (a rotation-key set and an operational key) and a 72-hour nullification window for recovering from a compromised key -- did:guardian's own operation log, replay model, and nullification window are deliberately the same shape.
+[did:plc](https://github.com/did-method-plc/did-method-plc) (Bluesky/AT Protocol's method) is the closest structural relative here: an append-only operation log, replayed to derive current state, with a two-tier key model (a rotation-key set and an operational key) -- did:guardian's own operation log and replay model are the same shape.
 
-**Comparable:** the log/replay/nullification mechanics are close enough that did:guardian is best understood as did:plc's model plus group guardianship, not a wholly separate design.
+**Comparable:** the log/replay mechanics are close enough that did:guardian is best understood as did:plc's model plus group guardianship, not a wholly separate design. did:plc also lets a rotation key undo a recent, unauthorized rotation within a recovery window; did:guardian has no equivalent -- an accepted operation is permanent, and recovering from a compromised key means the guardians rotate forward to a new one, never rolling one back.
 
 **Different:** did:plc's rotation-key tier is a single, ordered list of keys -- whichever one, in order, is willing and able to sign, authorizes recovery. did:guardian's guardian tier is a configurable, unordered M-of-N group instead, where a guardian can itself be a person, a committee, or another identity entirely, not just a second key one party happens to hold -- a deliberate difference from did:plc's own mechanism, not an extension of it. did:plc is also directory-resolved (a single, centrally-operated PLC directory), where did:guardian follows `did:web`'s own domain-scoped resolution instead -- any number of independent registrars, never one shared directory.
 
@@ -54,7 +54,7 @@ Sovrin's Guardianship Task Force published whitepapers (2019, a revised v2 in 20
 
 Ethereum's account abstraction standard lets a smart-contract wallet designate other addresses as guardians, with an M-of-N threshold of their approval able to replace the wallet's controlling key -- logic that lives in the contract, increasingly modularized under ERC-7579.
 
-**Comparable:** the M-of-N guardian-set mechanic is structurally close to a `GuardianPolicy` threshold.
+**Comparable:** the M-of-N guardian-set mechanic is structurally close to did:guardian's own `policy.recovery`/`policy.removal` settings.
 
 **Different:** ERC-4337's guardian logic lives entirely at the smart-contract/application layer, tied to one chain's execution environment, not in did:guardian's own method-level operation log -- a DID layered on top of such a wallet wouldn't inherit guardianship as a property of the DID method itself the way a did:guardian identity does. If the identity in question *is* a crypto wallet, and on-chain enforcement of recovery logic matters more than portability across chains or off-chain use, ERC-4337's own pattern fits that directly.
 

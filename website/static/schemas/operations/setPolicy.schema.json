@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/operations/setPolicy.schema.json",
+  "title": "setPolicy",
+  "description": "Formal spec §7.8. Replaces `policy` and `successor` (REQ-7-21).",
+  "type": "object",
+  "properties": {
+    "type": { "const": "setPolicy" },
+    "policy": { "$ref": "../policy.schema.json", "description": "REQ-7-20: replaces the state's `policy`." },
+    "successor": { "oneOf": [{ "$ref": "../entry.schema.json" }, { "type": "null" }], "description": "REQ-7-20: replaces the state's `successor`." },
+    "prev": { "type": "string" },
+    "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: one current key; guardians per `membership`, if N > 0; and every key in `successor`, if it is an entry that differs from the current `successor`." },
+    "critical": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "REQ-7-30: optional, non-empty, distinct extension names, each a member of `policy.extensions`." },
+    "extensions": { "type": "object", "description": "REQ-5-3: optional." }
+  },
+  "required": ["type", "policy", "successor", "prev", "proof"],
+  "additionalProperties": false
+}
