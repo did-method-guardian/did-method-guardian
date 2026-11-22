@@ -1,0 +1,349 @@
+{
+ "description": "one approval fewer",
+ "did": "did:guardian:acme.com:alice",
+ "log": [
+  {
+   "type": "create",
+   "did": "did:guardian:acme.com:alice",
+   "keys": [
+    "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz"
+   ],
+   "guardians": [],
+   "successor": null,
+   "policy": {
+    "recovery": "all"
+   },
+   "services": [],
+   "alsoKnownAs": [],
+   "prev": null,
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "zQRce7jyJeo197GATjrYpJmdo3oHX6uGh5eyimW9wYDi1JPPoCntmyKWbxqCNJbadN7T1WBfobZ8ruFaRzwQcz3i"
+    }
+   ],
+   "attestation": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+    "proofValue": "z78nPBYM6F8w8x6VWWkAQB9vhBq4iFPbjqTGq4wDDtRt1WuFmHy7qwZJQPsc2z7NWL8BbBZjPeXvWj5jNFU5Qf2A"
+   }
+  },
+  {
+   "type": "addGuardian",
+   "entry": {
+    "did": "did:guardian:acme.com:guard0",
+    "anchor": "zQmW7QPnc1ohJbv8Pq3LHnsaTSSbj421Z2hTKsRfaUqB16r",
+    "keys": [
+     "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi"
+    ],
+    "consent": "zQmcAN2oF9jE2JbFrtpDy7d2xrFVPUxy1iNeWdQ4mFYqYVC"
+   },
+   "prev": "zQmcWRfDEwBpV68KBu9SDrccYo7TiPFWgDPZaVM4dqPG3pN",
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "z32cxEiCpYrfKydW2GYM4m3Jg5bP9F12WxBFhr8MjgvtHdjA4qzN2t63srZviopkvA1ZNgMQfoMdzEmJmXG1xJNjE"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "z54goCxjJ1b7WozYoMWBuD2dHmfqyjPoJMuSF6joR51cMCfD9m66CQ8nK4tV3aDT964igrEHhrRc2uhZiDMWUQNPS"
+    }
+   ]
+  },
+  {
+   "type": "addGuardian",
+   "entry": {
+    "did": "did:guardian:acme.com:guard1",
+    "anchor": "zQmQ9TvHcBFv35xnN34jEs86b6WczQUaKd4M6gdmNTqR5vf",
+    "keys": [
+     "zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8"
+    ],
+    "consent": "zQmXEf9kLSK1NvyQGAEPxSrbKqwyzwxYyCXUq9V774HFCGM"
+   },
+   "prev": "zQmduEkJHRGxucQ6zQEGfxfJn2bKeNdrKPh6HQ1F98YWdu8",
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "zgzacLX7GP6jTPgwQMC1greJG8kv6f6FCAWECABcr42DzumRijbhTGAM4f9ndUH4MVu6ZXMvcgJPbDschzBk4upt"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+     "proofValue": "z22w3UsbFhgXoJX6YcGPXe34rd9MMtynfKbhgb9tcebTbB1BxXGijULW4ff7a1KwH1kjYuZpGkuWuChvLZW75VNFM"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "z67J51PQxUBojopLj6t2YUZSuFrD2KTi2pqfoHb5g51oVDhM2gZ7naNAvwRLvy64UkgNd5RWypStrKK782fUBGWao"
+    }
+   ]
+  },
+  {
+   "type": "addGuardian",
+   "entry": {
+    "did": "did:guardian:acme.com:guard2",
+    "anchor": "zQmU1wydXmjCG6wf2UaACK3k2J1xCXTQP5UvbrGwhecm2jP",
+    "keys": [
+     "zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS"
+    ],
+    "consent": "zQmVtEFayDacjQhwN8LC9WpsGjPFGG4xouWMXs1McJj3mtf"
+   },
+   "prev": "zQmZHxMwcLSVgTiy4LWVDKWoH3vspNga5cRTcsJGtizg8oY",
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS#zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS",
+     "proofValue": "z4yN3iZET8vqB8Xf4iwhSvjjiofATacauRsrZ9giqpSD1oSCd8n9zZK1PiU1pjgZKJpo3kxNdNEBzp6XihcrxhwrR"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "z5WPs7bbwLNpKmjafm9VX2XwdTqeweytrPg4K7139z2czGdqCBBdT4Vfw9VBLcaRwoVP8oC9VCeiEecehq1C5RMU4"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+     "proofValue": "z4DywrUD6HVbUehwF4LasWRRToEFVtZndkCwPveQBBEobsWQ6ywMPPkCed8ze4ZgN5Xuw3td9Kz5q17hzqJhKTJZY"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "z4XHsETGNFz23rht9Sber7hrnDTFUkfAxw7wSyMiyuWd5KNF5bXqEePNS7pwVGMqUy6duqcVSzsWjNi2dUK1QVfEw"
+    }
+   ]
+  },
+  {
+   "type": "update",
+   "keys": [
+    "zDnaeUBPpBnKYsLgJw9SJYFP8aRrQrd11kdsRC572kVPmWKLg"
+   ],
+   "services": [],
+   "alsoKnownAs": [],
+   "prev": "zQmZfP59YP8aos2G3oKHa7q1RRsMsRFodE9BoPDxnBSCqXJ",
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeUBPpBnKYsLgJw9SJYFP8aRrQrd11kdsRC572kVPmWKLg#zDnaeUBPpBnKYsLgJw9SJYFP8aRrQrd11kdsRC572kVPmWKLg",
+     "proofValue": "zrnQek8dHt7G2kBuE31UfC7HQUx1Q6N1xfteUvr7XDndm8Veb6TbCwi5idsjeUKdyugZkaHGT58YEjYZ2jhXKYxn"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+     "proofValue": "z4p3HsWFztY3o2za5DfYbp79mQCniioKVw7yZkiCWeMy3QdTD4mzg7kFx6D2Tn4mP6YF4t7wVnuMtyZ4Be2v7Bcyn"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "z2aNQdFs7DAQ61vxoBBGqqEBFm9DaTUswjHfFytBGnYLBVsBZ2ShG47bqyinQiBaVWXqmUDugCu7gHVkyatsdwDxJ"
+    }
+   ]
+  }
+ ],
+ "resolver": {
+  "did:guardian:acme.com": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com",
+    "keys": [
+     "zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha#zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha",
+      "proofValue": "z6bDMU9GLA6fvUpkKuuXcWkgiVFfDdzcPT6FfHAZSqwAP79MFeViGWAYH7tihxTnSpypKDd4mH91PByN1xyU8m96"
+     }
+    ]
+   }
+  ],
+  "did:guardian:acme.com:guard0": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com:guard0",
+    "keys": [
+     "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+      "proofValue": "z2xuNrLFYyNLhg3utx6yLAmcava8fHqZQT4FxaZn2MKdzE5t86KwcbaxH12qNXeQ881oTqVJ2PAEDtFEish1CETB9"
+     }
+    ],
+    "attestation": {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+     "proofValue": "z5dwKdB5pa7XjMmZ3RzW5AsR1Y9jywwJTryDw9jxLSQA9gSYNLZQ7LiJ3QCYtVnCyJUDfFLoJMmnr88NdQNbyQQVX"
+    }
+   },
+   {
+    "type": "acceptWard",
+    "ward": {
+     "did": "did:guardian:acme.com:alice",
+     "anchor": "zQmNnFBmKdbJMSscT29bT8AWenL2ZjkGhHypng2j64zcEQP"
+    },
+    "prev": "zQmVmKfcFosyeAqgLnP85mM2KS9ox7EJjKP1af7JBmryXK1",
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+      "proofValue": "z2T2XLBSKnJmPv9UJ9MhALq2nrB7LnhTdz81SJRpb1AXtK27JV7NTz7bEkxr2RM7aRnLJZKZPPq7xiv2w7RU6izr9"
+     }
+    ]
+   }
+  ],
+  "did:guardian:acme.com:guard1": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com:guard1",
+    "keys": [
+     "zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+      "proofValue": "zBKhEFEkndE8Mx5U31g3pbHTd7XDvN7yPtxLmXyxFmD63hcmmzzYa59nt2j3MH2pc8LLQqVgdF8fyXRWperAQhGH"
+     }
+    ],
+    "attestation": {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+     "proofValue": "z3wStYDpHKNTjKqtJ5tWcdFJ2WMnCmSYwT5kzW8q8q5gVRe8HBNRhkTmxCn7oo9MVu8LVMCxbrKnbamns5uB5k3fm"
+    }
+   },
+   {
+    "type": "acceptWard",
+    "ward": {
+     "did": "did:guardian:acme.com:alice",
+     "anchor": "zQmNnFBmKdbJMSscT29bT8AWenL2ZjkGhHypng2j64zcEQP"
+    },
+    "prev": "zQmXyuwY7NggMMcNqDDq2YofwKta66y5XX8w6PSG4SUMvJ4",
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+      "proofValue": "zgRsfzzFzY6cLf3VyrGgG35Czzxs6CTEEqwcQVNiiJCFJPMAxz1xkJzfAntZsaGrwS53CSvefUyNUZJF1VNCac3q"
+     }
+    ]
+   }
+  ],
+  "did:guardian:acme.com:guard2": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com:guard2",
+    "keys": [
+     "zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS#zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS",
+      "proofValue": "z4hfpXYy85RC1YXbB49LkwTPGiyjMWquhfb1EFLkx9CQiwPLpkXWY6edPjMLJeFHMDf8EowKvpqKQSAMvrBqiHH22"
+     }
+    ],
+    "attestation": {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+     "proofValue": "z2x3JmnJ8pSFBd9MV7szb5LT2dBYKrXnq36FT9BTWJsEQ5DW8UR5WGpAxhDvFp95ssJ4fS7pRpMccjvvvWJsBnEMx"
+    }
+   },
+   {
+    "type": "acceptWard",
+    "ward": {
+     "did": "did:guardian:acme.com:alice",
+     "anchor": "zQmNnFBmKdbJMSscT29bT8AWenL2ZjkGhHypng2j64zcEQP"
+    },
+    "prev": "zQmTcQWeiP3vDk24iVHmgSZR2FHua7JfghzDxuj1HyJvVcM",
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS#zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS",
+      "proofValue": "z3BdQPwAubgMbgtsS6bh2LgoGJExBk2mGCu8fWDczvgjDSCtDNyCtvKbJ2RsSKNv4Zg4eTsm6JpbqoQ25u6G1kn42"
+     }
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "result": "invalid"
+ },
+ "targets": "REQ-6-8",
+ "base": "recovery-all-N3"
+}

@@ -1,0 +1,142 @@
+{
+ "description": "create with 3 keys, a service and alsoKnownAs (DID document)",
+ "did": "did:guardian:acme.com:alice",
+ "log": [
+  {
+   "type": "create",
+   "did": "did:guardian:acme.com:alice",
+   "keys": [
+    "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+    "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+    "zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8"
+   ],
+   "guardians": [],
+   "successor": null,
+   "policy": {},
+   "services": [
+    {
+     "id": "#hub",
+     "type": "Hub",
+     "serviceEndpoint": "https://hub.example/a"
+    }
+   ],
+   "alsoKnownAs": [
+    "https://alice.example"
+   ],
+   "prev": null,
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "z2krS26LWnLafMUa4yKmWJVTFzVZjM4p6PgShSwUCKb8aSMdQkYGzXyaBBujxroFVYbMWY3gNEZ68GCnqTzA8ZVad"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+     "proofValue": "zeYud1ip6zYJM6Sh52MXYcfFZroRdpByTpHkLoq5BkxvFdVapdvhjRrAcX4YjVLroJZ1EsKRTAxr5JJsmrxRrvta"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "z4xxmFJtZyF5WqFFHTFM81HJxaKKGAB5JFgqmiNTfs6RMP7BQVfp5KKWoBX6BFqk94Hysr7yEKBTW2aEJVqiDcSKd"
+    }
+   ],
+   "attestation": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+    "proofValue": "z5o5zfUP6nVKUscK6DiZAFuSfTmzgfMQUa7XLpbM1SGUbiojGh25eV96c3Yo68BCbna5Bn42St3TjiT7eTT1twjyt"
+   }
+  }
+ ],
+ "resolver": {
+  "did:guardian:acme.com": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com",
+    "keys": [
+     "zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha#zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha",
+      "proofValue": "z6bDMU9GLA6fvUpkKuuXcWkgiVFfDdzcPT6FfHAZSqwAP79MFeViGWAYH7tihxTnSpypKDd4mH91PByN1xyU8m96"
+     }
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "result": "valid"
+ },
+ "targets": "REQ-9-2",
+ "anchor": "zQmcMPo7LJE2USQfHWxqeN2o1Mtp5jb19oB6WCcN8CNY5Jh",
+ "expectDocument": {
+  "@context": [
+   "https://www.w3.org/ns/did/v1",
+   "https://w3id.org/security/multikey/v1"
+  ],
+  "id": "did:guardian:acme.com:alice",
+  "verificationMethod": [
+   {
+    "id": "did:guardian:acme.com:alice#key-0",
+    "type": "Multikey",
+    "controller": "did:guardian:acme.com:alice",
+    "publicKeyMultibase": "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz"
+   },
+   {
+    "id": "did:guardian:acme.com:alice#key-1",
+    "type": "Multikey",
+    "controller": "did:guardian:acme.com:alice",
+    "publicKeyMultibase": "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi"
+   },
+   {
+    "id": "did:guardian:acme.com:alice#key-2",
+    "type": "Multikey",
+    "controller": "did:guardian:acme.com:alice",
+    "publicKeyMultibase": "zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8"
+   }
+  ],
+  "authentication": [
+   "did:guardian:acme.com:alice#key-0",
+   "did:guardian:acme.com:alice#key-1",
+   "did:guardian:acme.com:alice#key-2"
+  ],
+  "assertionMethod": [
+   "did:guardian:acme.com:alice#key-0",
+   "did:guardian:acme.com:alice#key-1",
+   "did:guardian:acme.com:alice#key-2"
+  ],
+  "capabilityInvocation": [
+   "did:guardian:acme.com:alice#key-0",
+   "did:guardian:acme.com:alice#key-1",
+   "did:guardian:acme.com:alice#key-2"
+  ],
+  "service": [
+   {
+    "id": "did:guardian:acme.com:alice#hub",
+    "type": "Hub",
+    "serviceEndpoint": "https://hub.example/a"
+   }
+  ],
+  "alsoKnownAs": [
+   "https://alice.example"
+  ]
+ }
+}

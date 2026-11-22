@@ -1,0 +1,155 @@
+{
+ "description": "9 keys",
+ "did": "did:guardian:acme.com:alice",
+ "log": [
+  {
+   "type": "create",
+   "did": "did:guardian:acme.com:alice",
+   "keys": [
+    "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz"
+   ],
+   "guardians": [],
+   "successor": null,
+   "policy": {},
+   "services": [],
+   "alsoKnownAs": [],
+   "prev": null,
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "z3EkHoFdAuodeWpxeyvUrVuKVM5XWnjkzmGvdVrXG6EXS4zcrRJd2zBh8wmAkeU71YxZQB7VE9q6CtN8692dsmH8f"
+    }
+   ],
+   "attestation": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+    "proofValue": "z3tCPUTMxXiKSzuHz7Yk6R58krmnJBNBkEVQwgvKRDRYyTmyJP9c7tb4ifrdWQhoyttxBzQsisHr75CBsd5MPQGXB"
+   }
+  },
+  {
+   "type": "update",
+   "keys": [
+    "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+    "zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+    "zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS",
+    "zDnaeUBPpBnKYsLgJw9SJYFP8aRrQrd11kdsRC572kVPmWKLg",
+    "zDnaekmB2iAXnJ3ZMBUChP37NaCeWJPuobC4mJqvaLp6AKM23",
+    "zDnaesywoyzecCMEdY5pW2kh5bQQsmV5R5rtgsWmHm3H4bqgo",
+    "zDnaenAZ7UFGhGqszKeuUGYu83ax5f78uPrRdKaG7Kemtc13A",
+    "zDnaeXmQPZRtUUH4JHMnZmdFExMB6qTXxuTzkHvCJSGaNZj45",
+    "zDnaeix6MbbFTE6BhmKKeEYuG7j1JkBS8WW6JoribKdJ6RejV"
+   ],
+   "services": [],
+   "alsoKnownAs": [],
+   "prev": "zQmRFhbC8PCdC9CPRDXEA9EtsyQ1Y8nPnxikVMA4pAu1i6N",
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeUBPpBnKYsLgJw9SJYFP8aRrQrd11kdsRC572kVPmWKLg#zDnaeUBPpBnKYsLgJw9SJYFP8aRrQrd11kdsRC572kVPmWKLg",
+     "proofValue": "z38tdoGCPLasgbUK6htzbCrrUtV6L37yoaWVrXhu51r693MjhFuR3f8eeoCG1ybL3UBCNTsiA25Hq3xRcQJ3iVuF7"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeXmQPZRtUUH4JHMnZmdFExMB6qTXxuTzkHvCJSGaNZj45#zDnaeXmQPZRtUUH4JHMnZmdFExMB6qTXxuTzkHvCJSGaNZj45",
+     "proofValue": "z33Kh3j5KqDdWWpq5o2yYSmC9L43yYi78oDRcFdwVyK7Gg9rRBgjbFpbitmbWmNjwruzZNQfDKzxGeHWGea7dsrx8"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS#zDnaeZC7UhA7H6N2UAFD8rKUtnKJGxm5nB3FQxvogFShUPhXS",
+     "proofValue": "z2QYiCSFVvVBvEWrQsFz8ZdaNQGsVm4h1tjK3EmcyZCG3F8TdmH3mfQdHHvqBt6yPnG59XXa6vbzRXW5xXH6mRFKT"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "z9bwqsjYA7GVd8s1TiZvNvPErnBHvk7GeA8SVMJhVtQEqxqL9VdNErrGYz8YNuxXKFGXRBvA7vgWqT6umYjQ4Uat"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+     "proofValue": "z2ZQrjMSCdRdDDbCu6EurUS1Lbcdj8gHzNyLECFvie4gKHQjzFAjktsyg47ynarFs2x6Hks1fTFRRQrcjTSv3YvYp"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeix6MbbFTE6BhmKKeEYuG7j1JkBS8WW6JoribKdJ6RejV#zDnaeix6MbbFTE6BhmKKeEYuG7j1JkBS8WW6JoribKdJ6RejV",
+     "proofValue": "z4JRuFE1aUazoAe71KS2ewQDEYA4Fo2CFdQHqec9MpSyCYxacfL2dttfbj3vbbq4mo5QLKpYZzy1Zd3A7hUMJqtik"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaekmB2iAXnJ3ZMBUChP37NaCeWJPuobC4mJqvaLp6AKM23#zDnaekmB2iAXnJ3ZMBUChP37NaCeWJPuobC4mJqvaLp6AKM23",
+     "proofValue": "z2GECdA8m3rkvy7UMboRERwMhLZRfKxQR1jsVK983TC5QwSbmAnbwsWk8f1og8BJEducUdjZXMBaHovJ9hTdM7dcE"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaenAZ7UFGhGqszKeuUGYu83ax5f78uPrRdKaG7Kemtc13A#zDnaenAZ7UFGhGqszKeuUGYu83ax5f78uPrRdKaG7Kemtc13A",
+     "proofValue": "z3BekdSVNqcuXkGu58Qhjnh1scwdMH6ZBjDaHUFaKeY6jwa8eNMyQupEEcY2ZRfzpxMAAAdiyp2auPHfdbs6WoUWt"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "z4Mo9f7WLra2bDK8EuLKsocX6Ryh1cLW33F3CwgjRoC1ihCrxigk4Jm1aEyuFhd9cWdpQTdfgPv7z8JoMWCqtyWdz"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaesywoyzecCMEdY5pW2kh5bQQsmV5R5rtgsWmHm3H4bqgo#zDnaesywoyzecCMEdY5pW2kh5bQQsmV5R5rtgsWmHm3H4bqgo",
+     "proofValue": "z4dJbANCJLossdLsjSRpB54VyEWHg9rtC3DrSdNywKebU5SjCYhqY8uNHtegPa43V3kGRRHfxKvhWdLf6Bo1D3Zup"
+    }
+   ]
+  }
+ ],
+ "resolver": {
+  "did:guardian:acme.com": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com",
+    "keys": [
+     "zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha#zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha",
+      "proofValue": "z6bDMU9GLA6fvUpkKuuXcWkgiVFfDdzcPT6FfHAZSqwAP79MFeViGWAYH7tihxTnSpypKDd4mH91PByN1xyU8m96"
+     }
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "result": "invalid"
+ },
+ "targets": "REQ-6-1",
+ "base": "update-key"
+}

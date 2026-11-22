@@ -1,0 +1,250 @@
+{
+ "description": "33 services",
+ "did": "did:guardian:acme.com:alice",
+ "log": [
+  {
+   "type": "create",
+   "did": "did:guardian:acme.com:alice",
+   "keys": [
+    "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+    "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+    "zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8"
+   ],
+   "guardians": [],
+   "successor": null,
+   "policy": {},
+   "services": [
+    {
+     "id": "#s0",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s1",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s2",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s3",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s4",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s5",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s6",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s7",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s8",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s9",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s10",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s11",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s12",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s13",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s14",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s15",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s16",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s17",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s18",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s19",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s20",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s21",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s22",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s23",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s24",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s25",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s26",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s27",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s28",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s29",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s30",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s31",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    },
+    {
+     "id": "#s32",
+     "type": "T",
+     "serviceEndpoint": "https://s.example"
+    }
+   ],
+   "alsoKnownAs": [
+    "https://alice.example"
+   ],
+   "prev": null,
+   "proof": [
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+     "proofValue": "z2Mhdzez33rVgzzosi4DL2VA4EdFESei4X6PLGSfCD316mT9dyuzoGJGWxDMxmYn6YHJrbYPMgYBj6vPQM2DrpGcW"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8#zDnaeczjUGHuq38ewMibc8qupr2hhbv9vR1ai2kLWQAFAtLZ8",
+     "proofValue": "z635L5W8JRA42m3o6mSHCHSuwn1Gt1nSNhLkNvkUixSu16y9qEjFKR8NCzbDV13SDBgVstmczb292TZmmr2Gv3juF"
+    },
+    {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+     "proofValue": "zRPTfN6Hp5nH1zRwXMGJNVshDVhdU8YnWEokgXSXew2vXRWgNMhQu6eiHaoz3EYPfV4Z4TuYDqa8qa7tY2ovGbPX"
+    }
+   ],
+   "attestation": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+    "proofValue": "z2aitooQ1QZew6nhrpXhXbjMekKTtyx42shdohJEdseMKEpmXhWL5LWE4E4xdmYoLPwyR17S5LM9hX4F3BCcpA8yk"
+   }
+  }
+ ],
+ "resolver": {
+  "did:guardian:acme.com": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com",
+    "keys": [
+     "zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha#zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha",
+      "proofValue": "z6bDMU9GLA6fvUpkKuuXcWkgiVFfDdzcPT6FfHAZSqwAP79MFeViGWAYH7tihxTnSpypKDd4mH91PByN1xyU8m96"
+     }
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "result": "invalid"
+ },
+ "targets": "REQ-6-1",
+ "base": "create-full"
+}
