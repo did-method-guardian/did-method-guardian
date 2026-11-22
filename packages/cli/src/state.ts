@@ -30,7 +30,7 @@ export function loadSession(): SessionFile {
   return JSON.parse(readFileSync(path, "utf8")) as SessionFile;
 }
 
-// --- pin store: SSH known_hosts for DIDs (REQ-12-2) ---
+// --- pin store: SSH known_hosts for DIDs (REQ-5-7's anchor, trust on first use) ---
 
 export interface Pin {
   anchor: string;
@@ -56,36 +56,4 @@ export function savePin(did: Did, pin: Omit<Pin, "pinnedAt">): void {
   const pins = loadPins();
   pins[did] = { ...pin, pinnedAt: new Date().toISOString() };
   writeFileSync(pinsPath(), JSON.stringify(pins, null, 2), { mode: 0o600 });
-}
-
-// --- registrar-key pin store: keyed by DOMAIN, not by ward DID (WS-2.3,
-// audit) -- every ward on the same registrar shares the same registrar
-// key, so pinning it once per ward meant N stale, independently-drifting
-// copies for N wards on the same registrar instead of one canonical one.
-
-export interface RegistrarKeyPin {
-  registrarDid: Did;
-  registrarKey: string; // Multikey, exactly as the DID document exposes it -- see resolveRegistrarKey
-  pinnedAt: string;
-}
-
-function registrarKeyPinsPath(): string {
-  return join(configDir(), "registrar-keys.json");
-}
-
-function loadRegistrarKeyPins(): Record<string, RegistrarKeyPin> {
-  const path = registrarKeyPinsPath();
-  if (!existsSync(path)) return {};
-  return JSON.parse(readFileSync(path, "utf8")) as Record<string, RegistrarKeyPin>;
-}
-
-export function getRegistrarKeyPin(domain: string): RegistrarKeyPin | undefined {
-  return loadRegistrarKeyPins()[domain];
-}
-
-export function saveRegistrarKeyPin(domain: string, pin: Omit<RegistrarKeyPin, "pinnedAt">): void {
-  mkdirSync(configDir(), { recursive: true, mode: 0o700 });
-  const pins = loadRegistrarKeyPins();
-  pins[domain] = { ...pin, pinnedAt: new Date().toISOString() };
-  writeFileSync(registrarKeyPinsPath(), JSON.stringify(pins, null, 2), { mode: 0o600 });
 }

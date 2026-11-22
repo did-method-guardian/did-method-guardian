@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
-import { generateKeypair, replay, unsecuredDocument, createProof, popVerificationMethod } from "@did-guardian/lib";
-import type { Did } from "@did-guardian/lib";
+import { createProof, generateKeypair, operationHash, verifyLog } from "@did-guardian/lib";
+import type { Did, UpdateOp } from "@did-guardian/lib";
 import { saveKey, loadKey, listLocalKeys } from "../keystore.js";
 import { loadSession } from "../state.js";
 import { takeCustody, fetchLog } from "../registrar-client.js";
@@ -46,9 +46,8 @@ export function registerKeyCommand(program: Command): void {
     .description("end a registrar's custody of a ward's key -- irreversible; requires \"did-guardian login\" first")
     .option("--new-key <label>", "an existing saved key to install (default: generate and save a fresh one under \"<ward-did>-self-held\")")
     .option("--keychain", "save the new key to the OS keychain instead of a local file")
-    .option("-f, --force", "proceed even if the ward has no guardian, or a registrar-held guardian alone satisfies recovery_threshold")
     .option("-y, --yes", "skip the confirmation prompt")
-    .action(async (wardDid: Did, opts: { newKey?: string; keychain?: boolean; force?: boolean; yes?: boolean }) => {
+    .action(async (wardDid: Did, opts: { newKey?: string; keychain?: boolean; yes?: boolean }) => {
       const session = loadSession();
       if (session.did !== wardDid) {
         throw new Error(`logged in as ${session.did}, not ${wardDid} -- run "did-guardian login ${wardDid} --login-secret <secret>" first.`);
@@ -70,38 +69,38 @@ export function registerKeyCommand(program: Command): void {
       } else {
         label = `${wardDid}-self-held`;
         newKey = await generateKeypair();
-        // WS-2.7 (audit): saved BEFORE submitting, not after -- once the
-        // server accepts this, this registrar can no longer sign on
-        // wardDid's behalf at all (that's take-custody's entire point),
-        // so if the process died between a successful submission and
-        // saving the key, this identity would be permanently locked out
-        // with no copy of its own new key anywhere. An unused generated
-        // key left on disk because the submission below never happens or
-        // gets rejected is harmless by comparison.
+        // Saved BEFORE submitting, not after -- once the server accepts
+        // this, this registrar can no longer sign on wardDid's behalf at
+        // all (that's take-custody's entire point), so if the process
+        // died between a successful submission and saving the key, this
+        // identity would be permanently locked out with no copy of its
+        // own new key anywhere. An unused generated key left on disk
+        // because the submission below never happens or gets rejected
+        // is harmless by comparison.
         await saveKey(label, newKey, opts);
       }
-      // REQ-7.2-12: this registrar will never hold newKey's private half,
-      // so it can't prove possession of it the way it does for a
-      // server-generated rotation -- that proof has to come from here, a
-      // self-contained did:key: proof of possession over the identical
-      // content the server independently reconstructs (same
-      // operationalKeys/services/prev shape signCustodialRotate would
-      // build). A stale prev by the time this reaches the server just
-      // fails like any other prev mismatch.
       const log = await fetchLog(wardDid);
       if (log.length === 0) throw new Error(`no operations found for ${wardDid} -- is it registered?`);
-      const state = replay(wardDid, log);
-      const rotationPartial = {
-        type: "custodial_rotate" as const,
-        operationalKeys: [newKey.publicKey],
+      const verified = await verifyLog(wardDid, log);
+      if (verified.result !== "valid") throw new Error(`${wardDid}'s own log does not verify: ${verified.reason}`);
+      const state = verified.state!;
+      // An `update` replaces keys/services/alsoKnownAs wholesale -- carry
+      // the existing services/alsoKnownAs over unchanged, only the keys
+      // actually change here.
+      const op: Omit<UpdateOp, "proof"> = {
+        type: "update",
+        keys: [newKey.publicKey],
         services: state.services,
-        prev: log[log.length - 1].cid,
+        alsoKnownAs: state.alsoKnownAs,
+        prev: await operationHash(log[log.length - 1]),
       };
-      const unsecuredDoc = unsecuredDocument(rotationPartial as any);
-      const keyProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
-      const result = await takeCustody(wardDid, session.cookie, newKey.publicKey, keyProof, opts.force);
+      // REQ-7-6: the registrar will never hold newKey's private half, so
+      // it can't prove possession of it the way it does for a
+      // server-generated rotation -- that proof of possession has to
+      // come from here.
+      const proof = await createProof(op, newKey.publicKey, newKey.privateKey);
+      const result = await takeCustody(wardDid, session.cookie, op, proof);
       if (!result.accepted) throw new Error(result.reason);
       console.log(`${wardDid} now holds its key${opts.newKey ? "" : ` (saved as "${label}")`}. This registrar can no longer sign on its behalf.`);
-      for (const warning of result.warnings) console.log(`Warning: ${warning}`);
     });
 }

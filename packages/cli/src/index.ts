@@ -6,6 +6,7 @@ import { registerResolveCommand } from "./commands/resolve.js";
 import { registerGuardianCommand } from "./commands/guardian.js";
 import { registerLoginCommand } from "./commands/login.js";
 import { registerCreateCommand } from "./commands/create.js";
+import { registerOperationCommand } from "./commands/operation.js";
 
 const program = new Command();
 
@@ -20,6 +21,7 @@ registerRegisterCommand(program);
 registerResolveCommand(program);
 registerLoginCommand(program);
 registerGuardianCommand(program);
+registerOperationCommand(program);
 
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(`Error: ${err.message}`);

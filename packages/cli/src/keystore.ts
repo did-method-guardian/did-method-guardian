@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 export interface StoredKey {
   did?: string;
-  publicKey: string; // base64url SPKI
+  publicKey: string; // Multikey ('z'-prefixed base58btc)
   privateKey: string; // base64url PKCS8
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "@did-guardian/cli",
   "version": "0.1.0",
-  "description": "Command-line tool for did:guardian: generate keys, register and resolve identities, and manage guardianship (add, recover, tombstone).",
+  "description": "Command-line tool for did:guardian: generate keys, register and resolve identities, and manage guardianship (add, recover, deactivate).",
   "type": "module",
   "bin": {
     "did-guardian": "dist/src/index.js"
