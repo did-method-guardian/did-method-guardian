@@ -25,7 +25,6 @@ import {
   loadLog,
   rotateWard,
   tombstoneWard,
-  relinquishWard,
   reissueLoginSecret,
   RegistrarError,
 } from "./registrar.js";
@@ -212,8 +211,19 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
            </form>${ward.name === "" ? `<p class="hint">Mail for this identity routes through <code>_@${escapeHtml(env.REGISTRAR_DOMAIN)}</code>, the same reserved local part already used to log in as root.</p>` : ""}`
     }
     ${
+      // R2-0.2 hotfix (round-2 audit): this used to be a one-click
+      // "Relinquish all guardians" button right here, calling
+      // relinquishWard with nothing but this page's own ward session --
+      // which signed with every registrar-held GUARDIAN's own stored
+      // key, none of them ever asked. guardian_relinquish's required
+      // signers are the guardians themselves (REQ-7.2-7a), never the
+      // ward, so a ward dashboard is the wrong place for this action at
+      // all now that it actually needs the guardian's own say: there's
+      // no guardian session to offer here. Point at the real path
+      // instead -- a guardian relinquishes through their OWN dashboard
+      // or the API's /relinquish, authenticated as themselves.
       state.guardians.length
-        ? `<form method="post" action="/account/relinquish"><button type="submit" class="danger">Relinquish all guardians</button></form>`
+        ? `<p class="hint">A guardian steps down under its own authority, not this account's -- see the registrar API's <code>.../remove-self</code> (one guardian, voluntary) or <code>.../relinquish</code> (signed in as a guardian) in the registrar API doc.</p>`
         : ""
     }
     ${!state.deactivated ? `<p><a href="/account/tombstone">Deactivate this identity</a></p>` : ""}
@@ -276,19 +286,6 @@ export async function handleAccountEmail(request: Request, env: Env): Promise<Re
   return result.ok
     ? redirectToAccount("Verification email sent -- check your inbox.")
     : redirectToAccount(`Couldn't set up forwarding: ${result.reason}`, "error");
-}
-
-export async function handleAccountRelinquish(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (session instanceof Response) return session;
-  const name = session.ward.name;
-  try {
-    await relinquishWard(env, name);
-  } catch (e) {
-    if (e instanceof RegistrarError) return redirectToAccount(`Couldn't relinquish: ${e.message}`, "error");
-    throw e;
-  }
-  return redirectToAccount("All guardians relinquished.");
 }
 
 export async function handleAccountTombstoneConfirm(request: Request, env: Env): Promise<Response> {

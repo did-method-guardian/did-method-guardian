@@ -21,6 +21,7 @@ import {
   isValidName,
   meetsThreshold,
   parseDid,
+  expectedRegistrarDid,
   wellKnownPath,
   DEFAULT_GUARDIAN_POLICY,
   signLogHeadStatement,
@@ -29,7 +30,7 @@ import {
 import type { CustodialCreateOp, DataIntegrityProof, Did, GuardianLivenessResolver, LogEntry, LogHeadStatement, Operation, ResolvedState, VerificationContext } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { didFor } from "./env.js";
-import { appendOperation, appendOperationIfCountMatches, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, insertWardCustody, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
+import { appendOperation, appendOperationIfCountMatches, deleteAllLoginSessionsForWard, getOperationLog, getWardByDid, getWardByName, getWardCustodyMode, insertWard, insertWardCustody, setLoginSecretHash, takeCustodyOfWardKey, updateWardKeys, type WardRow } from "./db.js";
 import { encryptSecret, decryptSecret, hashSecret, hashPassword, randomSecret } from "./secretBox.js";
 import { proposeOperation } from "./pendingOps.js";
 
@@ -402,7 +403,7 @@ export async function rotateWard(env: Env, name: string): Promise<{ did: string;
     oldPrivateKey,
     { [newKeypair.publicKey]: newKeypair.privateKey },
   );
-  const result = await submitOperation(env, name, op);
+  const result = await submitOperation(env, name, op, undefined, true); // R2-0.5: this registrar produced this rotation itself
   // WS-1.13 (audit): same convention as every other submitOperation
   // result mapped to a response -- 400, not 500.
   if (!result.accepted) throw new RegistrarError(`rotation failed: ${result.reason}`, 400);
@@ -459,44 +460,62 @@ export async function tombstoneWard(env: Env, name: string): Promise<{ did: stri
  * already a CURRENT guardian voluntarily giving up its own standing,
  * the same self-contained shape as rotate/tombstone.
  *
- * Only signs with whichever of the ward's current guardians this
- * registrar itself custodies (a guardian hosted on a different
- * registrar entirely can't be signed for here, same limit
- * registerWard's own atomic-creation path already accepts for
- * `incoming`) -- refuses clearly if that subset doesn't meet the
- * ward's own removal_threshold, rather than silently doing nothing.
+ * R2-0.2 hotfix (round-2 audit): this used to sign with EVERY registrar-
+ * held current guardian's own stored key on nothing but the WARD's own
+ * session -- none of those guardians were ever asked. Reproduced
+ * live-but-local in docs-internal/audit-2026-11-21/reaudit-server/
+ * p6_relinq.mjs: a ward's own login secret alone was enough to strip
+ * every guardian without their consent, which defeats recovery for
+ * anyone who'd lost their operational key but still had a guardian in
+ * place. `guardian_relinquish`'s own required signers are the guardians,
+ * never the ward (REQ-7.2-7a), so the ward was never the right party to
+ * authenticate here in the first place.
+ *
+ * Now takes `callerDid`: the one guardian whose own session (index.ts)
+ * authorizes this call, same two-way trust /remove-self already uses.
+ * Signs only for that caller. If their signature alone already meets
+ * removal_threshold against the full live set (the common case this
+ * endpoint exists for -- a sole guardian, trivially), finalizes
+ * synchronously, same as before. Otherwise there's nothing left this
+ * function can do without another guardian's own say, so it returns the
+ * partially-signed operation instead of silently signing for anyone else
+ * -- index.ts routes that through §3's `proposeOperation` (never
+ * registrar.ts calling into pendingOps.ts directly, which sits above
+ * this module and already calls back into it), so every other
+ * registrar-held guardian adds their own signature with their own
+ * session (`.../pending/<id>/sign-as-self`), never one this registrar
+ * produces unasked on their behalf.
  */
-export async function relinquishWard(env: Env, name: string): Promise<{ did: string; document: unknown }> {
+export async function relinquishWard(
+  env: Env,
+  name: string,
+  callerDid: Did,
+): Promise<{ ok: true; did: string; document: unknown } | { ok: false; pendingOp: Operation }> {
   const ward = await getWardByName(env, name);
   if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const callerWard = await getWardByDid(env, callerDid);
+  if (!callerWard) throw new RegistrarError(`"${callerDid}" is not a ward this registrar custodies -- it can't produce that guardian's signature`, 400);
   const log = await loadLog(env, ward.did);
   const latestCid = log[log.length - 1]?.cid;
   if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to relinquish from`, 500);
   const state = replay(ward.did as Did, log);
   const live = await liveGuardians(state, makeGuardianLivenessResolver(env)); // REQ-4-4 -- a deactivated guardian never counts toward removal_threshold, nor is it worth attempting to sign for
   if (live.length === 0) throw new RegistrarError(`"${name}" has no guardians to relinquish -- it's already ownerless`, 400);
+  if (!live.includes(callerDid)) throw new RegistrarError(`"${callerDid}" is not a current guardian of "${name}" -- only a current guardian can relinquish its own standing`, 403);
 
-  const signerKeys: Record<string, string> = {};
-  for (const guardianDid of live) {
-    const guardianWard = await getWardByDid(env, guardianDid);
-    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") signerKeys[guardianDid] = await decryptWardPrivateKey(env, guardianWard);
-  }
-  const signers = Object.keys(signerKeys);
-  if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, live)) {
-    throw new RegistrarError(
-      `not enough of "${name}"'s current guardians (${live.join(", ")}) are custodied by this registrar to meet its own removal_threshold -- a guardian on a different registrar has to relinquish through that registrar directly`,
-      400,
-    );
+  const callerPrivateKey = await decryptWardPrivateKey(env, callerWard);
+  const op = await signGuardianRelinquish({ type: "guardian_relinquish", prev: latestCid }, { [callerDid]: callerPrivateKey }, [callerDid]);
+
+  if (!meetsThreshold(state.guardianPolicy.removal_threshold, [callerDid], live)) {
+    return { ok: false, pendingOp: op as unknown as Operation };
   }
 
-  const op = await signGuardianRelinquish({ type: "guardian_relinquish", prev: latestCid }, signerKeys, signers);
   const result = await submitOperation(env, name, op);
   // WS-1.13 (audit): same convention as every other submitOperation
   // result mapped to a response -- 400, not 500.
   if (!result.accepted) throw new RegistrarError(`relinquish failed: ${result.reason}`, 400);
-
   const document = await resolveDocument(env, name);
-  return { did: ward.did, document };
+  return { ok: true, did: ward.did, document };
 }
 
 /**
@@ -528,44 +547,54 @@ export async function removeSelfAsGuardian(env: Env, name: string, callerDid: Di
 }
 
 /**
- * Forced removal of a named guardian (REQ-7.2-7b) -- self-contained only
- * when the *other* current guardians (excluding `outgoingDid` itself) this
- * registrar can sign for, among themselves, already meet `removal_threshold`
- * evaluated against the full current guardian set (REQ-7.2-7's own
- * correction -- never the shrunken remaining-guardians pool). Same shape as
- * relinquishWard, just excluding one specific guardian from both the signer
- * pool and the eligible set computed for display.
+ * Forced removal of a named guardian (REQ-7.2-7b) -- same shape as
+ * relinquishWard, just excluding one specific guardian from both the
+ * signer pool and the eligible set computed for display.
+ *
+ * R2-0.2 hotfix (round-2 audit): same root cause and same fix as
+ * relinquishWard above -- this used to sign with every OTHER registrar-
+ * held guardian's own stored key on the ward's session alone, none of
+ * them ever asked. Now takes `callerDid`: one of the ward's *other*
+ * current guardians (never `outgoingDid` itself -- that's /remove-self),
+ * whose own session (index.ts) authorizes this call. Signs only for that
+ * caller; if their signature alone meets removal_threshold against the
+ * full live set (REQ-7.2-7's own correction -- never the shrunken
+ * remaining-guardians pool), finalizes synchronously. Otherwise returns
+ * the partially-signed operation for index.ts to route through §3, so
+ * every other guardian needed adds their own signature with their own
+ * session.
  */
-export async function forceRemoveGuardian(env: Env, name: string, outgoingDid: Did): Promise<{ did: string; document: unknown }> {
+export async function forceRemoveGuardian(
+  env: Env,
+  name: string,
+  outgoingDid: Did,
+  callerDid: Did,
+): Promise<{ ok: true; did: string; document: unknown } | { ok: false; pendingOp: Operation }> {
   const ward = await getWardByName(env, name);
   if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
+  const callerWard = await getWardByDid(env, callerDid);
+  if (!callerWard) throw new RegistrarError(`"${callerDid}" is not a ward this registrar custodies -- it can't produce that guardian's signature`, 400);
   const log = await loadLog(env, ward.did);
   const latestCid = log[log.length - 1]?.cid;
   if (!latestCid) throw new RegistrarError(`"${name}" has no genesis operation to remove a guardian from`, 500);
   const state = replay(ward.did as Did, log);
   const live = await liveGuardians(state, makeGuardianLivenessResolver(env));
   if (!live.includes(outgoingDid)) throw new RegistrarError(`"${outgoingDid}" is not a current guardian of "${name}"`, 400);
+  if (callerDid === outgoingDid) throw new RegistrarError("to remove yourself, use /remove-self instead -- this endpoint is for one guardian removing a DIFFERENT one", 400);
+  if (!live.includes(callerDid)) throw new RegistrarError(`"${callerDid}" is not a current guardian of "${name}" -- only a current guardian can force-remove another`, 403);
 
-  const others = live.filter((d) => d !== outgoingDid);
-  const signerKeys: Record<string, string> = {};
-  for (const guardianDid of others) {
-    const guardianWard = await getWardByDid(env, guardianDid);
-    if (guardianWard && (await getWardCustodyMode(env, guardianWard.did)) === "registrar") signerKeys[guardianDid] = await decryptWardPrivateKey(env, guardianWard);
-  }
-  const signers = Object.keys(signerKeys);
-  if (!meetsThreshold(state.guardianPolicy.removal_threshold, signers, live)) {
-    throw new RegistrarError(
-      `not enough of "${name}"'s OTHER current guardians are custodied by this registrar to meet its own removal_threshold against the full guardian set -- use the asynchronous collection endpoints instead`,
-      400,
-    );
+  const callerPrivateKey = await decryptWardPrivateKey(env, callerWard);
+  const op = await signGuardianRemove({ type: "guardian_remove", outgoing: outgoingDid, prev: latestCid }, { [callerDid]: callerPrivateKey }, [callerDid]);
+
+  if (!meetsThreshold(state.guardianPolicy.removal_threshold, [callerDid], live)) {
+    return { ok: false, pendingOp: op as unknown as Operation };
   }
 
-  const op = await signGuardianRemove({ type: "guardian_remove", outgoing: outgoingDid, prev: latestCid }, signerKeys, signers);
   const result = await submitOperation(env, name, op);
   if (!result.accepted) throw new RegistrarError(`forced removal failed: ${result.reason}`, 400);
 
   const document = await resolveDocument(env, name);
-  return { did: ward.did, document };
+  return { ok: true, did: ward.did, document };
 }
 
 /**
@@ -577,8 +606,24 @@ export async function forceRemoveGuardian(env: Env, name: string, outgoingDid: D
  * registrar's own wards. Rejected outright if the ward already has any
  * current guardian (that's an ordinary REQ-7.2-4 addition, needing the
  * EXISTING committee's own approval -- see §3).
+ *
+ * R2-0.1 hotfix (round-2 audit): the caller MUST be authenticated as
+ * `name` itself (enforced by index.ts's route gate, same as /relinquish
+ * and /remove) -- the ward being adopted is the one party whose consent
+ * this function cannot do without, and until this fix it never asked.
+ * Signing with the incoming guardian's own stored key on the ward's say
+ * alone (no session of the incoming party's own) is a known, deliberately
+ * accepted gap for now -- it hands the incoming party an unwanted
+ * recovery/removal role over someone else, never access to their own key
+ * material, and R2-0.4/the propose-and-collect redesign is where that
+ * gets closed properly. The root is excluded outright: it has no
+ * "ward's own session" to give, since logging in as it IS gaining the
+ * power this function would otherwise hand away.
  */
 export async function adoptWard(env: Env, name: string, incomingDid: Did): Promise<{ did: string; document: unknown }> {
+  if (name === ROOT_WARD_NAME) {
+    throw new RegistrarError("the bare-domain root identity can't be adopted through this endpoint -- a guardianless root needs its own, deliberate recovery story, not an unattended one", 400);
+  }
   const ward = await getWardByName(env, name);
   if (!ward) throw new RegistrarError(`no such ward "${name}"`, 404);
   const incomingWard = await getWardByDid(env, incomingDid);
@@ -679,7 +724,7 @@ export async function takeCustody(
   const unsecuredDoc = unsecuredDocument(partial as any);
   const authProof = await createProof(unsecuredDoc, `${ward.did}#key-0`, oldPrivateKey);
   const op = { ...partial, proof: [authProof, newKeyProof] };
-  const result = await submitOperation(env, name, op);
+  const result = await submitOperation(env, name, op, undefined, true); // R2-0.5: this registrar produced this rotation itself (to the caller's own new key, but still this registrar's own call)
   // WS-1.13 (audit): submitOperation's own rejection reasons (a bad
   // newKeyProof, a stale prev, ...) are the caller's own mistake, same
   // as every other call site that maps this exact boolean+reason result
@@ -892,6 +937,14 @@ export async function submitOperation(
   name: string | null,
   op: Operation,
   sigTimestamps?: Record<Did, string>,
+  // R2-0.5 hotfix (round-2 audit): true only from rotateWard/takeCustody's
+  // own internal calls below -- the two places this registrar produces a
+  // custodial_rotate itself, already behind this ward's own authenticated
+  // session. Every OTHER custodial_rotate reaching this function came
+  // from somewhere else (a guardian's recovery signature, most urgently,
+  // but also any other externally-signed rotation) and gets the
+  // credential-revocation treatment below once accepted.
+  producedByRegistrar = false,
 ): Promise<{ accepted: true; cid?: string; document?: unknown } | { accepted: false; reason: string }> {
   if (op.type === "custodial_create") {
     if (name === null) return { accepted: false, reason: "the bare-domain root identity can't be created this way" };
@@ -900,6 +953,34 @@ export async function submitOperation(
   }
   const ward = await findWard(env, name);
   if (!ward) return { accepted: false, reason: `no such ward "${name}"` };
+
+  // R2-0.3 hotfix (round-2 audit): strip any incoming proof claiming to
+  // be from this registrar itself, before verification or storage.
+  // receiptCreatedAt (lib operations.ts) trusts the FIRST proof whose
+  // verificationMethod matches the registrar's own key -- without ever
+  // verifying its signature -- and nothing here used to reject an extra,
+  // unexplained proof on a non-genesis operation (genesis already has
+  // this check, WS-1.7; see checkGenesisShape). An attacker with a
+  // stolen ward key could submit a rotation carrying a forged, backdated
+  // "registrar" proof ahead of where this registrar's own real receipt
+  // gets appended below -- receiptCreatedAt's first-match lookup would
+  // then return the forged date forever, and a guardian's later
+  // nullification would read the rotation as accepted years ago, past
+  // REQ-6-8/6-9's 72-hour window (reproduced live-but-local:
+  // docs-internal/audit-2026-11-21/reaudit-server/p9_backdate.mjs).
+  // Safe to strip unconditionally here -- no non-genesis rule in
+  // OPERATION_RULES ever counts a registrar-DID proof as a valid signer,
+  // and cidFor (REQ-6-4) already excludes every proof from the content
+  // hash, so this can't change what gets accepted, only what gets
+  // stored. The full fix (verifying every proof is an explained signer,
+  // for every op type) is R2-2, not this hotfix.
+  const registrarDid = expectedRegistrarDid(ward.did as Did);
+  const incomingProofs = (op as { proof?: DataIntegrityProof[] }).proof ?? [];
+  const cleanProofs = incomingProofs.filter((p) => p.verificationMethod.split("#")[0] !== registrarDid);
+  if (cleanProofs.length !== incomingProofs.length) {
+    op = { ...op, proof: cleanProofs } as Operation;
+  }
+
   const log = await loadLog(env, ward.did);
   const state = replay(ward.did, log);
   const latestCid = log[log.length - 1]?.cid ?? null;
@@ -1005,6 +1086,33 @@ export async function submitOperation(
   if (!inserted) {
     return { accepted: false, reason: "a concurrent operation for this identity was accepted in the meantime -- re-fetch the current log and resubmit (WS-1.12, audit)" };
   }
+
+  // R2-0.5 hotfix (round-2 audit): an accepted custodial_rotate THIS
+  // registrar didn't itself produce -- most urgently, a guardian's
+  // recovery signature -- means whoever's holding this ward's login
+  // secret and any existing gw_session for it is no longer provably its
+  // legitimate owner. The rotation itself already can't be forged this
+  // way (every registrar-signed convenience endpoint re-verifies against
+  // the ward's CURRENT key and fails the instant it's stale -- reproduced
+  // live-but-local, p5_custody.mjs), but the OLD login secret kept
+  // authenticating "Sign in with did:guardian" and the account dashboard
+  // as this identity regardless, with nothing here to stop it. Clearing
+  // the stored key and moving custody to self (WS-1.1's unfinished half)
+  // is correct even if this ward had already self-custodied before this
+  // rotation -- idempotent, and keeps wards.public_key from going stale
+  // the same way WS-1.1/1.2 already found it could. Revoking the login
+  // secret and every session is deliberately unconditional, not limited
+  // to "looks like recovery" -- a self-custodied ward's own routine
+  // external rotation re-authenticating afterward is a minor inconvenience;
+  // an unrevoked credential surviving a recovery it should have triggered
+  // is not.
+  if (op.type === "custodial_rotate" && !producedByRegistrar) {
+    const newOperationalKey = (op as { operationalKeys?: string[] }).operationalKeys?.[0];
+    if (newOperationalKey) await takeCustodyOfWardKey(env, ward.did, newOperationalKey);
+    await setLoginSecretHash(env, ward.name, "");
+    await deleteAllLoginSessionsForWard(env, ward.did);
+  }
+
   return { accepted: true };
 }
 

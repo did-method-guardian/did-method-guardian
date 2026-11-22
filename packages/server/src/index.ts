@@ -1,5 +1,5 @@
 import type { Env } from "./env.js";
-import type { DataIntegrityProof } from "@did-guardian/lib";
+import type { DataIntegrityProof, Did } from "@did-guardian/lib";
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
 import { registerWard, reissueLoginSecret, resolveDocument, resolveLog, getLogHead, rotateWard, takeCustody, relinquishWard, tombstoneWard, removeSelfAsGuardian, forceRemoveGuardian, adoptWard, submitOperation, RegistrarError } from "./registrar.js";
@@ -19,7 +19,6 @@ import {
   handleAccountRotate,
   handleAccountReissueLoginSecret,
   handleAccountEmail,
-  handleAccountRelinquish,
   handleAccountTombstoneConfirm,
   handleAccountTombstone,
   handleAccountRevokeConsent,
@@ -269,22 +268,31 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
           return json({ ok: true, did: result.did, document: result.document, warnings: result.warnings });
         }
         if (suffix === "/relinquish" && request.method === "POST") {
-          // Same two-way trust as /rotate, same reasoning: self-
-          // contained (every signer this needs is already a current
-          // guardian voluntarily giving up its own standing, not a
-          // new party being handed authority), so the same trusted-
-          // client-or-self-session gate is enough -- see relinquishWard's
-          // own comment for why this is NOT extended to the general
-          // guardian_transfer case.
+          // R2-0.2 hotfix (round-2 audit): this used to authenticate the
+          // WARD's own session and let relinquishWard sign with every
+          // registrar-held guardian's own stored key unasked -- `name` in
+          // the URL is the ward being left, never a required signer for
+          // guardian_relinquish (REQ-7.2-7a), so the ward's session was
+          // never the right thing to check. Same auth split as
+          // /remove-self now: the caller is the GUARDIAN relinquishing,
+          // named by their own session, or explicitly via guardian_did
+          // for a trusted client acting on an already-authenticated
+          // decision of its own.
           const targetName = name ?? "";
           const sessionId = readCookie(request, "gw_session");
-          const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
-          const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
-          if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to relinquish its guardians", 403);
+          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+          let callerDid = sessionDid;
+          if (!callerDid) {
+            const trustedClient = await authenticateOidcClient(request, env);
+            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to relinquish a guardian's standing", 403);
+            const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
+            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
+            callerDid = body.guardian_did;
           }
-          const result = await relinquishWard(env, targetName);
-          return json({ ok: true, did: result.did, document: result.document });
+          const result = await relinquishWard(env, targetName, callerDid as Did);
+          if (result.ok) return json({ ok: true, did: result.did, document: result.document });
+          const proposed = await proposeOperation(env, name, result.pendingOp);
+          return json({ ok: true, pending: true, id: proposed.id, state: proposed.state, message: "this guardian's signature alone doesn't meet removal_threshold -- proposed for the ward's other guardians to countersign (see the registrar API doc §3)" }, 202);
         }
         if (suffix === "/tombstone" && request.method === "POST") {
           // Same two-way trust as /rotate -- self-destruct needs only
@@ -324,39 +332,53 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
           return json({ ok: true, did: result.did, document: result.document });
         }
         if (suffix === "/remove" && request.method === "POST") {
-          // Forced removal -- same two-way trust as /relinquish: the ward's
-          // own session or a trusted client may trigger the attempt, but
-          // the real authority comes from whichever OTHER guardians this
-          // registrar can sign for actually meeting removal_threshold.
+          // R2-0.2 hotfix (round-2 audit): same fix as /relinquish --
+          // the real authority for a forced removal is the ward's OTHER
+          // current guardians (REQ-7.2-7b), never the ward's own
+          // session, which this used to accept alone. The caller is one
+          // of those other guardians, named by their own session or
+          // (for a trusted client) guardian_did in the body.
           const targetName = name ?? "";
+          const body = (await request.json().catch(() => ({}))) as { outgoing_did?: string; guardian_did?: string };
+          if (!body.outgoing_did) return error("outgoing_did is required", 400);
+          const sessionId = readCookie(request, "gw_session");
+          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+          let callerDid = sessionDid;
+          if (!callerDid) {
+            const trustedClient = await authenticateOidcClient(request, env);
+            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to force-remove a guardian", 403);
+            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
+            callerDid = body.guardian_did;
+          }
+          const result = await forceRemoveGuardian(env, targetName, body.outgoing_did as Did, callerDid as Did);
+          if (result.ok) return json({ ok: true, did: result.did, document: result.document });
+          const proposed = await proposeOperation(env, name, result.pendingOp);
+          return json({ ok: true, pending: true, id: proposed.id, state: proposed.state, message: "this guardian's signature alone doesn't meet removal_threshold -- proposed for the ward's other guardians to countersign (see the registrar API doc §3)" }, 202);
+        }
+        if (suffix === "/adopt" && request.method === "POST") {
+          // R2-0.1 hotfix (round-2 audit): this used to authenticate the
+          // INCOMING guardian's own session and take the ward's consent
+          // for granted -- which meant any registered caller could name
+          // ANY guardianless ward (including the bare-domain root, both
+          // live roots had no guardian at all) and have this registrar
+          // sign a guardian_add with that ward's own stored key, no
+          // consent from the ward asked or given. The ward being adopted
+          // is the party whose consent this can't do without, so the
+          // auth gate is now the same two-way trust as /relinquish and
+          // /remove: a session (or trusted client) for `name` itself,
+          // with the incoming guardian's DID named explicitly in the
+          // body instead of implied by who's logged in.
+          if (name === null) return error("the bare-domain root identity can't be adopted through this endpoint", 403);
+          const targetName = name;
           const sessionId = readCookie(request, "gw_session");
           const sessionWardDid = sessionId ? await resolveSession(env, sessionId) : null;
           const trustedClient = sessionWardDid ? null : await authenticateOidcClient(request, env);
           if (sessionWardDid !== didFor(name, env.REGISTRAR_DOMAIN) && !trustedClient) {
-            return error("must be signed in as this identity (or a trusted client acting on its behalf) to force-remove one of its guardians", 403);
+            return error("must be signed in as this identity (or a trusted client acting on its behalf) to adopt a guardian", 403);
           }
-          const body = (await request.json()) as { outgoing_did?: string };
-          if (!body.outgoing_did) return error("outgoing_did is required", 400);
-          const result = await forceRemoveGuardian(env, targetName, body.outgoing_did);
-          return json({ ok: true, did: result.did, document: result.document });
-        }
-        if (suffix === "/adopt" && request.method === "POST") {
-          // Same auth split as /remove-self: the caller adopting the ward
-          // is a different identity than `name` (the ward being adopted),
-          // so a session identifies the caller directly, and a trusted
-          // client must name one explicitly via guardian_did.
-          const targetName = name ?? "";
-          const sessionId = readCookie(request, "gw_session");
-          const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
-          let incomingDid = sessionDid;
-          if (!incomingDid) {
-            const trustedClient = await authenticateOidcClient(request, env);
-            if (!trustedClient) return error("must be signed in, or a trusted client naming guardian_did, to adopt a ward", 403);
-            const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
-            if (!body.guardian_did) return error("guardian_did is required for a trusted client", 400);
-            incomingDid = body.guardian_did;
-          }
-          const result = await adoptWard(env, targetName, incomingDid);
+          const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
+          if (!body.guardian_did) return error("guardian_did is required", 400);
+          const result = await adoptWard(env, targetName, body.guardian_did);
           return json({ ok: true, did: result.did, document: result.document });
         }
       } catch (e) {
@@ -506,9 +528,6 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
     }
     if (path === "/account/email" && request.method === "POST") {
       return handleAccountEmail(request, env);
-    }
-    if (path === "/account/relinquish" && request.method === "POST") {
-      return handleAccountRelinquish(request, env);
     }
     if (path === "/account/tombstone" && request.method === "GET") {
       return handleAccountTombstoneConfirm(request, env);

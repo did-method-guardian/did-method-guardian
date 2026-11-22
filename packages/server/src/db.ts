@@ -374,6 +374,11 @@ export async function deleteLoginSession(env: Env, sessionId: string): Promise<v
   await env.DB.prepare("DELETE FROM login_sessions WHERE session_id = ?").bind(sessionId).run();
 }
 
+/** R2-0.5 (round-2 audit): every session for one ward, not just one by id -- used when an externally-produced rotation (registrar.ts's submitOperation, after accepting a custodial_rotate it didn't itself sign) means whoever's holding this ward's OLD login secret might not be its legitimate owner any more. */
+export async function deleteAllLoginSessionsForWard(env: Env, wardDid: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM login_sessions WHERE ward_did = ?").bind(wardDid).run();
+}
+
 export interface EmailForwardingRow {
   did: string;
   forward_to: string;
