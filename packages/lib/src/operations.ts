@@ -64,7 +64,20 @@ export function unsecuredDocument<T extends { proof?: unknown; sigs?: unknown; t
   return rest;
 }
 
-const PROOF_CONFIG_PURPOSE = "assertionMethod" as const;
+/**
+ * WS-5.4 (audit, DECIDED): `capabilityInvocation` for a ward/guardian/
+ * registrar signature authorizing an operation (including a proof of
+ * possession -- the key it names is itself becoming, or already is, a
+ * `capabilityInvocation` verification method per REQ-3-2), `assertionMethod`
+ * for a registrar's genesis attestation, acceptance receipt, or log-head
+ * statement -- a statement ABOUT the log, never an action against it.
+ * `createProof`'s default covers every operation-signing call site in this
+ * file (the overwhelming majority); the few assertionMethod producers
+ * (signRegistrarAttestation, signReceipt, signLogHeadStatement) pass it
+ * explicitly.
+ */
+const ALLOWED_PROOF_PURPOSES = ["assertionMethod", "capabilityInvocation"] as const;
+type ProofPurpose = (typeof ALLOWED_PROOF_PURPOSES)[number];
 
 /**
  * ecdsa-jcs-2019 (W3C Data Integrity ECDSA Cryptosuites v1.0): signing
@@ -74,9 +87,15 @@ const PROOF_CONFIG_PURPOSE = "assertionMethod" as const;
  * own input as part of the ordinary signing operation, one level
  * deeper). Verified directly against the W3C spec text, not assumed.
  */
-export async function createProof(unsecuredDoc: unknown, verificationMethod: string, privateKeyB64url: string, created: string = new Date().toISOString()): Promise<DataIntegrityProof> {
+export async function createProof(
+  unsecuredDoc: unknown,
+  verificationMethod: string,
+  privateKeyB64url: string,
+  created: string = new Date().toISOString(),
+  proofPurpose: ProofPurpose = "capabilityInvocation",
+): Promise<DataIntegrityProof> {
   // WS-3.1 (audit): canonicalize now checks JCS-safety itself (crypto.ts), on everything it's given -- no separate call needed here.
-  const proofConfig = { type: "DataIntegrityProof" as const, cryptosuite: "ecdsa-jcs-2019" as const, verificationMethod, proofPurpose: PROOF_CONFIG_PURPOSE, created };
+  const proofConfig = { type: "DataIntegrityProof" as const, cryptosuite: "ecdsa-jcs-2019" as const, verificationMethod, proofPurpose, created };
   const proofConfigHash = await sha256Bytes(new TextEncoder().encode(canonicalize(proofConfig)));
   const documentHash = await sha256Bytes(new TextEncoder().encode(canonicalize(unsecuredDoc)));
   const signingInput = new Uint8Array(proofConfigHash.length + documentHash.length);
@@ -97,19 +116,27 @@ const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/;
  * hashed the real values) -- they carry meaning under the W3C Data
  * Integrity model, and createProof never produces anything but this
  * fixed shape. Without this, a proof with an unrecognized cryptosuite, a
- * proofPurpose other than this implementation's one current value (WS-
- * 5.4 decided a future per-role split -- update PROOF_CONFIG_PURPOSE's
- * use here to a per-role expected value once that split is actually
- * implemented in code, not just decided), a created that isn't a real
- * ISO-8601 UTC instant, or an unexpected extra field would only ever be
- * caught indirectly, by relying on the signature check to happen to fail
- * -- which it does today only because nothing has a reason to sign a
- * different shape, not because anything actually checks for one.
+ * proofPurpose other than one of this method's two allowed values (WS-5.4),
+ * a created that isn't a real ISO-8601 UTC instant, or an unexpected extra
+ * field would only ever be caught indirectly, by relying on the signature
+ * check to happen to fail -- which it does today only because nothing has
+ * a reason to sign a different shape, not because anything actually checks
+ * for one.
+ *
+ * This checks only that `proofPurpose` is one of the two values this
+ * method ever produces (WS-5.4) -- not that it's the SPECIFIC one a given
+ * proof's own role requires (an operation signature using
+ * `capabilityInvocation`, a registrar attestation/receipt/log-head using
+ * `assertionMethod`). That role-specific check would need every caller of
+ * this function to say which role it expects, which no caller does today;
+ * left as a known, documented gap rather than guessed at here.
  */
 export function validateProofShape(proof: DataIntegrityProof): { valid: boolean; reason?: string } {
   if (proof.type !== "DataIntegrityProof") return { valid: false, reason: `proof.type must be "DataIntegrityProof"` };
   if (proof.cryptosuite !== "ecdsa-jcs-2019") return { valid: false, reason: `proof.cryptosuite must be "ecdsa-jcs-2019"` };
-  if (proof.proofPurpose !== PROOF_CONFIG_PURPOSE) return { valid: false, reason: `proof.proofPurpose must be "${PROOF_CONFIG_PURPOSE}"` };
+  if (!ALLOWED_PROOF_PURPOSES.includes(proof.proofPurpose as ProofPurpose)) {
+    return { valid: false, reason: `proof.proofPurpose must be one of: ${ALLOWED_PROOF_PURPOSES.join(", ")}` };
+  }
   if (typeof proof.verificationMethod !== "string" || proof.verificationMethod.length === 0) {
     return { valid: false, reason: "proof.verificationMethod must be a non-empty string" };
   }
@@ -148,6 +175,24 @@ async function verifyProof(unsecuredDoc: unknown, proof: DataIntegrityProof, pub
 export function verificationMethodDid(vm: string): Did {
   const i = vm.indexOf("#");
   return i >= 0 ? vm.slice(0, i) : vm;
+}
+
+/**
+ * Audit WS-5.3: a `#key-<N>` fragment is this method's own `verificationMethod`
+ * id for an ordinary signer (REQ-3-1, REQ-6-7) -- it names WHICH of that
+ * signer's current keys produced the proof, not merely which DID. Returns
+ * `null` for anything that doesn't parse as exactly that shape (no fragment
+ * at all, a non-numeric fragment, a negative or non-integer index, or a
+ * `did:key:...` self-contained PoP id, which this never applies to) --
+ * callers MUST treat `null` as "this proof can never be matched to a key by
+ * index," never as index 0.
+ */
+export function keyIndexFromVerificationMethod(vm: string): number | null {
+  const i = vm.indexOf("#key-");
+  if (i < 0) return null;
+  const rest = vm.slice(i + 5);
+  if (!/^\d+$/.test(rest)) return null;
+  return Number(rest);
 }
 
 /**
@@ -210,9 +255,17 @@ export async function verifySignerProof(unsecuredDoc: unknown, proofs: DataInteg
 export async function verifyAgainstKeys(unsecuredDoc: unknown, proofs: DataIntegrityProof[], did: Did, keys: string[]): Promise<boolean> {
   const candidates = proofs.filter((p) => verificationMethodDid(p.verificationMethod) === did);
   for (const proof of candidates) {
-    for (const pk of keys) {
-      if (await verifyProof(unsecuredDoc, proof, pk)) return true;
-    }
+    // Audit WS-5.3: the verificationMethod's own #key-<N> fragment names
+    // WHICH of `did`'s current keys this proof claims to be -- checked
+    // against exactly that key, never every key in the list regardless of
+    // what the fragment claims. A fragment that doesn't parse as #key-<N>,
+    // or whose N is out of range for `keys`, can never match by
+    // construction: this is still every single-key identity's ordinary
+    // case (index 0 against a one-element keys array), not a new failure
+    // mode for anything that already worked.
+    const index = keyIndexFromVerificationMethod(proof.verificationMethod);
+    if (index === null || index < 0 || index >= keys.length) continue;
+    if (await verifyProof(unsecuredDoc, proof, keys[index])) return true;
   }
   return false;
 }
@@ -261,7 +314,7 @@ export async function signCustodialCreate(
  */
 export async function signRegistrarAttestation(partial: Omit<CustodialCreateOp, "proof">, registrarDid: Did, registrarPrivateKey: string, created?: string): Promise<DataIntegrityProof> {
   const unsecuredDoc = unsecuredDocument(partial as any);
-  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, created);
+  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, created, "assertionMethod");
 }
 
 /**
@@ -275,7 +328,7 @@ export async function signRegistrarAttestation(partial: Omit<CustodialCreateOp, 
  * matching read side).
  */
 export async function signReceipt(unsecuredDoc: unknown, registrarDid: Did, registrarPrivateKey: string, acceptedAt: string): Promise<DataIntegrityProof> {
-  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, acceptedAt);
+  return createProof(unsecuredDoc, `${registrarDid}#key-0`, registrarPrivateKey, acceptedAt, "assertionMethod");
 }
 
 /**

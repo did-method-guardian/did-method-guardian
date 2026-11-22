@@ -800,7 +800,12 @@ async function signRawProofConfig(unsecuredDoc: unknown, proofConfig: { type: "D
   const popProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
   const forgedWardProof = await signRawProofConfig(
     unsecuredDoc,
-    { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod: `${badPurposeDid}#key-0`, proofPurpose: "capabilityInvocation", created: new Date().toISOString() },
+    // WS-5.4 (audit): capabilityInvocation and assertionMethod are both
+    // now valid proofPurpose values this method actually produces (one
+    // for an operation signature, the other for a registrar attestation/
+    // receipt/log-head) -- "authentication" is neither, so it stays a
+    // genuinely invalid value regardless of which role this proof plays.
+    { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod: `${badPurposeDid}#key-0`, proofPurpose: "authentication", created: new Date().toISOString() },
     ward.privateKey,
   );
   const rotate = { ...partial, proof: [popProof, forgedWardProof] } as unknown as CustodialRotateOp;
@@ -808,7 +813,7 @@ async function signRawProofConfig(unsecuredDoc: unknown, proofConfig: { type: "D
     "invalid",
     "proof_wrong_proof_purpose",
     [{ cid: genesisCid, op: genesis }, { cid: await cidFor(rotate), op: rotate }],
-    "REJECT: the ward's own proof over the rotation carries proofPurpose capabilityInvocation, not this implementation's one current value (assertionMethod) -- a genuinely valid signature over that exact content, which validateProofShape (WS-1.9) must still refuse.",
+    "REJECT: the ward's own proof over the rotation carries proofPurpose \"authentication\", neither of this method's two allowed values (capabilityInvocation, assertionMethod; WS-5.4) -- a genuinely valid signature over that exact content, which validateProofShape (WS-1.9) must still refuse.",
     { [badPurposeDid]: ward.publicKey, ...registrarKnownKeys },
     "reject",
   );
@@ -829,7 +834,7 @@ async function signRawProofConfig(unsecuredDoc: unknown, proofConfig: { type: "D
   const popProof = await createProof(unsecuredDoc, popVerificationMethod(newKey.publicKey), newKey.privateKey);
   const forgedWardProof = await signRawProofConfig(
     unsecuredDoc,
-    { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod: `${badCreatedDid}#key-0`, proofPurpose: "assertionMethod", created: "not-a-real-timestamp" },
+    { type: "DataIntegrityProof", cryptosuite: "ecdsa-jcs-2019", verificationMethod: `${badCreatedDid}#key-0`, proofPurpose: "capabilityInvocation", created: "not-a-real-timestamp" },
     ward.privateKey,
   );
   const rotate = { ...partial, proof: [popProof, forgedWardProof] } as unknown as CustodialRotateOp;

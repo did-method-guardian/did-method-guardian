@@ -150,7 +150,14 @@ export interface DataIntegrityProof {
    * same as every other signature this method ever checked).
    */
   verificationMethod: string;
-  proofPurpose: "assertionMethod";
+  /**
+   * WS-5.4 (audit, DECIDED): `capabilityInvocation` for a ward/guardian/
+   * registrar signature authorizing an operation (proof of possession
+   * included); `assertionMethod` for a registrar's genesis attestation,
+   * acceptance receipt, or log-head statement -- a statement ABOUT the
+   * log, not an action against it.
+   */
+  proofPurpose: "assertionMethod" | "capabilityInvocation";
   created: string; // ISO 8601
   proofValue: string; // multibase base58btc (REQ-6-4), raw P-256 r||s, low-S
 }

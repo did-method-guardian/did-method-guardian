@@ -28,8 +28,9 @@ test("audit WS-1.9: validateProofShape rejects an unrecognized cryptosuite", () 
   assert.equal(validateProofShape(validProof({ cryptosuite: "eddsa-rdfc-2022" as any })).valid, false);
 });
 
-test("audit WS-1.9: validateProofShape rejects a proofPurpose other than this implementation's one current value", () => {
-  assert.equal(validateProofShape(validProof({ proofPurpose: "capabilityInvocation" as any })).valid, false);
+test("audit WS-5.4: validateProofShape accepts either of this method's two allowed proofPurpose values, rejects anything else", () => {
+  assert.equal(validateProofShape(validProof({ proofPurpose: "assertionMethod" })).valid, true);
+  assert.equal(validateProofShape(validProof({ proofPurpose: "capabilityInvocation" as any })).valid, true);
   assert.equal(validateProofShape(validProof({ proofPurpose: "authentication" as any })).valid, false);
 });
 

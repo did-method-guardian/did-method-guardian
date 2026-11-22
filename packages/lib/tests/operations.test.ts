@@ -10,6 +10,7 @@ import {
   verifyCustodialRotate,
   signRegistrarAttestation,
   verifySignerProof,
+  verifyAgainstKeys,
   unsecuredDocument,
   createProof,
   cidFor,
@@ -400,6 +401,61 @@ test("REQ-4-2: verifySignerProof's own asOf parameter resolves a signer's key as
 
   assert.equal(await verifySignerProof(unsecuredDoc, op.proof, signerDid, resolve, signedAt), true, "verified as of when it was actually signed, against the key valid then");
   assert.equal(await verifySignerProof(unsecuredDoc, op.proof, signerDid, resolve), false, "verified with no asOf (i.e. 'now', after rotation) against the signer's current key must fail -- it's genuinely a different key");
+});
+
+test("audit WS-5.4: an operation signature (ward PoP, ward authorizing signature, registrar attestation all included in one genesis) uses capabilityInvocation except the registrar's own attestation, which uses assertionMethod", async () => {
+  const ward = await generateKeypair();
+  const registrar = await generateKeypair();
+
+  const partial: Omit<CustodialCreateOp, "proof" | "creator"> = {
+    type: "custodial_create",
+    did: "did:guardian:example.com:alice",
+    name: "alice",
+    operationalKeys: [ward.publicKey],
+    services: {},
+    outgoing: [],
+    incoming: [],
+    prev: null,
+  };
+  const withCreator = { ...partial, creator: REGISTRAR_DID };
+  const signed = await signCustodialCreate(withCreator, {}, { [ward.publicKey]: ward.privateKey });
+  const attestation = await signRegistrarAttestation(withCreator, REGISTRAR_DID, registrar.privateKey);
+
+  for (const p of signed.proof) {
+    assert.equal(p.proofPurpose, "capabilityInvocation", `ward proof ${p.verificationMethod} must use capabilityInvocation`);
+  }
+  assert.equal(attestation.proofPurpose, "assertionMethod", "the registrar's own genesis attestation must use assertionMethod, not capabilityInvocation");
+});
+
+// --- WS-5.3 (audit): verificationMethod's #key-<N> fragment is checked against that specific key, not tried against every key in the array ---
+
+test("audit WS-5.3: verifyAgainstKeys checks the proof's own claimed #key-<N> index, not every key in the array", async () => {
+  const keyA = await generateKeypair();
+  const keyB = await generateKeypair();
+  const did: Did = "did:guardian:example.com:alice";
+  const unsecuredDoc = { hello: "world" };
+
+  // A proof genuinely signed by keyB, correctly labeled #key-1 (its real
+  // index in a hypothetical two-key array [keyA, keyB]).
+  const proofKeyB = await createProof(unsecuredDoc, `${did}#key-1`, keyB.privateKey);
+  assert.equal(await verifyAgainstKeys(unsecuredDoc, [proofKeyB], did, [keyA.publicKey, keyB.publicKey]), true, "a correctly-indexed proof must still verify");
+
+  // The same proof, mislabeled #key-0 -- must be rejected even though
+  // keyB's own signature bytes are perfectly valid, because keyB is not
+  // the key at index 0 (that's keyA). A verifier that instead tried every
+  // key regardless of the claimed index would wrongly accept this.
+  const mislabeled = { ...proofKeyB, verificationMethod: `${did}#key-0` };
+  assert.equal(await verifyAgainstKeys(unsecuredDoc, [mislabeled], did, [keyA.publicKey, keyB.publicKey]), false, "a proof claiming the wrong key index must be rejected, not matched against a different key in the array");
+});
+
+test("audit WS-5.3: verifyAgainstKeys rejects a verificationMethod with no #key-<N> fragment, or an out-of-range index, rather than falling back to try-every-key", async () => {
+  const key = await generateKeypair();
+  const did: Did = "did:guardian:example.com:alice";
+  const unsecuredDoc = { hello: "world" };
+  const proof = await createProof(unsecuredDoc, `${did}#key-0`, key.privateKey);
+
+  assert.equal(await verifyAgainstKeys(unsecuredDoc, [{ ...proof, verificationMethod: did }], did, [key.publicKey]), false, "no fragment at all must not fall back to matching anything");
+  assert.equal(await verifyAgainstKeys(unsecuredDoc, [{ ...proof, verificationMethod: `${did}#key-5` }], did, [key.publicKey]), false, "an index past the end of the array must be rejected, not clamped or wrapped");
 });
 
 test("cidFor is deterministic for identical content", async () => {

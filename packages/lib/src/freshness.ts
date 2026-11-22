@@ -74,7 +74,7 @@ export async function signLogHeadStatement(
   registrarPrivateKey: string,
 ): Promise<LogHeadStatement> {
   const unsecuredDoc = unsecuredDocument(partial as any);
-  const proof = await createProof(unsecuredDoc, `${partial.registrar}#key-0`, registrarPrivateKey);
+  const proof = await createProof(unsecuredDoc, `${partial.registrar}#key-0`, registrarPrivateKey, undefined, "assertionMethod");
   return { ...partial, proof };
 }
 

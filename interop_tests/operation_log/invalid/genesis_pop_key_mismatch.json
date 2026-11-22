@@ -2,18 +2,18 @@
   "note": "Fix 1 (PoP bypass): operationalKeys names a key the attacker does not hold; the only proof of possession attached is for a DIFFERENT key the attacker actually controls. Must reject -- a valid proof for the wrong key is not proof of possession of the right one.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com": "zDnaeo7UtsyU5dzZaGyBHj7vyHK8XvXjLzNeg6bVaVceEPGz3"
+    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmWYuNY5qe7PkfC591KkWGyjN7xEcRdhfUXzP441f1fPiB",
+      "cid": "zQmbHYVbL8ta2DRoexYpDgVTqg9Shj3YvtiS2LPSBzB6H5G",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:keyswap",
         "name": "keyswap",
         "operationalKeys": [
-          "zDnaeWVM8Lid6weTGqHhmU6u2YmKrBeyky8d37cxyrGwajYQQ"
+          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
         ],
         "services": {},
         "outgoing": [],
@@ -24,18 +24,18 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaey5HYd5L73XtkscpoaWaHWu5ysZbbK1K2fzBtaaHJWp9V#zDnaey5HYd5L73XtkscpoaWaHWu5ysZbbK1K2fzBtaaHJWp9V",
-            "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:46:12.940Z",
-            "proofValue": "z4jYJNfEnNfjAuUgymt2CUthd8bKbFsX5MsikKbXAuiu71a8ntd8g1SEwjUy4mjFpxGCiPz8EZHB2qyS77oECzQct"
+            "verificationMethod": "did:key:zDnaeiv72zuqwujh8PPCwRrRFjGhNRaCbwK3JW3k8yyWCx18k#zDnaeiv72zuqwujh8PPCwRrRFjGhNRaCbwK3JW3k8yyWCx18k",
+            "proofPurpose": "capabilityInvocation",
+            "created": "2026-11-22T03:06:17.664Z",
+            "proofValue": "z4DPSVtzAKeJDorNPJ2XnbJzBo13tknhyRidkE9BjfBWp7ra1hVc55tr43SWRNizECpKudGgKjHfLhtuAcpUQKv7J"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T00:46:12.940Z",
-            "proofValue": "z2xbRpNeJRLMAdSRQUprxcuGbrrEZBc27mv9vXEAEHR4d4DLG7rfbfLytLR73HQR2hDPksR8ujL4YCWyxpQmPZ9gd"
+            "created": "2026-11-22T03:06:17.664Z",
+            "proofValue": "ztSq9uYQ1hjarqHAEvkvspfeqZ3XKjf4gHWJukTpSbpkkwEBvkiVGNaAhfAriMZAsyR531Aapkyc1LAvDj3EiAB4"
           }
         ]
       }
