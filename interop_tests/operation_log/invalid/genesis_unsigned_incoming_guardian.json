@@ -2,19 +2,19 @@
   "note": "REJECT: 'board-a' is named as an incoming guardian directly at genesis (REQ-7.1-1, v0.3) but carries no proof at all -- establishing a guardian this way still requires that guardian's consent.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:board-a": "zDnaeR814sJYRj2dJ3CmAr2wLkxLgYb4oKyxQias2ywgcLT2c",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:example.com:board-a": "zDnaeqaF9sybGek9AiVNG5JRizW8cqBQGvMjAmBya7AKFqF8G",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmYHiYYUkWt7v6ZMiyFymictnrTruEPg1x4y97swvyTLNN",
+      "cid": "zQmZ7heQbMp3MbhbkVTXvT4efAQzCma1kJJwgtfMr8Hmgha",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:unsigned",
         "name": "unsigned",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {},
         "outgoing": [],
@@ -27,18 +27,18 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.661Z",
-            "proofValue": "z2mkRwbQc3kwyK8u6jz69k6grPrSHZ3vDihYvpgNL7Nm56vr1C9pN3r2rbwSKVtMzSG4fipMpDbG7VcsFCcJST13c"
+            "created": "2026-11-22T03:19:52.337Z",
+            "proofValue": "z4LifdPvKddP2HU65YW5zdPdc3RzVoDwKCNapYDbLMajPbQRfAYfST2cNwvNQaMfRPQBGZM1DXnAYCqA5tobAc7yS"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.661Z",
-            "proofValue": "z4b7CMDezrqzH8hU4KvTeNMGWTusGhXX9juKvk6hU8KYDQ21isW8UUTZJSdNdzyWosVC4NonmohL32RJHbkyeo5w1"
+            "created": "2026-11-22T03:19:52.337Z",
+            "proofValue": "zzS5VuYLSFYQ4bt1beoWDrchNH2mtrNDitXhs8MNxHmJjfAWQiowZFdMkKVQUEC3YqXVFU9XwdpjdnacAAQxwb13"
           }
         ]
       }

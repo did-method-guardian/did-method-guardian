@@ -179,6 +179,8 @@ export interface CustodialCreateOp {
   policy?: Partial<GuardianPolicy>;
   /** WS-5.8 (audit, DECIDED): the "link, don't move" domain-migration story (spec §9) names alsoKnownAs as its own mechanism, but nothing ever let a ward actually set it until now. Optional; omitted or absent means none declared yet. */
   alsoKnownAs?: string[];
+  /** WS-5.11 (audit): the same pinning convenience REQ-12-4 gives guardian_add's own `anchor` field, extended to genesis's `incoming` (REQ-7.1-1) -- a subset (or all, or none) of incoming's own DIDs mapped to that guardian's anchor. Optional; a key not present in `incoming` is ignored. */
+  incomingAnchors?: Record<Did, string>;
 }
 
 export interface CustodialRotateOp {

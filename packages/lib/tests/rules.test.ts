@@ -58,6 +58,7 @@ async function signProofs(payload: unknown, signerKeys: Record<Did, string>, sig
 test("REQ-7.1-1: genesis with a non-empty incoming guardian who never co-signed is rejected", () => {
   const result = checkGenesisShape({
     did: "did:guardian:acme.com:alice",
+    name: "alice",
     incoming: ["did:guardian:example.com:board"],
     proof: [],
     prev: null,
@@ -72,7 +73,7 @@ test("REQ-7.1-1: genesis with a non-empty incoming guardian who never co-signed 
 test("REQ-7.1-1 (v0.3, relaxed): genesis with a non-empty incoming guardian who co-signed passes shape -- a guardian may now be established directly at genesis", async () => {
   const boardDid: Did = "did:guardian:example.com:board";
   const board = await generateKeypair();
-  const partial = { did: "did:guardian:acme.com:alice" as Did, incoming: [boardDid], prev: null, operationalKeys: ["pk"], services: {}, creator: "did:guardian:acme.com" as Did };
+  const partial = { did: "did:guardian:acme.com:alice" as Did, name: "alice", incoming: [boardDid], prev: null, operationalKeys: ["pk"], services: {}, creator: "did:guardian:acme.com" as Did };
   const proof = await signProofs(partial, { [boardDid]: board.privateKey }, [boardDid]);
   const result = checkGenesisShape({ ...partial, proof });
   assert.equal(result.valid, true, result.reason);
@@ -81,6 +82,7 @@ test("REQ-7.1-1 (v0.3, relaxed): genesis with a non-empty incoming guardian who 
 test("REQ-7.1-2: genesis with non-null prev is rejected", () => {
   const result = checkGenesisShape({
     did: "did:guardian:acme.com:alice",
+    name: "alice",
     incoming: [],
     proof: [],
     prev: "some-cid",
@@ -95,6 +97,7 @@ test("REQ-7.1-2: genesis with non-null prev is rejected", () => {
 test("REQ-7.1-4: genesis with no creator is rejected", () => {
   const result = checkGenesisShape({
     did: "did:guardian:acme.com:alice",
+    name: "alice",
     incoming: [],
     proof: [],
     prev: null,
@@ -108,6 +111,7 @@ test("REQ-7.1-4: genesis with no creator is rejected", () => {
 test("Fix 2: genesis with no did at all is rejected", () => {
   const result = checkGenesisShape({
     did: "" as Did,
+    name: null,
     incoming: [],
     proof: [],
     prev: null,
@@ -122,6 +126,7 @@ test("Fix 2: genesis with no did at all is rejected", () => {
 test("REQ-7.1-1/2/3/4: a conformant genesis (empty incoming, null prev, full key material, a creator) is accepted", () => {
   const result = checkGenesisShape({
     did: "did:guardian:acme.com:alice",
+    name: "alice",
     incoming: [],
     proof: [],
     prev: null,
@@ -135,6 +140,7 @@ test("REQ-7.1-1/2/3/4: a conformant genesis (empty incoming, null prev, full key
 test("audit WS-1.13: checkGenesisShape rejects a missing proof field with a clean message, instead of throwing when something later iterates over it", () => {
   const result = checkGenesisShape({
     did: "did:guardian:acme.com:alice",
+    name: "alice",
     incoming: [],
     proof: undefined as any, // a wire payload that simply omitted `proof` entirely
     prev: null,
@@ -147,9 +153,24 @@ test("audit WS-1.13: checkGenesisShape rejects a missing proof field with a clea
 });
 
 test("audit WS-1.13: checkGenesisShape rejects a non-array incoming/operationalKeys the same way", () => {
-  const base = { did: "did:guardian:acme.com:alice" as Did, proof: [], prev: null, services: {}, creator: "did:guardian:acme.com" as Did };
+  const base = { did: "did:guardian:acme.com:alice" as Did, name: "alice", proof: [], prev: null, services: {}, creator: "did:guardian:acme.com" as Did };
   assert.equal(checkGenesisShape({ ...base, incoming: "not-an-array" as any, operationalKeys: ["pk"] }).valid, false);
   assert.equal(checkGenesisShape({ ...base, incoming: [], operationalKeys: "not-an-array" as any }).valid, false);
+});
+
+test("audit WS-5.9: checkGenesisShape rejects a genesis whose name doesn't match the name encoded in did", () => {
+  const result = checkGenesisShape({
+    did: "did:guardian:acme.com:alice",
+    name: "mallory",
+    incoming: [],
+    proof: [],
+    prev: null,
+    operationalKeys: ["pk"],
+    services: {},
+    creator: "did:guardian:acme.com",
+  });
+  assert.equal(result.valid, false);
+  assert.match(result.reason!, /REQ-7\.1-3/);
 });
 
 // --- REQ-2-1: name syntax ------------------------------------------------

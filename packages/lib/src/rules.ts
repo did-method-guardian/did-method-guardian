@@ -16,6 +16,7 @@
 // acceptance).
 
 import { unsecuredDocument, verificationMethodDid, verifyAgainstKeys, verifyPop, verifySignerProof } from "./operations.js";
+import { parseDid } from "./resolve.js";
 import type { KeyResolver } from "./operations.js";
 import { meetsThreshold } from "./quorum.js";
 import { MAX_SUPPORTED_POLICY_VERSION, validatePolicy } from "./types.js";
@@ -128,6 +129,7 @@ export interface ShapeResult {
  */
 export function checkGenesisShape(op: {
   did: Did;
+  name: string | null;
   incoming: Did[];
   proof: DataIntegrityProof[];
   prev: unknown;
@@ -136,6 +138,23 @@ export function checkGenesisShape(op: {
   creator?: Did;
 }): ShapeResult {
   if (!op.did) return { valid: false, reason: "Fix 2: did must be present" };
+  // WS-5.9 (audit): `name` is never independently trusted -- the only
+  // genuine source of truth for a genesis's own name is `did` itself
+  // (REQ-7.1-10 already binds `did` to this registrar's domain and
+  // name). Nothing in verifyCustodialCreate ever checked `name` against
+  // `did` before this -- a third-party verifier calling it directly
+  // (rather than going through this reference registrar's own separate
+  // acceptGenesis check) had no way to catch a genesis whose `name`
+  // field simply lied about what `did` actually said.
+  let parsedName: string | null;
+  try {
+    parsedName = parseDid(op.did).name;
+  } catch {
+    return { valid: false, reason: `Fix 2: did "${op.did}" is not a well-formed did:guardian identifier` };
+  }
+  if (parsedName !== op.name) {
+    return { valid: false, reason: `REQ-7.1-3: name "${op.name}" does not match the name encoded in did "${op.did}"` };
+  }
   // WS-1.13 (audit): a wire payload is untrusted JSON, not a value this
   // type signature actually guarantees -- a missing or wrongly-typed
   // `incoming`/`proof`/`operationalKeys` previously reached the `for`

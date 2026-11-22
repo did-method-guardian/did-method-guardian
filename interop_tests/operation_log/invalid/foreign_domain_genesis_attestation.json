@@ -2,19 +2,19 @@
   "note": "REJECT: genesis for example.com:foreign is attested by did:guardian:evil.example#key-0 -- a real, validly-signed attestation, but not from example.com's own domain root (WS-4.4/REQ-7.1-5).",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:evil.example": "zDnaeox3JTKqBGwbQDXdEujXakRTHsFwrvQ21CQNVVNhNgT7G",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:evil.example": "zDnaeaRDebLZNW1HgNFzv3KQRgVgTS3nxUmeRMvg7e33W7df2",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmeG8Jpiv5yRoaYuqcRx7QnJqCvWLcH55k3oS4SRyeBkm7",
+      "cid": "zQmeo2u9CS75dFZxuKt2iXVWh9TPqnzRSHP72RaV2DyZiHA",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:foreign",
         "name": "foreign",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {},
         "outgoing": [],
@@ -25,18 +25,18 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.666Z",
-            "proofValue": "z4MKzmm4xuVAMiL848CzxqgDvbVGfgZ3A1KcYLLPuTpL3BA6LDEYAk9DcNXKtpzJEy39voAxikDww4ngnVK35HiqY"
+            "created": "2026-11-22T03:19:52.342Z",
+            "proofValue": "z4vcpT5ycSCG2W1qQysKi9nh8PTNXDWwv3WjRzYPrcKAYZ5BN6y6Ca3iTD8r7HDPzVqz9kXeMnwsQAjhYNFPGP6iJ"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:evil.example#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.666Z",
-            "proofValue": "ziwBBnBPsfaERmLXXSPmwRbYeJgrt7TwJFDLBLhjvvTDUYbXHsqsqrKEMbfy2knbHrHeSFvnyueFtByicvTfhi1r"
+            "created": "2026-11-22T03:19:52.342Z",
+            "proofValue": "z3htKoMBmSrv5H5Vd3vaRzXt1cz53EvhvTjaVyFyKcEgDNXfHepJUnfbGkmmndkkgajZmrTXPPxyvn3cuRvqTTebc"
           }
         ]
       }

@@ -2,19 +2,19 @@
   "note": "REJECT: the ward's own signature over the rotation is the mathematically-equivalent high-S counterpart of a valid signature -- ECDSA malleability must not produce a second valid form (Fix 3).",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:highs": "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:example.com:highs": "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmah19KPVHBYZpLjWwBfEkjCf7VL4jHnBP77Vp6ABzyEB5",
+      "cid": "zQmYhKgU88Xsp5hbT8NZyBqUpjmeyQGcxUW31GYtLPj58GE",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:highs",
         "name": "highs",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {},
         "outgoing": [],
@@ -25,47 +25,47 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.665Z",
-            "proofValue": "z3mtREVoKA4xuzETuPmJd1EfEwFRxoDj9gUCT18WR9svAtzB5kDy7fP2XvW8PqE9YMiVmSdUoVas1GvMY21DNpLtz"
+            "created": "2026-11-22T03:19:52.341Z",
+            "proofValue": "z3g1omkkuvyJ2rqGVmRBzUwwj7UTmfVg76dvjX4ULRKpPciskBGKZhuN3S9UGo4aWaBKL7FwEY6SbWiu45hj5kEGK"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.665Z",
-            "proofValue": "z2NbYTLfrYsWspNW45NUYBWven9Z4Uqrbq732gY4o6H3YzkZwDZussVzgaVrCfryDfctBkTETtsNLrn4Cp4eK8s3W"
+            "created": "2026-11-22T03:19:52.341Z",
+            "proofValue": "z2ovyvDUyaWALKfhfNftM2QeHfKiNf1ZzG6mVzemYRoHicYHy1N6rWsnayFJ9rqdy214iCpkizpryPd7XkXhA9bRR"
           }
         ]
       }
     },
     {
-      "cid": "zQmPfK5PmokKVVQ69Bmk5TdBwZh1dbY1g9sEPS1ePYAdw8W",
+      "cid": "zQmchG9T5ERkiku4EGjbpZAd7A16RPHyFTD4poWPMXh2z4m",
       "op": {
         "type": "custodial_rotate",
         "operationalKeys": [
-          "zDnaempzYKgRG1EXBTHLvBB7hPW9goeqk6EiQGoC296EKud5H"
+          "zDnaeumRaSvoXzuKK5SPGWEPtdgra4UsegzCRLqYcAtxJnKTS"
         ],
         "services": {},
-        "prev": "zQmah19KPVHBYZpLjWwBfEkjCf7VL4jHnBP77Vp6ABzyEB5",
+        "prev": "zQmYhKgU88Xsp5hbT8NZyBqUpjmeyQGcxUW31GYtLPj58GE",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaempzYKgRG1EXBTHLvBB7hPW9goeqk6EiQGoC296EKud5H#zDnaempzYKgRG1EXBTHLvBB7hPW9goeqk6EiQGoC296EKud5H",
+            "verificationMethod": "did:key:zDnaeumRaSvoXzuKK5SPGWEPtdgra4UsegzCRLqYcAtxJnKTS#zDnaeumRaSvoXzuKK5SPGWEPtdgra4UsegzCRLqYcAtxJnKTS",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.666Z",
-            "proofValue": "z4GKqRKSC8ZpfkifNaDHE3KUiS8yVT9bayDu8wRh5CtZghHT2ATRCv5jpL5Bokf3qKzVp5xRF3uUq8Z2wzPvpxrns"
+            "created": "2026-11-22T03:19:52.341Z",
+            "proofValue": "z4x8JiuWAFc9xkxgW8tCmTzte4USxxAkXkLiTfzpyVa1Bc2JS8S71mpkhT9ywRvpYDbWpWeHuY2xKzVZatLXxWDGX"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:highs#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.666Z",
-            "proofValue": "z37L7B7v6egkPhtepz46R4xeqrw25khrnRip7TxKM6uGPYuSbnq2V7gSEkTcbEPJEtCAauQrXF1qW4Gc9Y8BiPTze"
+            "created": "2026-11-22T03:19:52.342Z",
+            "proofValue": "z5UnFzTKrW96y1n3rzyrFs3GnPxFkfWzehEPDBMDQCRSc4yxxcgL7grQ7ecMT1tEiHzpJZH7n7ZUmVTVQsCUUW1F1"
           }
         ]
       }

@@ -2,19 +2,19 @@
   "note": "REJECT: a genesis can't name itself as its own guardian (REQ-7.1-9), even though it co-signs successfully.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:selfguardian": "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:example.com:selfguardian": "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmZzvpEkA3mVhNyp3M9BDJuTQ1wVRtmwQWAPJUjp7Gurv4",
+      "cid": "zQmbfi3T5w99J1o1SMW8tRoXLm5r6qeXs8z2AAa5o3s5XWj",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:selfguardian",
         "name": "selfguardian",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {},
         "outgoing": [],
@@ -27,26 +27,26 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.667Z",
-            "proofValue": "z2rNGj2J2Li2rVgEEjb61aUrF6ruYvbnZWg8k2re1jGCBWvvF1cpLnajzKzfahsEnzJyeaTi9fYNwufxcYewkinbi"
+            "created": "2026-11-22T03:19:52.343Z",
+            "proofValue": "z3SfGozbT9bGSM5hbBddUz7bYKevupfyipS41YWsRu3HyhXuWxtJYKCCwk88HhjyxvhuxLDGjH4Lwk3qyDGUNDdUn"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:selfguardian#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.667Z",
-            "proofValue": "z3Dr6GRQkvitEp1Kxj9ptxXxiYdYCxffnaCaodQqaK5rosKmijczaxcqs1EwqtbFXC4Stkuv5iPq6zQ2RnhuhVgQe"
+            "created": "2026-11-22T03:19:52.343Z",
+            "proofValue": "z5iMzfdJbeC7oMreWN7eby4iV8SFeEFYUBA1hCu3tw4wiMpZqBTmN9h3c7r2ZS17KN7uXGJpz7HZSpmcofbdK729h"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.667Z",
-            "proofValue": "zALbT9VgTbFDk9eUozx4dD5xgevoE7n75LNbnNVQsBTQSwuGBZmxZVeYDBnYrYKo6LQymYU2TSfFN2ApCmhFAjcD"
+            "created": "2026-11-22T03:19:52.343Z",
+            "proofValue": "z59k7mmxHUoE7bd99N7fdr2Tgqin19CmVF6zmgs6Eun4sDDyiHCsZvzYqcBTF6X6fjwSVG2ApXycZKhmvRma8QYc6"
           }
         ]
       }

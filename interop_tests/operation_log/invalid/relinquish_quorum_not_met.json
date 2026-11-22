@@ -2,21 +2,21 @@
   "note": "REJECT: three guardians exist, default removal/relinquish threshold is majority (2 of 3), but only board-a signed.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:board-a": "zDnaeR814sJYRj2dJ3CmAr2wLkxLgYb4oKyxQias2ywgcLT2c",
-    "did:guardian:example.com:board-b": "zDnaebK6mUqQ7u6Kw5kuiCqYVFzX1hRGS1Ua8cJAdqk2mKGng",
-    "did:guardian:example.com:board-c": "zDnaesvdZuDX6MxuohyHYPHKNy1jAzRKWtT7PfnVaojGFceZj",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:example.com:board-a": "zDnaeqaF9sybGek9AiVNG5JRizW8cqBQGvMjAmBya7AKFqF8G",
+    "did:guardian:example.com:board-b": "zDnaez5rUtPLGhJ9ukxarQvveh9LqKohbJr2NLARsPjjPcVeX",
+    "did:guardian:example.com:board-c": "zDnaefNjDFeVwxyeu7ES3LmbpdPjyK7XUrAN7kN7JB5n4ng7k",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmXk53KzrYemZZPixaiDfw6vpxn15NaBhybmwV1P96oTYn",
+      "cid": "zQmXcDM5L9bNWVcfYmp5pRC98fDnt98JrC1PMEKRd6ZGVwc",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:fred",
         "name": "fred",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {},
         "outgoing": [],
@@ -31,59 +31,59 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.663Z",
-            "proofValue": "z4GtNLvtZ7z3aikUf2MFTEaY3veyspqzEdWAcY7DjgJEuu9A5og4uJudvtmoCDWBGTVmKx7qYM5ssdt8YpxYKxYe4"
+            "created": "2026-11-22T03:19:52.338Z",
+            "proofValue": "z5M6myZs99kac2EHpPUKmoDxhafct8crPCQQp4Qfc56GXcMBmwDwhkWxh3dKpWCQcVtV8R34tmVD9CKyNdTHuMzXo"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board-a#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.663Z",
-            "proofValue": "z2h5kXcPLZtciStySmW3AaKJSJ9p1wAMfyM3oiaL68aepqS2sksQohercLMdwSbLd1RrQbCbS8mS5fq1HPUbmg4AX"
+            "created": "2026-11-22T03:19:52.338Z",
+            "proofValue": "z51gRtHqoTveBREcHtqYeW5gK2kAoosYoDez24uEUiDrwJAsECbg7zxP7pvt9aQv4diLwtTnejtejSUTW8gqTpFm7"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board-b#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.663Z",
-            "proofValue": "z5iCqhhE5B2dRfyF68mcUhKxWuVts4Kw6d69amJyH9WEptKfTCEgKAzDhrx4KAGNhuihh4Dz2PBFW7bjhj61ueaKL"
+            "created": "2026-11-22T03:19:52.338Z",
+            "proofValue": "z3hPr5HWrndoUHRgygHCGdyHLdGJhDLmwE6oXrfxHnp3VmsHogPRudGkxfo8W8SBKkhFyFPC35NGj9Zvx8urdTk4z"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board-c#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.663Z",
-            "proofValue": "z1NyNka94d5jbWXbWRggzKTmFSWpgSDzAMvTmm3Mt2aKVYyy5SWoXBzK8T5DhNAWYGBbj1o8wZPVqMQ377xUaSTi"
+            "created": "2026-11-22T03:19:52.339Z",
+            "proofValue": "zcZnYwuAqEGoXfjncKVKjLDnBodFWWpuX5v9VeRUYc7KFiPK9ZD8WZycegtV3zJYJVS9HYH3BA3vCgUtT5afSbQN"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.663Z",
-            "proofValue": "z2VtwoqMQQNPxPYPgKiZY8TLTC7VYEdwx3V6MF9MSVHfPkf6UNMSLf5J9AzmDD1s96NQEf6pUeDnYAnU7JP2DsTY3"
+            "created": "2026-11-22T03:19:52.339Z",
+            "proofValue": "z5dF2MZGUR9ddpBNhg6ZgiC61TC5MGS3sHsNwuw1YCjcTaSQAQCFAYdBTD7Bp1vWDEYGGAdx7dUzQ2PoNYJ66Nr3N"
           }
         ]
       }
     },
     {
-      "cid": "zQmPbZe5PXik48RWz6iwqPP95jgH88ATGRbomSfRGFBxmF9",
+      "cid": "zQmdTAdqgHqJX23Mo5unUj7CgN5MGDM2jgnLSvcPNdjGZwU",
       "op": {
         "type": "guardian_relinquish",
-        "prev": "zQmXk53KzrYemZZPixaiDfw6vpxn15NaBhybmwV1P96oTYn",
+        "prev": "zQmXcDM5L9bNWVcfYmp5pRC98fDnt98JrC1PMEKRd6ZGVwc",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com:board-a#key-0",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.663Z",
-            "proofValue": "z2aqWL8NJK7zPx5N425ASmbeThyFWmSGZeQaZxmsogF3nhUASrQ12FqNbdNoqfKXMVuhKeBaK27vEFoyySiwNrNM2"
+            "created": "2026-11-22T03:19:52.339Z",
+            "proofValue": "z5Lnv6C153DNH8yK7bsbJqxbHn1FUuD83fKfEq6zY7T2s2RTN3RAqwJGPQ6y43i3ebrFwbYRifi8zpVmEV7dUTrEC"
           }
         ]
       }

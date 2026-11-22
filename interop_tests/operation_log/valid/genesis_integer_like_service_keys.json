@@ -2,19 +2,19 @@
   "note": "ACCEPT: genesis's services map has integer-like keys (\"2\", \"10\") -- any implementation whose JCS canonicalization sorts object keys by native numeric enumeration instead of RFC 8785's lexicographic UTF-16 order (WS-3.1) computes a DIFFERENT cid/signing input for this exact content and must fail to verify it.",
   "expect": "accept",
   "known_keys": {
-    "did:guardian:example.com:intkeys": "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:example.com:intkeys": "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQmSBUKjLcXvzFbLAwmB1t2zfXdRvg5pqBWRksgPDxZKWtK",
+      "cid": "zQmXdQAjBmVzN3oNkMFZKgD9oEFkuTZgbLwWGZqftL9XCaB",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:intkeys",
         "name": "intkeys",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {
           "2": {
@@ -34,18 +34,18 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.674Z",
-            "proofValue": "z2LfCjf1oV2bZp5f6Kk1PWYkL5vNVjY3Y2KG9vg9rpHhjzRfC7JFUF8SVGEAXgjNEUuWFDJWR8paytcpMcQUDrt9L"
+            "created": "2026-11-22T03:19:52.351Z",
+            "proofValue": "z5J2m9QrruHUpMotwkTzhnru6jhH3b1sNnJ4dEdNcsq12cE83UpCZBb19EpkC3wMGnEWN4LhM72R68haLq6PvoQD3"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.674Z",
-            "proofValue": "z3JQYXuAKGfGAE9toP6aWdNATTd4yiGiwkBGy71H94Fq3H1UYzbV6SBubwr4dVeDYwqccHYUyt6wPVQQ4TmqXrvzG"
+            "created": "2026-11-22T03:19:52.351Z",
+            "proofValue": "z5xM7FZeQF87v9CARzanXNkQktr1sDAzFGgbzDF13jXmNDPSu897rx2FQs6ip74PmUPdkiCewa97VYnAMbvZe25tv"
           }
         ]
       }

@@ -264,7 +264,7 @@ async function signGenesis(
 // --- valid (Fix 7): the bare-domain root identity attests its own genesis -- no other registrar attestation exists or is needed ---
 {
   const rootDid: Did = "did:guardian:example.com"; // the SAME identity as `registrarDid` elsewhere in this file -- here it's attesting ITSELF, not some other ward
-  const genesisPartial = { type: "custodial_create" as const, did: rootDid, name: "", operationalKeys: [registrar.publicKey], services: {}, outgoing: [] as [], incoming: [] as Did[], prev: null, creator: rootDid };
+  const genesisPartial = { type: "custodial_create" as const, did: rootDid, name: null, operationalKeys: [registrar.publicKey], services: {}, outgoing: [] as [], incoming: [] as Did[], prev: null, creator: rootDid };
   const signed = await signCustodialCreate(genesisPartial, {}, { [registrar.publicKey]: registrar.privateKey });
   write(
     "valid",

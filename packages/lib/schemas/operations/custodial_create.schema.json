@@ -16,6 +16,7 @@
     "creator": { "type": "string", "description": "REQ-7.1-4: the DID of whichever party initiated this registration. Carries no signature requirement." },
     "policy": { "$ref": "../guardian-policy.schema.json", "description": "REQ-7.1-7: optional full or partial GuardianPolicy proposed at genesis." },
     "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "WS-5.8: optional, declarative list of other identifiers this one claims a relationship with (spec §9's 'link, don't move' domain-migration story)." },
+    "incomingAnchors": { "type": "object", "additionalProperties": { "type": "string" }, "description": "WS-5.11/REQ-7.1-11: optional map from a subset of incoming's own DIDs to that guardian's anchor -- the same pinning convenience REQ-12-4 gives guardian_add's own anchor field." },
     "proof": {
       "type": "array",
       "items": { "$ref": "../data-integrity-proof.schema.json" },

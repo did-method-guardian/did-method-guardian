@@ -2,19 +2,19 @@
   "note": "REJECT: the ward's own proof over the rotation carries created: \"not-a-real-timestamp\" -- a genuinely valid signature over that exact content, which validateProofShape (WS-1.9) must still refuse.",
   "expect": "reject",
   "known_keys": {
-    "did:guardian:example.com:badcreated": "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
-    "did:guardian:example.com": "zDnaeQy6ndEC4csNs4ngyGkKff9uMhGTznaYo2hDW5W5KgQga"
+    "did:guardian:example.com:badcreated": "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
+    "did:guardian:example.com": "zDnaeVcRuBtcJ9ZXpZeBQK7EojcfadkzauYS6oUQKAb9SqUqr"
   },
   "registrar_did": "did:guardian:example.com",
   "log": [
     {
-      "cid": "zQme1HJZmWwFKLBeRJsNNZiSaJxvBRVnpZQUYp2NVaE4sbt",
+      "cid": "zQmdNxS7Ansp6wjwsqe9v4NoidygDUWC8Pn3tEahVzrXuj8",
       "op": {
         "type": "custodial_create",
         "did": "did:guardian:example.com:badcreated",
         "name": "badcreated",
         "operationalKeys": [
-          "zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV"
+          "zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z"
         ],
         "services": {},
         "outgoing": [],
@@ -25,39 +25,39 @@
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV#zDnaerwReHqbo7SR6wG4uQaKVna4sNvPWdutdouVywBbxmBkV",
+            "verificationMethod": "did:key:zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z#zDnaeXBYCDoyy8e3NzzhVkzc5Gm6g3BY8DUX3nGjKGRo6348Z",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.673Z",
-            "proofValue": "z5sfZSzT3q2BF6xg4o8gtDa9YNZMiDKj1qjMqWwVU3Qs22xLVmHpjgHRtWcAixX3Tg75mZVTnWdFQuvZKRLQJ7uAQ"
+            "created": "2026-11-22T03:19:52.350Z",
+            "proofValue": "z4REoYbo13Zjb5b1xE5TUqSatUMyfCCmcZ1bxzUsgB4jAp3mh2EexvSS5Yz9XpRJiaizMGygJ2yaafB8V67GjhATG"
           },
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
             "verificationMethod": "did:guardian:example.com#key-0",
             "proofPurpose": "assertionMethod",
-            "created": "2026-11-22T03:06:17.673Z",
-            "proofValue": "z5k7HcGGnsDygs2udL41d2fRt9qJ8bnkYTBEZ2RFFx4ji9wnzDuiCgyEcP5V8KEaEhET2fYaYPQPnzkurH2zKRLwa"
+            "created": "2026-11-22T03:19:52.350Z",
+            "proofValue": "z4Dy6sF19sEZgHn84dYANa41xbm8kfdSrWCALkvr7gsoKDP9EvnRoZ7QEWAiFAY1Um3XZ4paYRbHUmnkzea21Q62X"
           }
         ]
       }
     },
     {
-      "cid": "zQmeN9W6Uxehg7TNq8Ad1oEHznA1WxNWua62NGq1su2ttsY",
+      "cid": "zQmUnswiraTTUXeGBGkpPVvFzmeUcWJJinM1oVgMjNpfpxe",
       "op": {
         "type": "custodial_rotate",
         "operationalKeys": [
-          "zDnaeR3gySJBEHYbww5tyC1ivQbKoQyjFh3PG52PkworBb5AW"
+          "zDnaeSATvhtGziprxf2nsdAynhgUvx5iofp9w2BPi7zQkNE8s"
         ],
         "services": {},
-        "prev": "zQme1HJZmWwFKLBeRJsNNZiSaJxvBRVnpZQUYp2NVaE4sbt",
+        "prev": "zQmdNxS7Ansp6wjwsqe9v4NoidygDUWC8Pn3tEahVzrXuj8",
         "proof": [
           {
             "type": "DataIntegrityProof",
             "cryptosuite": "ecdsa-jcs-2019",
-            "verificationMethod": "did:key:zDnaeR3gySJBEHYbww5tyC1ivQbKoQyjFh3PG52PkworBb5AW#zDnaeR3gySJBEHYbww5tyC1ivQbKoQyjFh3PG52PkworBb5AW",
+            "verificationMethod": "did:key:zDnaeSATvhtGziprxf2nsdAynhgUvx5iofp9w2BPi7zQkNE8s#zDnaeSATvhtGziprxf2nsdAynhgUvx5iofp9w2BPi7zQkNE8s",
             "proofPurpose": "capabilityInvocation",
-            "created": "2026-11-22T03:06:17.673Z",
-            "proofValue": "z5amW7xskr3vgJyxNrvbgKc2719XnBvaYzP5BtqecMg7zsouUcu8y4uFJ21BHcxrrXA9RNcCKwnaGqJ5bGAaf9CJ5"
+            "created": "2026-11-22T03:19:52.351Z",
+            "proofValue": "zUNtLap17okZDqyNXzJZecSiywtCcWuAkJJuSyS3ZPixA6cuTRzx35WRkpvLu26Rsep6ppgDUkw9QXM9MdoXmUq2"
           },
           {
             "type": "DataIntegrityProof",
@@ -65,7 +65,7 @@
             "verificationMethod": "did:guardian:example.com:badcreated#key-0",
             "proofPurpose": "capabilityInvocation",
             "created": "not-a-real-timestamp",
-            "proofValue": "z61eF9UApFqiV1iqcFCVDnH8HFgbXKGr1KGTjTsA4HKEoDx9MXhT5q95WA71fSeimchY7FFi43XoGf3LjeFWGYMxs"
+            "proofValue": "z3efP2uVpRpnwWfHgm8fd7ifq1TqrzTSGgfYJrsaYfct2FjUFmanzX441iyc4BfLPViHGyWnNx4N7qPPv8zoTRphL"
           }
         ]
       }
