@@ -84,21 +84,42 @@ export interface ResolveResult {
   metadata?: ResolutionMetadata;
 }
 
-/** REQ-11-1: resolves a DID to its document. `implementedExtensions` defaults to empty, same as `verifyLog`. */
-export async function resolve(did: Did, log: Log, resolveLog: LogResolver, implementedExtensions: ReadonlySet<string> = new Set()): Promise<ResolveResult> {
-  const verified = await verifyLog(did, log, implementedExtensions);
+/**
+ * REQ-11-1: resolves a DID to its document. `implementedExtensions`
+ * defaults to empty, same as `verifyLog`. REQ-9-5: `versionId`, if
+ * given, is the operation hash of some operation in `log` -- the
+ * document is derived from the state right after that operation
+ * instead of the log's own current end, and only the log up to and
+ * including it needs to verify (a later operation, if any, is never
+ * looked at at all, not even for shape).
+ */
+export async function resolve(
+  did: Did,
+  log: Log,
+  resolveLog: LogResolver,
+  implementedExtensions: ReadonlySet<string> = new Set(),
+  versionId?: string,
+): Promise<ResolveResult> {
+  let effectiveLog = log;
+  if (versionId !== undefined) {
+    const index = await findByHash(log, versionId);
+    if (index === -1) return { result: "invalid", reason: `REQ-9-5: no operation with hash ${versionId} in this log` };
+    effectiveLog = log.slice(0, index + 1);
+  }
+
+  const verified = await verifyLog(did, effectiveLog, implementedExtensions);
   if (verified.result !== "valid") return { result: verified.result, reason: verified.reason };
 
   const domain = parseGuardianDid(did)!.domain;
   const isRoot = did === `did:guardian:${domain}`;
   if (!isRoot) {
-    const attestationResult = await verifyAttestation(log[0] as CreateOp, resolveLog, implementedExtensions);
+    const attestationResult = await verifyAttestation(effectiveLog[0] as CreateOp, resolveLog, implementedExtensions);
     if (attestationResult !== "valid") return { result: attestationResult };
   }
 
   const state = verified.state!;
-  const version = await operationHash(log[log.length - 1]);
-  const anchor = await anchorOf(log[0] as CreateOp);
+  const version = await operationHash(effectiveLog[effectiveLog.length - 1]);
+  const anchor = await anchorOf(effectiveLog[0] as CreateOp);
   return { result: "valid", document: toDidDocument(did, state), metadata: toResolutionMetadata(version, anchor, state) };
 }
 

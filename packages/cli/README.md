@@ -55,10 +55,12 @@ Creates a held identity the ordinary way (`POST /register`) -- the held path. `c
 ### Resolve and verify
 
 ```
-did-guardian resolve <did> [--log] [--json]
+did-guardian resolve <did> [--log] [--json] [--version-id <hash>]
 did-guardian verify <did> --log <file>
 ```
-`resolve` fetches a DID's current log live and runs the full §11 resolution: its document, plus a mutuality report for every guardian and successor (`mutual`, `keys out of date`, `withdrawn`, `deactivated`, `different identity`, or `unavailable`) and a ward report for everything it's itself a guardian or successor of. It pins the identity's anchor the first time it sees that DID (§5.7, trust on first use) -- a later resolution with a different anchor is reported loudly, never silently accepted.
+`resolve` fetches a DID's current log live and runs §11 resolution: its document, plus (outside `--json`) a mutuality report for every guardian and successor (`mutual`, `keys out of date`, `withdrawn`, `deactivated`, `different identity`, or `unavailable`) and a ward report for everything it's itself a guardian or successor of. `--version-id <hash>` resolves as of a past operation instead of the log's own current end (REQ-9-5).
+
+Every log this command fetches -- the target, and every guardian's, successor's, or attestation root's log resolution touches along the way -- is pinned by anchor *and* version (REQ-11-3), in every mode including `--json`: a later fetch reporting a different anchor is a different identity, and one whose log no longer contains a previously-recorded version is a rollback or fork (REQ-11-4). Either one is reported loudly and exits non-zero, never silently accepted.
 
 `verify` checks a log you already have *offline*, §8 only (signatures and structure, no cross-log or attestation check, since those need the network) -- reports valid, invalid, or unsupported.
 

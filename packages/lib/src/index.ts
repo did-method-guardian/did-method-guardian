@@ -7,3 +7,4 @@ export * from "./resolve.js";
 export * from "./rules.js";
 export * from "./verifyLog.js";
 export * from "./accept.js";
+export * from "./pin.js";

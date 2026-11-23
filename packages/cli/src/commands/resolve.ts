@@ -1,27 +1,52 @@
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
-import { checkMutuality, checkWardReport, resolve, verifyLog } from "@did-guardian/lib";
-import type { Did, Log } from "@did-guardian/lib";
+import { checkMutuality, checkPin, checkWardReport, resolve, verifyLog } from "@did-guardian/lib";
+import type { Did, Log, LogResolver, PinStore } from "@did-guardian/lib";
 import { fetchLog, makeLiveResolver } from "../registrar-client.js";
-import { getPin, savePin } from "../state.js";
+import { filePinStore } from "../state.js";
 
 /**
- * REQ-5-7's anchor, pinned trust-on-first-use (SSH known_hosts style):
- * the first anchor ever seen for a DID is saved, and a later resolution
- * reporting a DIFFERENT anchor for the same DID is a loud mismatch, not
- * a silent overwrite -- that's the one thing a name-reuse attack (or a
- * registrar error) would actually change.
+ * REQ-11-3/REQ-11-4 (audit F-14/#5/#6): the CLI used to pin only the
+ * anchor, so a registrar serving a shorter log (a rollback) or a
+ * different, incompatible tail (a fork) resolved as an ordinary
+ * "anchor matches" with exit 0 -- the lib's own checkPin is what
+ * actually distinguishes those from an honest, growing log. Reports
+ * the outcome and returns true if this was a failure a caller should
+ * treat as fatal (different identity, or rolled back/forked);
+ * advances the pin itself on anything else.
  */
-function checkPin(did: Did, anchor: string): void {
-  const pin = getPin(did);
-  if (!pin) {
-    savePin(did, { anchor });
-    console.log(`First resolution of ${did} -- pinned anchor ${anchor}.`);
-  } else if (pin.anchor !== anchor) {
-    console.log(`ANCHOR MISMATCH: pinned ${pin.anchor} (from ${pin.pinnedAt}), this resolution has ${anchor} -- this is not the identity previously seen under this DID.`);
-  } else {
-    console.log(`Anchor matches the pin from ${pin.pinnedAt}.`);
+async function reportPin(did: Did, log: Log, store: PinStore): Promise<boolean> {
+  const result = await checkPin(did, log, store);
+  switch (result.status) {
+    case "new":
+      console.log(`First resolution of ${did} -- pinned anchor ${result.current.anchor}, version ${result.current.version}.`);
+      await result.advance();
+      return false;
+    case "same-identity":
+      console.log(`${did}: matches the pin from the anchor seen before.`);
+      await result.advance();
+      return false;
+    case "different-identity":
+      console.log(
+        `${did}: DIFFERENT IDENTITY -- pinned anchor ${result.recorded!.anchor}, this resolution has ${result.current.anchor}. This is not the identity previously seen under this DID.`,
+      );
+      return true;
+    case "rolled-back-or-forked":
+      console.log(
+        `${did}: ROLLED BACK OR FORKED -- the previously recorded version (${result.recorded!.version}) is no longer present in this log. Do not trust this resolution without investigating.`,
+      );
+      return true;
   }
+}
+
+/** Wraps a LogResolver so every cross-log fetch it makes (guardians, successor, the attestation's root) is pinned too, not only the target DID resolve() is called with directly. */
+function pinningResolver(base: LogResolver, store: PinStore, sawFailure: { value: boolean }): LogResolver {
+  return async (did: Did) => {
+    const log = await base(did);
+    if (!log) return undefined;
+    if (await reportPin(did, log, store)) sawFailure.value = true;
+    return log;
+  };
 }
 
 export function registerResolveCommand(program: Command): void {
@@ -30,39 +55,54 @@ export function registerResolveCommand(program: Command): void {
     .description("fetch a did:guardian identity's current log live, verify and resolve it (§11), and report on its guardians' and wards' own mutuality")
     .option("--log", "print the full verified operation log instead of the current document")
     .option("--json", "skip the report lines, print only the raw document or log")
-    .action(async (did: Did, opts: { log?: boolean; json?: boolean }) => {
+    .option("--version-id <hash>", "resolve as of a past operation (REQ-9-5) instead of the log's own current end")
+    .action(async (did: Did, opts: { log?: boolean; json?: boolean; versionId?: string }) => {
       const log = await fetchLog(did);
-      const resolveLog = makeLiveResolver();
-      const result = await resolve(did, log, resolveLog);
+      const store = filePinStore();
+      const sawFailure = { value: false };
+      // REQ-11-3/11-4: pin the target DID's own log directly (it was
+      // fetched here, not through resolveLog below) -- every OTHER log
+      // this resolution touches (guardians, successor, the
+      // attestation's root) goes through the wrapped resolver instead,
+      // so it's pinned too, in every mode, including --json.
+      if (await reportPin(did, log, store)) sawFailure.value = true;
+      const resolveLog = pinningResolver(makeLiveResolver(), store, sawFailure);
+
+      const result = await resolve(did, log, resolveLog, undefined, opts.versionId);
       if (result.result !== "valid") {
         console.log(`${result.result.toUpperCase()}${result.reason ? ` -- ${result.reason}` : ""}`);
         process.exitCode = 1;
         return;
       }
 
-      if (!opts.json) checkPin(did, result.metadata!.anchor);
       console.log(JSON.stringify(opts.log ? log : result.document, null, 2));
-      if (opts.json) return;
+      if (!opts.json) {
+        const verified = await verifyLog(did, log);
+        const state = verified.state!;
 
-      const verified = await verifyLog(did, log);
-      const state = verified.state!;
+        console.log("");
+        if (state.guardians.length === 0 && !state.successor) {
+          console.log("No guardians or successor -- fully self-governing.");
+        }
+        for (const g of state.guardians) {
+          const m = await checkMutuality(did, result.metadata!.anchor, g, resolveLog);
+          console.log(`Guardian ${g.did}: ${m}`);
+        }
+        if (state.successor) {
+          const m = await checkMutuality(did, result.metadata!.anchor, state.successor, resolveLog);
+          console.log(`Successor ${state.successor.did}: ${m}`);
+        }
+        for (const record of state.wards) {
+          const w = await checkWardReport(did, record, resolveLog);
+          console.log(`Ward ${record.did}: ${w}`);
+        }
+      }
 
-      console.log("");
-      if (state.guardians.length === 0 && !state.successor) {
-        console.log("No guardians or successor -- fully self-governing.");
-      }
-      for (const g of state.guardians) {
-        const m = await checkMutuality(did, result.metadata!.anchor, g, resolveLog);
-        console.log(`Guardian ${g.did}: ${m}`);
-      }
-      if (state.successor) {
-        const m = await checkMutuality(did, result.metadata!.anchor, state.successor, resolveLog);
-        console.log(`Successor ${state.successor.did}: ${m}`);
-      }
-      for (const record of state.wards) {
-        const w = await checkWardReport(did, record, resolveLog);
-        console.log(`Ward ${record.did}: ${w}`);
-      }
+      // REQ-11-4: a different identity or a rollback/fork is reported
+      // above regardless of mode, but it must also make the command
+      // fail -- an anchor mismatch silently exiting 0 is exactly the
+      // audit's own finding (#6).
+      if (sawFailure.value) process.exitCode = 1;
     });
 
   program

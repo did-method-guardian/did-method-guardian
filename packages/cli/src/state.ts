@@ -4,7 +4,7 @@
 // overloading the keys directory.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseDid, type Did } from "@did-guardian/lib";
+import { parseDid, type Did, type PinRecord, type PinStore } from "@did-guardian/lib";
 import { configDir } from "./keystore.js";
 
 // --- session: one active login at a time, v1 scope ---
@@ -50,10 +50,11 @@ export function requireSessionFor(did: Did): SessionFile {
   return session;
 }
 
-// --- pin store: SSH known_hosts for DIDs (REQ-5-7's anchor, trust on first use) ---
+// --- pin store: SSH known_hosts for DIDs (REQ-11-3/11-4: anchor AND
+// version, so the lib's own checkPin can detect a rollback or fork, not
+// only a different identity) ---
 
-export interface Pin {
-  anchor: string;
+export interface Pin extends PinRecord {
   pinnedAt: string;
 }
 
@@ -71,9 +72,17 @@ export function getPin(did: Did): Pin | undefined {
   return loadPins()[did];
 }
 
-export function savePin(did: Did, pin: Omit<Pin, "pinnedAt">): void {
+export function savePin(did: Did, pin: PinRecord): void {
   mkdirSync(configDir(), { recursive: true, mode: 0o700 });
   const pins = loadPins();
   pins[did] = { ...pin, pinnedAt: new Date().toISOString() };
   writeFileSync(pinsPath(), JSON.stringify(pins, null, 2), { mode: 0o600 });
+}
+
+/** F-14/C-5-6 (audit): the lib's own checkPin, backed by this CLI's local file -- the pluggable-store design means the same checkPin call will serve a registrar's own persistent storage too, if REQ-10-15 (pending the user's approval) requires one. */
+export function filePinStore(): PinStore {
+  return {
+    get: (did) => getPin(did),
+    set: (did, record) => savePin(did, record),
+  };
 }
