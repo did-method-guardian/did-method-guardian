@@ -107,8 +107,25 @@ async function checkCrossLogRules(
         const consentIndex = await findByHash(guardianLog, removed.consent);
         if (consentIndex === -1 || evidenceIndex <= consentIndex) return reject("REQ-10-7: evidence must follow the entry's consent");
 
-        const standing = await hasStanding(wardDid, wardAnchor, removed, resolveLog, implementedExtensions);
-        if (standing) return reject("REQ-10-7: evidence is valid only once the entry's standing is already lost by deactivation or release");
+        // F-3 (audit): REQ-10-7 row 4's own "the entry does not have
+        // standing because of item 2 or item 5" is narrower than "does
+        // not have standing for ANY reason" (hasStanding/checkMutuality
+        // collapses all five REQ-10-6 items into one bool). A guardian
+        // that released, then genuinely re-consented, then separately
+        // rotated its keys has lost standing via item 3 (keys out of
+        // date) -- that's not what evidence is for, and the stale
+        // release used as "evidence" here no longer reflects the
+        // guardian's CURRENT standing at all (checked by items 1/3/4
+        // below, independent of items 2/5).
+        const state = guardianVerified.state!;
+        const consentOp = consentIndex === -1 ? undefined : guardianLog[consentIndex];
+        const consentIsGenuine = consentOp?.type === "acceptWard" && consentOp.ward.did === wardDid && consentOp.ward.anchor === wardAnchor;
+        if (!consentIsGenuine) return reject("REQ-10-7: the entry's consent is not a genuine acceptWard naming this identity");
+        if (!sameKeys(state.keys, removed.keys)) return reject("REQ-10-7: evidence is not valid once the guardian's own keys have changed -- that is a separate standing loss, not deactivation or release");
+        const stillAWard = state.wards.some((w) => w.did === wardDid && w.anchor === wardAnchor);
+        if (!state.deactivated && stillAWard) {
+          return reject("REQ-10-7: evidence is valid only once the entry's standing is already lost by deactivation or release");
+        }
       }
       const remainingGuardians = guardians.filter((g) => g.did !== candidate.guardian);
       const promotesSuccessor = remainingGuardians.length === 0 && successor !== null;
