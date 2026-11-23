@@ -15,16 +15,17 @@ import type { CreateOp, Did, Entry, Key, Log, WardRecord } from "./types.js";
  * grammar, not a coincidence.
  */
 export function parseDid(did: Did): { name: string | null; domain: string } {
-  const parts = did.split(":");
-  if (parts[0] !== "did" || parts[1] !== "guardian" || parts.length < 3) {
-    throw new Error(`not a valid did:guardian identifier: ${did}`);
-  }
-  const rest = parts.slice(2);
-  const domain = rest[0];
-  if (rest.length < 1 || rest.length > 2 || !domain) {
-    throw new Error(`not a valid did:guardian identifier: ${did}`);
-  }
-  return rest.length === 1 ? { name: null, domain } : { name: rest[1], domain };
+  // F-12 (audit): this used to do only structural splitting (segment
+  // count), never REQ-4-2/REQ-4-3's own character-class validation of
+  // `domain`/`name` -- callers build request URLs and redirect
+  // targets straight from this function's output (registrar-client.ts,
+  // oidc.ts, several CLI commands), so an unvalidated segment (a
+  // stray "/", "..", "#", control characters) could land in a URL.
+  // parseGuardianDid (operations.ts) is the real, already-validating
+  // parser; this is now a thin, throwing wrapper around it.
+  const parsed = parseGuardianDid(did);
+  if (!parsed) throw new Error(`not a valid did:guardian identifier: ${did}`);
+  return { name: parsed.name, domain: parsed.domain };
 }
 
 /** `name: null` resolves to the reserved `_` segment -- the bare-domain identity's own well-known path (spec §2.1/§5), never a real registration (the name ABNF forbids `_`). */

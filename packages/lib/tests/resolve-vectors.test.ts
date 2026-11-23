@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { anchorOf, checkMutuality, checkWardReport, MIN_KEYS_EXTENSION, resolve, verifyLog } from "../src/index.js";
+import { anchorOf, checkMutuality, checkWardReport, resolve, verifyLog } from "../src/index.js";
+import { MIN_KEYS_EXTENSION } from "../src/testExtensions.js";
 import type { CreateOp, Did, Entry, Log, LogResolver, WardRecord } from "../src/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

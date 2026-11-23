@@ -21,6 +21,24 @@ test("parseDid: rejects malformed identifiers", () => {
   assert.throws(() => parseDid("did:guardian:a:b:c"));
 });
 
+// F-12 (audit): parseDid used to do only structural (segment-count)
+// splitting, accepting anything in the domain/name positions as long
+// as the colon count matched -- callers build request URLs and
+// redirect targets straight from its output. It must reject the same
+// malformed domain/name REQ-4-2/REQ-4-3 already reject elsewhere, not
+// just hand back whatever characters were there.
+test("parseDid: rejects a syntactically-plausible but invalid domain (REQ-4-2)", () => {
+  assert.throws(() => parseDid("did:guardian:not a domain"));
+  assert.throws(() => parseDid("did:guardian:evil.com/../escape"));
+  assert.throws(() => parseDid("did:guardian:evil.com#fragment"));
+});
+
+test("parseDid: rejects a syntactically-plausible but invalid name (REQ-4-3)", () => {
+  assert.throws(() => parseDid("did:guardian:acme.com:../../etc"));
+  assert.throws(() => parseDid("did:guardian:acme.com:a b"));
+  assert.throws(() => parseDid("did:guardian:acme.com:_"));
+});
+
 test("wellKnownPath: a real name resolves to its own path, null resolves to the reserved _ segment", () => {
   assert.equal(wellKnownPath("alice"), "/.well-known/guardian/alice");
   assert.equal(wellKnownPath(null), "/.well-known/guardian/_");

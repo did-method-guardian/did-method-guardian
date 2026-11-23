@@ -3,7 +3,6 @@ import {
   checkGuardiansShape,
   checkKeyOverlap,
   checkKeysShape,
-  checkMinKeysExtension,
   checkPolicyShape,
   checkServiceShape,
   checkWardsShape,
@@ -11,6 +10,7 @@ import {
   VALID,
   type ShapeResult,
 } from "./operations.js";
+import { checkMinKeysExtension } from "./testExtensions.js";
 import type { Did, Entry, Operation, Service, State } from "./types.js";
 
 export interface ApplyResult {
