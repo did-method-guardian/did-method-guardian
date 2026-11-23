@@ -76,11 +76,11 @@ did-guardian guardian confirm-adopt <ward-did> <pending-id>
 ### Guardianship (local-key signing, for self-held identities)
 
 ```
-did-guardian guardian add <ward-did> <guardian-did> --ward-key <label> --guardian-key <label>
+did-guardian guardian add <ward-did> <guardian-did> --ward-key <label> --guardian-key <label> [--guardian-key <label> ...]
 did-guardian guardian recover <ward-did> <guardian-did> --guardian-key <label> [--new-key <label>] [--submit]
-did-guardian guardian deactivate <ward-did> <guardian-did> --guardian-key <label> [--submit] [-y]
+did-guardian guardian deactivate <ward-did> <guardian-did> --guardian-key <label> [--ward-key <label>] [--submit] [-y]
 ```
-These sign directly with keys you hold. `add` needs *both* parties to hold a key directly (via `create` or `key take-custody`) -- for a ward that's still held by a registrar, use `guardian adopt`/`confirm-adopt` instead. `recover` and `deactivate` only ever need the guardian's key, so they work regardless of the ward's own custody -- each submits immediately and reports whether the ward's own policy was satisfied by that one guardian's approval alone.
+These sign directly with keys you hold. `add` needs *both* parties to hold a key directly (via `create` or `key take-custody`) -- for a ward that's still held by a registrar, use `guardian adopt`/`confirm-adopt` instead. Repeat `--guardian-key` once per key for a guardian with more than one current key -- a proof is needed from every one of them. `recover` only ever needs the guardian's key, so it works regardless of the ward's own custody. `deactivate` needs `--ward-key` too whenever `policy.deactivation.by` is `"both"` (the default) or `"self"` -- the command says so up front if it's missing rather than submitting something doomed to be rejected.
 
 ### The generic multi-signer path
 
