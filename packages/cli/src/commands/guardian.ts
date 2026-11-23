@@ -26,9 +26,71 @@ async function printOrSubmit(did: Did, op: UpdateOp | DeactivateOp, submit?: boo
   if (result.accepted) {
     console.log("Submitted and accepted.");
   } else {
+    // C-5 (audit): a rejection must not exit 0 -- scripts/automation
+    // calling this command can only tell success from failure by the
+    // exit code, not by scraping stdout for the word "Rejected".
+    process.exitCode = 1;
     console.log(`Rejected: ${result.reason}`);
     console.log('If this needs more than one guardian\'s approval, build and sign it the same way, then use "did-guardian operation propose"/"did-guardian operation sign" to collect every required proof.');
   }
+}
+
+/**
+ * The business logic behind "guardian add", factored out of the
+ * Commander action so it's directly testable without going through
+ * loadKey/the OS keystore: both parties' keys, already loaded.
+ * `guardianKeys` must exactly match the guardian's own CURRENT key
+ * set (validated by the caller) -- REQ-7-6 needs a proof of
+ * possession for every one of them.
+ */
+export async function addFirstGuardian(wardDid: Did, guardianDid: Did, wardKey: StoredKey, guardianKeys: StoredKey[]): Promise<{ accepted: boolean; reason?: string }> {
+  const guardianKey = guardianKeys[0];
+
+  // Step 1: the guardian accepts the ward into its own log first --
+  // REQ-7-6's addGuardian approval needs this to already be durable
+  // (its hash becomes `entry.consent`) before the ward's own log can
+  // reference it.
+  const { log: guardianLog, state: guardianState } = await currentState(guardianDid);
+  const guardianAnchor = await anchorOf(guardianLog[0] as CreateOp);
+  const wardAnchor = await anchorOf((await currentState(wardDid)).log[0] as CreateOp);
+
+  // C-2 (audit): a half-done "guardian add" (step 1 succeeded, step 2
+  // failed or was never run) must not block a retry. Rather than
+  // blindly submitting a second acceptWard -- which wastes a maxWards
+  // slot and would fail outright once that policy caps the guardian
+  // at its current ward count -- look for the guardian's own
+  // acceptWard already on record for this exact ward (matching did
+  // AND anchor) and reuse its hash as consent.
+  const alreadyAccepted = guardianState.wards.some((w) => w.did === wardDid && w.anchor === wardAnchor);
+  let consent: string;
+  if (alreadyAccepted) {
+    const existing = guardianLog.find((op): op is AcceptWardOp => op.type === "acceptWard" && op.ward.did === wardDid && op.ward.anchor === wardAnchor);
+    if (!existing) throw new Error(`${guardianDid} already lists ${wardDid} as a ward, but its own acceptWard operation could not be found in its log -- this should not happen.`);
+    consent = await operationHash(existing);
+    console.log(`${guardianDid} already accepted ${wardDid} as a ward (reusing that consent -- resuming a previously half-finished "guardian add").`);
+  } else {
+    const acceptWardBase: Omit<AcceptWardOp, "proof"> = {
+      type: "acceptWard",
+      ward: { did: wardDid, anchor: wardAnchor },
+      prev: await operationHash(guardianLog[guardianLog.length - 1]),
+    };
+    const acceptProof = await createProof(acceptWardBase, guardianKey.publicKey, guardianKey.privateKey);
+    const acceptResult = await submitOperation(guardianDid, { ...acceptWardBase, proof: [acceptProof] });
+    if (!acceptResult.accepted) throw new Error(`${guardianDid} could not accept ${wardDid} as a ward: ${acceptResult.reason}`);
+    consent = await operationHash(acceptResult.operation!);
+  }
+
+  // Step 2: the ward adds the guardian's entry, needing a proof of
+  // possession for EVERY one of the guardian's current keys (REQ-7-6
+  // -- the caller validates this is a matching set) plus the ward's
+  // own current key.
+  const entry: Entry = { did: guardianDid, anchor: guardianAnchor, keys: guardianState.keys, consent };
+  const { log: wardLog } = await currentState(wardDid);
+  const addGuardianBase: Omit<AddGuardianOp, "proof"> = { type: "addGuardian", entry, prev: await operationHash(wardLog[wardLog.length - 1]) };
+  const entryProofs = await Promise.all(guardianKeys.map((k) => createProof(addGuardianBase, k.publicKey, k.privateKey)));
+  const wardProof = await createProof(addGuardianBase, wardKey.publicKey, wardKey.privateKey);
+  const op = { ...addGuardianBase, proof: sortProofs([...entryProofs, wardProof]) };
+  return await submitOperation(wardDid, op);
 }
 
 export function registerGuardianCommand(program: Command): void {
@@ -94,47 +156,32 @@ export function registerGuardianCommand(program: Command): void {
     .command("add <ward-did> <guardian-did>")
     .description("add the first guardian to a guardian-less, self-held ward -- needs both parties' keys locally (see \"create\"/\"key take-custody\"); for a still registrar-held ward, use \"guardian adopt\"/\"guardian confirm-adopt\" instead")
     .requiredOption("--ward-key <label>", "the ward's saved key")
-    .requiredOption("--guardian-key <label>", "the incoming guardian's saved key")
-    .option("--keychain", "look up both keys in the OS keychain instead of local files")
-    .action(async (wardDid: Did, guardianDid: Did, opts: { wardKey: string; guardianKey: string; keychain?: boolean }) => {
+    .requiredOption("--guardian-key <label>", "the incoming guardian's saved key -- repeat once per key for a multi-key guardian (every one of its current keys needs its own proof, REQ-7-6)", (value: string, previous: string[]) => [...previous, value], [] as string[])
+    .option("--keychain", "look up every key in the OS keychain instead of local files")
+    .action(async (wardDid: Did, guardianDid: Did, opts: { wardKey: string; guardianKey: string[]; keychain?: boolean }) => {
       const { state: wardState } = await currentState(wardDid);
       if (wardState.guardians.length > 0) {
         throw new Error(
           `${wardDid} already has ${wardState.guardians.length} guardian(s) -- this command only handles the zero-to-one case. Adding to a non-empty guardian set needs every current guardian's own approval too -- see "did-guardian operation propose".`,
         );
       }
+      if (opts.guardianKey.length === 0) throw new Error("--guardian-key is required (pass it once per key for a multi-key guardian)");
       const wardKey = await loadKey(opts.wardKey, opts);
-      const guardianKey = await loadKey(opts.guardianKey, opts);
+      const guardianKeys = await Promise.all(opts.guardianKey.map((label) => loadKey(label, opts)));
       await confirmKeyIsCurrent(wardDid, wardKey.publicKey);
-      await confirmKeyIsCurrent(guardianDid, guardianKey.publicKey);
+      for (const k of guardianKeys) await confirmKeyIsCurrent(guardianDid, k.publicKey);
 
-      // Step 1: the guardian accepts the ward into its own log first --
-      // REQ-7-6's addGuardian approval needs this to already be durable
-      // (its hash becomes `entry.consent`) before the ward's own log can
-      // reference it.
-      const { log: guardianLog, state: guardianState } = await currentState(guardianDid);
-      const guardianAnchor = await anchorOf(guardianLog[0] as CreateOp);
-      const wardAnchor = await anchorOf((await currentState(wardDid)).log[0] as CreateOp);
-      const acceptWardBase: Omit<AcceptWardOp, "proof"> = {
-        type: "acceptWard",
-        ward: { did: wardDid, anchor: wardAnchor },
-        prev: await operationHash(guardianLog[guardianLog.length - 1]),
-      };
-      const acceptProof = await createProof(acceptWardBase, guardianKey.publicKey, guardianKey.privateKey);
-      const acceptResult = await submitOperation(guardianDid, { ...acceptWardBase, proof: [acceptProof] });
-      if (!acceptResult.accepted) throw new Error(`${guardianDid} could not accept ${wardDid} as a ward: ${acceptResult.reason}`);
-      const consent = await operationHash(acceptResult.operation!);
+      const { state: guardianState } = await currentState(guardianDid);
+      const loadedKeySet = new Set(guardianKeys.map((k) => k.publicKey));
+      const currentKeySet = new Set(guardianState.keys);
+      if (loadedKeySet.size !== currentKeySet.size || ![...currentKeySet].every((k) => loadedKeySet.has(k))) {
+        throw new Error(
+          `${guardianDid} currently has ${guardianState.keys.length} key(s), but ${guardianKeys.length} --guardian-key value(s) were given. addGuardian needs a proof of possession for every one of the guardian's CURRENT keys (REQ-7-6) -- pass --guardian-key once per key, exactly matching ${JSON.stringify(guardianState.keys)}.`,
+        );
+      }
 
-      // Step 2: the ward adds the guardian's entry, needing both the
-      // guardian's own key (proof of possession) and the ward's own
-      // current key.
-      const entry: Entry = { did: guardianDid, anchor: guardianAnchor, keys: guardianState.keys, consent };
-      const { log: wardLog } = await currentState(wardDid);
-      const addGuardianBase: Omit<AddGuardianOp, "proof"> = { type: "addGuardian", entry, prev: await operationHash(wardLog[wardLog.length - 1]) };
-      const entryProof = await createProof(addGuardianBase, guardianKey.publicKey, guardianKey.privateKey);
-      const wardProof = await createProof(addGuardianBase, wardKey.publicKey, wardKey.privateKey);
-      const op = { ...addGuardianBase, proof: sortProofs([entryProof, wardProof]) };
-      const result = await submitOperation(wardDid, op);
+      const result = await addFirstGuardian(wardDid, guardianDid, wardKey, guardianKeys);
+      if (!result.accepted) process.exitCode = 1;
       console.log(result.accepted ? `${guardianDid} is now a guardian of ${wardDid}.` : `Rejected: ${result.reason}`);
     });
 
@@ -192,15 +239,31 @@ export function registerGuardianCommand(program: Command): void {
     .command("deactivate <ward-did> <guardian-did>")
     .description("guardian-signed deactivation (approved via policy.deactivation) -- permanent, never reversible")
     .requiredOption("--guardian-key <label>", "the signing guardian's saved key")
-    .option("--keychain", "look up the guardian key in the OS keychain instead of a local file")
+    // C-3 (audit): policy.deactivation.by defaults to "both" (one
+    // current key AND enough guardian approvals, REQ-6-11) -- this
+    // command used to sign with the guardian's key alone, which can
+    // never satisfy "both" or "self". --ward-key is optional because
+    // "guardians"-only policies don't need it, but there's no way to
+    // succeed under the default policy without it.
+    .option("--ward-key <label>", "the ward's own current key -- needed whenever policy.deactivation.by is \"both\" (the default), \"self\", or \"either\"")
+    .option("--keychain", "look up every key in the OS keychain instead of local files")
     .option("--submit", "actually submit the signed operation to the registrar (default: print it only)")
     .option("-y, --yes", "skip the confirmation prompt when submitting")
-    .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; submit?: boolean; yes?: boolean }) => {
-      const { log } = await currentState(wardDid);
+    .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; wardKey?: string; keychain?: boolean; submit?: boolean; yes?: boolean }) => {
+      const { log, state } = await currentState(wardDid);
       const guardianKey = await loadKey(opts.guardianKey, opts);
       await confirmKeyIsCurrent(guardianDid, guardianKey.publicKey);
+      const deactivationBy = state.policy.deactivation?.by ?? "both";
+      if (!opts.wardKey && (deactivationBy === "both" || deactivationBy === "self")) {
+        throw new Error(`${wardDid}'s policy.deactivation.by is "${deactivationBy}", which requires one of the ward's own current keys too -- pass --ward-key.`);
+      }
       const base: Omit<DeactivateOp, "proof"> = { type: "deactivate", prev: await operationHash(log[log.length - 1]) };
-      const proof = await createProof(base, guardianKey.publicKey, guardianKey.privateKey);
+      const proofs = [await createProof(base, guardianKey.publicKey, guardianKey.privateKey)];
+      if (opts.wardKey) {
+        const wardKey = await loadKey(opts.wardKey, opts);
+        await confirmKeyIsCurrent(wardDid, wardKey.publicKey);
+        proofs.push(await createProof(base, wardKey.publicKey, wardKey.privateKey));
+      }
       if (opts.submit) {
         const proceed = await confirm(`This permanently deactivates ${wardDid}. Continue?`, opts.yes);
         if (!proceed) {
@@ -208,6 +271,6 @@ export function registerGuardianCommand(program: Command): void {
           return;
         }
       }
-      await printOrSubmit(wardDid, { ...base, proof: [proof] }, opts.submit);
+      await printOrSubmit(wardDid, { ...base, proof: sortProofs(proofs) }, opts.submit);
     });
 }

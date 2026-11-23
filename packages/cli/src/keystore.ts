@@ -112,7 +112,17 @@ export function listLocalKeys(): string[] {
 //
 // Every call here uses execFileSync with an explicit argv array, never a
 // shell string -- a label or key value containing shell metacharacters
-// must never be interpretable as anything but literal data.
+// must never be interpretable as anything but literal data. The one
+// exception is darwin's add-generic-password (below): its secret goes
+// through security(1)'s own `-i` stdin batch mode instead of argv, to
+// keep the private key out of the process table -- securityQuote
+// handles THAT parser's quoting, which is unrelated to (and not a
+// substitute for) shell quoting.
+
+/** Quotes a value for security(1)'s own `-i` stdin command parser -- NOT a shell. Wrap in double quotes, backslash-escape literal backslashes and double quotes. */
+function securityQuote(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
 
 function keychainEntryExists(label: string): boolean {
   const os = platform();
@@ -145,7 +155,14 @@ function saveKeyToKeychain(label: string, key: StoredKey, opts: KeyStoreOptions 
     } catch {
       // No existing entry to delete -- fine, this is the common case.
     }
-    execFileSync("security", ["add-generic-password", "-s", SERVICE_NAME, "-a", label, "-w", secret, "-U"]);
+    // C-4 (audit): a private key passed as an ordinary `-w <secret>`
+    // argument lands in this process's own argv, which `ps`/Activity
+    // Monitor can read for as long as the child process is alive --
+    // a local attacker (another user, or any process with enough
+    // privilege) could capture the private key with nothing more than
+    // a well-timed `ps`. `security -i` reads its command from stdin
+    // instead, so the secret never appears in argv at all.
+    execFileSync("security", ["-i"], { input: `add-generic-password -s ${securityQuote(SERVICE_NAME)} -a ${securityQuote(label)} -w ${securityQuote(secret)} -U\n`, stdio: ["pipe", "ignore", "pipe"] });
     return;
   }
   if (os === "linux") {
