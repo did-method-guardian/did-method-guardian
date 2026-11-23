@@ -154,7 +154,7 @@ test("login, the account dashboard, and self-rotate", async () => {
   assert.equal(rotateResp.status, 200);
 });
 
-test("R2-0.5 (re-wired): an accepted key rotation revokes every existing session for that DID", async () => {
+test("R2-0.5 (re-wired, per review): a key rotation revokes every existing session AND the old login_secret for that DID", async () => {
   const name = uniqueName("alice");
   const { loginSecret } = await registerHeld(name);
   const cookie = await loginAs(name, loginSecret);
@@ -174,6 +174,18 @@ test("R2-0.5 (re-wired): an accepted key rotation revokes every existing session
   // too.
   const afterRotate = await fetch(`${BASE}/account`, { headers: { cookie: `gw_session=${cookie}` }, redirect: "manual" });
   assert.notEqual(afterRotate.status, 200, "the old session must not still work after a key rotation");
+
+  // And the OLD login_secret itself must no longer produce a NEW
+  // session either -- otherwise whoever also holds the leaked
+  // login_secret just logs back in, defeating the point of the
+  // rotation.
+  const reLoginAttempt = await fetch(`${BASE}/guardian-login`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ name, login_secret: loginSecret, return_to: "/account" }),
+  });
+  assert.equal(cookieFrom(reLoginAttempt), null, "the old login_secret must no longer produce a session after a key rotation");
 });
 
 test("REQ-10-13/10-14 negative: a held key signs only on a request authenticated as that exact identity", async () => {

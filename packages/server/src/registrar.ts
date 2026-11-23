@@ -8,6 +8,8 @@ import {
   generateKeypair,
   parseGuardianDid,
   resolve as resolveDid,
+  sameKeys,
+  verifyLog,
   type CreateOp,
   type Did,
   type DidDocument,
@@ -15,7 +17,17 @@ import {
   type Log,
   type Operation,
 } from "@did-guardian/lib";
-import { appendOperation, deleteAllLoginSessionsForWard, getHeldKey, getLog, getNameEntry, insertHeldKey, insertNameEntry, setHeldKeyLoginSecretHash } from "./db.js";
+import {
+  appendOperation,
+  deleteAllLoginSessionsForWard,
+  getHeldKey,
+  getLog,
+  getNameEntry,
+  insertHeldKey,
+  insertNameEntry,
+  invalidateLoginSecretHash,
+  setHeldKeyLoginSecretHash,
+} from "./db.js";
 import { makeResolveLog } from "./logResolver.js";
 import { signAttestation } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
@@ -170,17 +182,26 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
   const appended = await appendOperation(env, did, seq, prev, toAccept, new Date().toISOString());
   if (!appended) throw new RegistrarError("REQ-10-8: the log has moved on since this operation was prepared; retry against its current version");
 
-  // R2-0.5 (round-2 audit, re-wired per audit r3's dead-code review):
-  // login_secret/sessions and the operational key are unrelated
-  // credentials -- a session proves login_secret, not possession of
-  // any key -- so an accepted key rotation must invalidate every
-  // existing session for this DID regardless of who signed it or
-  // which path produced it (self-service, take-custody, or a
-  // guardian's own recovery), or whoever holds a stolen login_secret
-  // keeps a working session straight through the rotation meant to
-  // recover from exactly that.
-  if (toAccept.type === "update") {
-    await deleteAllLoginSessionsForWard(env, did);
+  // R2-0.5 (round-2 audit, re-wired; scope and login_secret coverage
+  // per thoward-59's review): login_secret/sessions and the
+  // operational key are unrelated credentials -- a session proves
+  // login_secret, not possession of any key -- so an accepted `update`
+  // that actually changes `keys` must invalidate every existing
+  // session AND the login_secret itself for this DID, regardless of
+  // who signed it or which path produced it (self-service,
+  // take-custody, or a guardian's own recovery), or whoever holds a
+  // stolen login_secret just keeps a working session (or logs back in
+  // outright) straight through the rotation meant to recover from
+  // exactly that. Scoped to an actual keys change, not every update --
+  // editing a service endpoint or alsoKnownAs alone must not log
+  // anyone out.
+  if (toAccept.type === "update" && existingLog.length > 0) {
+    const priorVerified = await verifyLog(did, existingLog);
+    const priorKeys = priorVerified.result === "valid" ? priorVerified.state!.keys : [];
+    if (!sameKeys(priorKeys, toAccept.keys)) {
+      await deleteAllLoginSessionsForWard(env, did);
+      await invalidateLoginSecretHash(env, did);
+    }
   }
 
   return toAccept;

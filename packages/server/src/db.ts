@@ -100,6 +100,21 @@ export async function setHeldKeyLoginSecretHash(env: Env, did: string, hash: str
   await env.DB.prepare("UPDATE held_keys SET login_secret_hash = ? WHERE did = ?").bind(hash, did).run();
 }
 
+/**
+ * R2-0.5 (re-wired, extended per thoward-59's review): a no-op if this
+ * registrar holds no key for `did` at all (nothing to invalidate).
+ * `NULL` is the same state a freshly-registered-but-password-unset
+ * identity is already in -- verifyLogin (login.ts) already treats it
+ * as "no password set," so this doesn't need its own new case there.
+ * There is currently no self-service way for the identity to get a
+ * fresh one back afterward except through a trusted OIDC client or an
+ * operator-level reissue (/login-secret's own authenticatedAs check) --
+ * a real, disclosed gap, not hidden.
+ */
+export async function invalidateLoginSecretHash(env: Env, did: string): Promise<void> {
+  await env.DB.prepare("UPDATE held_keys SET login_secret_hash = NULL WHERE did = ?").bind(did).run();
+}
+
 /** Take-custody: once the caller's own `update` op naming their supplied key is durable in the log, this registrar's held key for them is gone for good -- not merely marked unused. */
 export async function deleteHeldKey(env: Env, did: string): Promise<void> {
   await env.DB.prepare("DELETE FROM held_keys WHERE did = ?").bind(did).run();
