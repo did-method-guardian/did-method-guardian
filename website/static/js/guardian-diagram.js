@@ -80,6 +80,7 @@
       render();
       then();
     });
+    return 450 * names.length + 400;
   }
 
   function finish(ms) {
@@ -95,34 +96,62 @@
   function run(type, pickIndices) {
     var act = active();
     var signers = pickIndices.map(function (i) { return act[i].name; });
-    sign(signers, function () {
+    var dur = sign(signers, function () {
       push(type, "sig: " + signers.join(", ") + " · " + signers.length + "/" + act.length);
     });
-    finish(450 * signers.length + 2200);
+    finish(dur + 2200);
   }
 
-  // A simplified illustration of handing guardianship to a new party --
-  // the real method has no single "transfer" operation; it's an
-  // addGuardian (needing the incoming guardian's own signature too, not
-  // shown here) followed by a removeGuardian for the outgoing one.
-  function transfer() {
+  // Deactivate, under the default policy.deactivation (REQ-6-11:
+  // by "both") -- neither the ward's own key nor a guardian vote is
+  // enough alone; this needs both together.
+  function deactivate() {
+    var act = active();
+    var voters = act.length === 1 ? [act[0].name] : [act[0].name, act[act.length - 1].name];
+    var signers = ["laura"].concat(voters);
+    var dur = sign(signers, function () {
+      push("deactivate", "sig: laura, " + voters.join(", "));
+    });
+    finish(dur + 2200);
+  }
+
+  // Replacing a guardian is three real operations, not one: the
+  // incoming guardian consents on its own first (acceptWard, REQ-7-6
+  // needs this durable before addGuardian can reference it), then
+  // addGuardian (the ward's own key, the guardian vote, and the
+  // incoming guardian's own proof of possession together), then
+  // removeGuardian for the outgoing one (here, by vote of the
+  // guardians staying on).
+  function replaceGuardian() {
     var act = active();
     var outgoing = act[0]; // oldest active guardian
-    var continuing = act.filter(function (g) { return g !== outgoing; }).map(function (g) { return g.name; });
-    sign(continuing, function () {
-      var incoming = makeGuardian(state.nextPoolIndex++);
-      state.guardians.push(incoming);
-      spread();
-      render();
-      push("addGuardian", "sig: " + continuing.concat([incoming.name]).join(", "));
-      at(1300, function () {
-        outgoing.active = false;
-        spread();
-        render();
-        push("removeGuardian", "sig: " + outgoing.name);
+    var continuing = act.filter(function (g) { return g !== outgoing; });
+    var continuingNames = continuing.map(function (g) { return g.name; });
+    var incoming = makeGuardian(state.nextPoolIndex++);
+
+    var dur1 = sign([incoming.name], function () {
+      push("acceptWard", "sig: " + incoming.name);
+      at(600, function () {
+        var addSigners = ["laura"].concat(continuingNames).concat([incoming.name]);
+        sign(addSigners, function () {
+          state.guardians.push(incoming);
+          spread();
+          render();
+          push("addGuardian", "sig: laura, " + continuingNames.concat([incoming.name]).join(", "));
+          at(1300, function () {
+            sign(continuingNames, function () {
+              outgoing.active = false;
+              spread();
+              render();
+              push("removeGuardian", "sig: " + continuingNames.join(", "));
+            });
+          });
+        });
       });
     });
-    finish(450 * (continuing.length + 1) + 400 + 3000);
+    var dur2 = 450 * (1 + continuingNames.length + 1) + 400;
+    var dur3 = 450 * continuingNames.length + 400;
+    finish(dur1 + 600 + dur2 + 1300 + dur3 + 2200);
   }
 
   function impersonate() {
@@ -219,6 +248,7 @@
     });
 
     coreCircle.setAttribute("r", state.reject ? 40 : 44);
+    coreCircle.setAttribute("fill", state.signed["laura"] ? "color-mix(in srgb, var(--clay) 65%, var(--paper) 35%)" : "var(--clay)");
     rejectRingEl.setAttribute("opacity", state.reject ? 1 : 0);
 
     var statusEl = document.getElementById("diagram-status");
@@ -251,14 +281,17 @@
     btn.addEventListener("click", function () {
       if (state.busy) return;
       var action = btn.getAttribute("data-action");
-      // Operation type strings here match the formal spec's own §7
-      // operation names exactly, not the button's own UI label --
-      // "Recover" and "Revoke" are both guardian-initiated
-      // update/deactivate under the hood, same as the real method
-      // defines them.
+      // Operation type strings pushed to the log match the formal
+      // spec's own §7 operation names exactly, not the button's own
+      // UI label. "Recover" is guardian-initiated alone
+      // (policy.recovery's default, "majority", needs no ward key);
+      // "Deactivate" and "Replace guardian" both need the ward's own
+      // key too, under their own default policies -- see deactivate()
+      // and replaceGuardian() above for exactly which operations and
+      // signers each one plays out.
       if (action === "recover") run("update", [0, 1]);
-      else if (action === "revoke") run("deactivate", [0, active().length - 1]);
-      else if (action === "transfer") transfer();
+      else if (action === "deactivate") deactivate();
+      else if (action === "replace-guardian") replaceGuardian();
       else if (action === "impersonate") impersonate();
     });
   });
