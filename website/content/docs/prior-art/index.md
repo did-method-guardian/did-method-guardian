@@ -40,7 +40,7 @@ In [KERI](https://trustoverip.github.io/kswg-keri-specification/), a delegated i
 
 **Comparable:** the mutual-consent requirement is philosophically close to did:guardian's "guardianship is explicit and consensual."
 
-**Different:** KERI delegation is structurally delegator-to-delegate, not a configurable M-of-N peer group. There's no native concept of several guardians, with changeable membership, jointly overseeing one identity under a threshold -- nesting builds a hierarchy, not a flat guardian set. If a hierarchical chain of authority (a root issuer delegating down through several tiers) is the actual shape you need, KERI's delegation model fits that directly; did:guardian's group model doesn't represent hierarchy at all.
+**Different:** KERI delegation is structurally delegator-to-delegate, not a configurable M-of-N peer group. There's no native concept of several guardians, with changeable membership, jointly overseeing one identity under a threshold -- nesting builds a hierarchy, not a flat guardian set. A guardian can itself have its own guardians in did:guardian too (a guardian is just an identity, REQ-6-2), so a chain of relationships can still form -- but each one is a separate, flat M-of-N group, not a single structured delegation hierarchy with KERI's own authority semantics. If that structured chain is the actual shape you need, KERI's delegation model fits it directly.
 
 ## The Sovrin Guardianship Task Force
 

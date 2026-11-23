@@ -59,7 +59,7 @@ Nothing here stops the bare-domain root identity from calling `.../take-custody`
 
 ## 3. Asynchronous signature collection (`pending_proofs`)
 
-For anything needing more than one proof collected over more than one request -- `addGuardian`/`removeGuardian` against a guardian set that already has more than one member, `setPolicy`, `updateGuardian`, or a recovery/deactivation whose required guardians aren't all held by (or available in the same call to) this registrar.
+For anything needing more than one proof collected over more than one request -- `addGuardian` (it always needs both the ward's own key and the incoming guardian's, two different parties, even for the very first guardian), `removeGuardian` against a guardian set that already has more than one member, `setPolicy`, `updateGuardian`, or a recovery/deactivation whose required guardians aren't all held by (or available in the same call to) this registrar.
 
 There's no state machine. A proposal is a candidate operation (its `prev` already fixed against the current log) plus a growing array of proofs. Each proof secures the operation independently ([REQ-5-10](/docs/did-guardian-spec-v0.2.0/#req-5-10)), so signers never need to see each other's proofs or coordinate at all -- they just add their own, in any order, whenever they get to it. After every addition, this registrar checks whether the proofs collected so far are now enough (exactly [REQ-10-5](/docs/did-guardian-spec-v0.2.0/#req-10-5), the same check `.../operations` runs); if so, it submits the operation itself and the proposal is gone. If not, it keeps collecting.
 
@@ -93,7 +93,7 @@ An absent policy member takes the default in [REQ-6-11](/docs/did-guardian-spec-
 Two independent flows share the same underlying credential (`login_secret`) and the same `gw_session` cookie, for two different purposes:
 
 - `/authorize`, `/token`, `/userinfo`, `/revoke`, `/oauth/register-client`, `/.well-known/openid-configuration`, `/.well-known/jwks.json` -- the OIDC relying-party flow, for a third-party application that wants to let someone sign in with their Guardian ID. See `packages/server/src/oidc.ts`.
-- `GET`/`POST /guardian-login?return_to=<path>` -- this registrar's first-party login, for this registrar's pages (currently just §3's browser voting page). No client registration: it's just "sign in, then take me back to the same-origin path that sent me here" (`return_to` is restricted to a relative path -- no open redirect to an external target). See `votingPage.ts`.
+- `GET`/`POST /guardian-login?return_to=<path>` -- this registrar's first-party login, for this registrar's own pages: §3's browser voting page, the account dashboard (§8), and the admin console (§14), each redirecting here when there's no active session. No client registration: it's just "sign in, then take me back to the same-origin path that sent me here" (`return_to` is restricted to a relative path -- no open redirect to an external target). See `votingPage.ts`.
 - `POST /guardian-logout?return_to=<path>` -- ends the session: deletes the `login_sessions` row server-side (not just the cookie client-side, so the old session id can't be replayed) and clears the cookie. POST only, same reasoning as every other state-changing action here -- never a bare link a scanner could trigger. Linked from the account dashboard (§8).
 
 Named `/guardian-login`/`/guardian-logout`, not the shorter `/login`/`/logout`, because a registrar is commonly deployed on a domain that already has its own, unrelated human-facing `/login` and `/logout`. Each still needs its wrangler route entry -- worth checking your own host application's routes before adding any new top-level path here, not just these two.
@@ -183,7 +183,7 @@ Shows identity status, current guardians and successor with the identity's polic
 | Method | Path | |
 |---|---|---|
 | `GET` | `/account` | the dashboard itself |
-| `POST` | `/account/rotate` | rotate the operational key |
+| `POST` | `/account/rotate` | rotate the identity's key |
 | `POST` | `/account/login-secret/reissue` | reissue the login secret (a generated one, shown once, same convention every other one-time secret here follows) -- or, given `password`/`password_confirm` fields instead, set your own password |
 | `POST` | `/account/email` | set up forwarding (§6) |
 | `GET`/`POST` | `/account/tombstone` | a confirmation page -- requires typing the account's name, not a bare button -- then deactivates |
@@ -231,7 +231,7 @@ Every card here declares `securitySchemes.oidc` (an `OpenIdConnectSecurityScheme
 
 **The same WebFinger endpoint also serves OpenID Connect Discovery 1.0's unrelated WebFinger usage** -- `rel=http://openid.net/specs/connect/1.0/issuer` -- which is what a relying party that only has a user's identifier calls first, before ever fetching `/.well-known/openid-configuration` (e.g. a "log in with your identity provider" flow that takes `alice@guardianspec.org` directly, which is how Tailscale's custom-OIDC login discovers an issuer). The `href` returned is always the registrar's bare domain -- there's one OIDC issuer per registrar, not one per ward, so this step only ever confirms the identifier exists here at all. `rel` is a filter per RFC 7033: pass it zero or more times to get only matching links, or omit it to get every link this registrar knows for that resource (both the A2A one and the OIDC one, together).
 
-**Deliberately unsigned in this pass.** A2A's `AgentCardSignature` (JWS, canonicalized) is optional, not required -- plain HTTPS already gives a verifier a weaker binding to this domain. Signing with a ward's operational key (already custodied here, already published in its DID Document) is a natural fit for later, not something this first pass needed to block on.
+**Deliberately unsigned in this pass.** A2A's `AgentCardSignature` (JWS, canonicalized) is optional, not required -- plain HTTPS already gives a verifier a weaker binding to this domain. Signing with a ward's own key (already custodied here, already published in its DID Document) is a natural fit for later, not something this first pass needed to block on.
 
 ## 12. Resource Indicators (planned MCP interop)
 

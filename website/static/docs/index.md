@@ -44,16 +44,16 @@ Three situations come up often enough to need a standard answer:
 ## How it works
 
 
-By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover it, deactivate it, or act on its behalf, under a policy that any verifier checks by replaying the log. \
-\
+By default, a `did:guardian` identity functions no differently than a standard DID, controlling its keys directly. However, an identity can optionally have one or more **guardians**, becoming a **ward** of those guardians. Guardians are other identities (people, organizations, or other wards) granted the power to recover it, deactivate it, or act on its behalf, under a policy that any verifier checks by replaying the log.
+
 A simple example of this is a human that manages an agent. The agent has a fully functional id, and the human has a separate id, but the human can be assigned as the agent's *guardian*.
 
 
 A few rules hold regardless of how many guardians there are or who they are:
 
 - **Guardianship is explicit and consensual.** A guardian has to sign to accept the role; nobody can be named a guardian without agreeing to it. Adding or removing a guardian is also a signed, auditable action, visible in the identity's history afterward.
-- **A guardian can act on the ward's behalf for things the ward can't authorize alone.** This covers recovery, but also ongoing authorization, similar to how a legal guardian already can act on behalf of a dependent, like a minor child.
-- **A threshold decides how many guardians need to act together.** A ward can require any one guardian, a majority, all of them, or a specific count, choosing the appropriate policy for the level of trust the situation calls for.
+- **A guardian can act on the ward's behalf for things the ward can't authorize alone.** Recovery is core to the method itself; a conformant registrar can also let a guardian act as the ward on an ongoing basis (see [token exchange](/docs/registrar/#10-delegation-chain-tokens-token-exchange), a registrar-profile capability, not something the method defines a dedicated operation for) -- similar to how a legal guardian already can act on behalf of a dependent, like a minor child.
+- **A threshold decides how many guardians need to act together.** A ward can require any one guardian, a majority, all of them, or a specific count from 1 to 32, choosing the appropriate policy for the level of trust the situation calls for.
 - **Each guardian action is signed with that specific guardian's key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to whichever guardian performed it, in the identity's history.
 - **Guardianship is temporary by design.** It can be handed off, shared among several guardians, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor). Removing the last guardian deactivates the identity by default; an identity whose policy opts into guardian-less operation ahead of time keeps going without one instead.
 
@@ -121,7 +121,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 
 
-**The reference library** (`packages/lib`). A portable implementation of the method's cryptographic and verification logic, such as signing and verifying operations, replaying a log into current state, checking threshold rules. Implemented in JavaScript so it runs in Node, in a browser, or for example, serverless infrastructure like Cloudflare Workers.
+**The reference library** (`packages/lib`). A portable implementation of the method's cryptographic and verification logic, such as signing and verifying operations, replaying a log into current state, checking threshold rules. Implemented in TypeScript, using only Web Crypto, so it runs in Node, in a browser, or in serverless infrastructure like Cloudflare Workers.
 
 
 

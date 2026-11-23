@@ -16,7 +16,7 @@ did:guardian merges did:plc's operation log and key-rotation model with did:web'
 - [Get started](https://guardianspec.org/docs/how-to/): a CLI quickstart -- create an identity, resolve it, add a guardian.
 - [Self-host a registrar](https://guardianspec.org/docs/how-to/self-host/): deploy packages/server, the reference registrar, on your own domain.
 - [Sign in via custom OIDC](https://guardianspec.org/docs/how-to/custom-oidc-login/): register an OAuth client and use a Guardian ID to sign in anywhere that accepts a custom OIDC identity provider.
-- [Recover after a lost key](https://guardianspec.org/docs/how-to/recover-lost-key/): a guardian-initiated rotation replaces a ward's lost operational key.
+- [Recover after a lost key](https://guardianspec.org/docs/how-to/recover-lost-key/): a guardian-initiated rotation replaces a ward's lost key.
 - [Give an AI agent an identity a human can revoke](https://guardianspec.org/docs/how-to/ai-agent-identity/): register an identity for an agent, make a human its guardian, and let that human authorize, recover, or shut it down.
 
 ## Code

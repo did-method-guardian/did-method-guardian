@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://guardianspec.org/schemas/operations/deactivate.schema.json",
   "title": "deactivate",
-  "description": "Formal spec §7.10. Sets `deactivated` to `true` (REQ-7-28). Permanent -- no later operation is accepted (REQ-8-1.4).",
+  "description": "Formal spec §7.10. Sets `deactivated` to `true` (REQ-7-28). Permanent -- no later operation is accepted (REQ-8-1, step 4).",
   "type": "object",
   "properties": {
     "type": { "const": "deactivate" },
