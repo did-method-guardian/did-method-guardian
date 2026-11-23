@@ -55,6 +55,24 @@ async function authenticatedAs(request: Request, env: Env, did: Did): Promise<bo
   return trustedClient !== null;
 }
 
+/**
+ * A create reaching /operations or /propose is anonymous self-service by
+ * construction, whichever route it arrives through (S-F3) -- the same
+ * rate limit and REGISTRATION_MODE gate /register itself applies.
+ * Returns an error Response to short-circuit the route, or null to
+ * continue.
+ */
+async function checkCreateGate(env: Env, request: Request, opType: string): Promise<Response | null> {
+  if (opType !== "create") return null;
+  if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
+    return error("too many registration attempts from this address -- try again in a few minutes", 429);
+  }
+  if (env.REGISTRATION_MODE === "closed") {
+    return error("this registrar doesn't accept public registration", 403);
+  }
+  return null;
+}
+
 /** The caller's own identity, from a session or (if named explicitly, for a trusted client with no identity of its own) the `did`/`guardian_did` field named in `body`. */
 async function callerIdentity(request: Request, env: Env, body: { guardian_did?: string }): Promise<Did | null> {
   const sessionId = readCookie(request, "gw_session");
@@ -122,18 +140,8 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
 
       if (suffix === "/operations" && request.method === "POST") {
         const op = (await request.json()) as Operation;
-        // A create here is a brand-new identity claiming this name --
-        // anonymous self-service by construction, so it gets exactly
-        // /register's gate: rate-limited per IP, and blocked outright
-        // when this deployment has closed public registration.
-        if (op.type === "create") {
-          if (!(await checkRateLimit(env, "register", clientIp(request), 5, 600))) {
-            return error("too many registration attempts from this address -- try again in a few minutes", 429);
-          }
-          if (env.REGISTRATION_MODE === "closed") {
-            return error("this registrar doesn't accept public registration", 403);
-          }
-        }
+        const gated = await checkCreateGate(env, request, op.type);
+        if (gated) return gated;
         try {
           const accepted = await submitOperation(env, did, op);
           return json({ accepted: true, operation: accepted }, 201);
@@ -148,10 +156,21 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         // model as /operations: the operation's own attached proof is
         // the authorization. A required signer with no account here at
         // all must be able to propose or contribute without logging in.
+        // A create reaching this route is just as much anonymous
+        // self-service as one through /operations (S-F3), so it gets
+        // the identical gate -- /propose is not a second, ungated door
+        // into the same acceptance path.
         const body = (await request.json()) as { operation?: Omit<Operation, "proof">; proof?: DataIntegrityProof };
         if (!body.operation || !body.proof) return error("operation and proof are required", 400);
-        const outcome = await proposeOperation(env, did, body.operation, body.proof);
-        return json(outcome, outcome.status === "finalized" ? 201 : 202);
+        const gated = await checkCreateGate(env, request, body.operation.type);
+        if (gated) return gated;
+        try {
+          const outcome = await proposeOperation(env, did, body.operation, body.proof);
+          return json(outcome, outcome.status === "finalized" ? 201 : 202);
+        } catch (e) {
+          if (e instanceof RegistrarError) return error(e.message, e.status);
+          throw e;
+        }
       }
 
       if (suffix === "/email" && request.method === "POST") {

@@ -89,6 +89,41 @@ test("REQ-10-2: GET the root identity's document before anything has ever been c
   assert.equal(r.status, 404);
 });
 
+test("S-F1: the root identity cannot be claimed by a submitted create, through /operations or /propose", async () => {
+  const keypair = await generateKeypair();
+  const rootCreate = {
+    type: "create" as const,
+    did: "did:guardian:guardianspec.org" as const,
+    keys: [keypair.publicKey],
+    guardians: [],
+    successor: null,
+    policy: {},
+    services: [],
+    alsoKnownAs: [],
+    prev: null,
+  };
+  const proof = await createProof(rootCreate, keypair.publicKey, keypair.privateKey);
+
+  const viaOperations = await fetch(`${BASE}/.well-known/guardian/_/operations`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...rootCreate, proof: [proof] }),
+  });
+  assert.equal(viaOperations.status, 400, "an attacker-signed root create through /operations must be rejected");
+
+  const viaPropose = await fetch(`${BASE}/.well-known/guardian/_/propose`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: rootCreate, proof }),
+  });
+  assert.equal(viaPropose.status, 400, "an attacker-signed root create through /propose must be rejected too -- it reaches the same acceptance path");
+
+  // The root was never claimed by the attacker -- it still doesn't
+  // exist yet (nothing else in this run has created it either).
+  const rootLog = await fetch(`${BASE}/.well-known/guardian/_/log`);
+  assert.equal(rootLog.status, 404);
+});
+
 test("register, resolve, and the root identity is lazily bootstrapped as a side effect", async () => {
   const name = uniqueName("alice");
   const { did } = await registerHeld(name);

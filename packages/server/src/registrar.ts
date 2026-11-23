@@ -131,22 +131,25 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
     if (existingLog.length > 0) throw new RegistrarError("REQ-8-1: a later operation must not be a create");
     if (parsed.domain !== env.REGISTRAR_DOMAIN) throw new RegistrarError(`REQ-10-9: this registrar only creates identities on ${env.REGISTRAR_DOMAIN}`);
 
-    if (parsed.name !== null) {
-      // REQ-10-10: the root identity must exist before any other
-      // create -- bootstrapped here, lazily, on the first one (never
-      // from a GET: REQ-10-2).
-      await ensureRootIdentity(env);
+    // REQ-10-10: the root identity is this registrar's own, bootstrapped
+    // only by ensureRootIdentity (at startup/first use), never accepted
+    // as a submitted operation -- an externally-submitted root create
+    // would let the first anonymous caller claim the attestation key.
+    if (parsed.name === null) throw new RegistrarError("REQ-10-10: the root identity cannot be created by a submitted operation");
 
-      // REQ-10-9: the name must be unused -- a pre-check here for a clear
-      // rejection reason; insertNameEntry's own unique constraint (after
-      // acceptance, below) is what actually makes this race-free.
-      const existingName = await getNameEntry(env, parsed.domain, parsed.name);
-      if (existingName) throw new RegistrarError("REQ-10-12: this name is already used");
+    // REQ-10-10: the root identity must exist before any other
+    // create -- bootstrapped here, lazily, on the first one (never
+    // from a GET: REQ-10-2).
+    await ensureRootIdentity(env);
 
-      // REQ-10-9: add the attestation before REQ-10-5 applies.
-      toAccept = { ...candidate, attestation: await signAttestation(env, candidate) };
-    }
-    // The root's own create gets no attestation (REQ-7-7).
+    // REQ-10-9: the name must be unused -- a pre-check here for a clear
+    // rejection reason; insertNameEntry's own unique constraint (after
+    // acceptance, below) is what actually makes this race-free.
+    const existingName = await getNameEntry(env, parsed.domain, parsed.name);
+    if (existingName) throw new RegistrarError("REQ-10-12: this name is already used");
+
+    // REQ-10-9: add the attestation before REQ-10-5 applies.
+    toAccept = { ...candidate, attestation: await signAttestation(env, candidate) };
   } else if (existingLog.length === 0) {
     throw new RegistrarError("REQ-10-5: this identity has no log yet");
   }
@@ -154,9 +157,11 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
   const result = await checkAcceptance(did, existingLog, toAccept, resolveLog);
   if (!result.accepted) throw new RegistrarError(result.reason ?? "REQ-10-5: rejected");
 
-  if (toAccept.type === "create" && parsed.name !== null) {
+  if (toAccept.type === "create") {
+    // parsed.name is never null here -- a root create was already
+    // rejected above.
     const now = new Date().toISOString();
-    const ok = await insertNameEntry(env, parsed.domain, parsed.name, did, now);
+    const ok = await insertNameEntry(env, parsed.domain, parsed.name as string, did, now);
     if (!ok) throw new RegistrarError("REQ-10-12: this name is already used");
   }
 
