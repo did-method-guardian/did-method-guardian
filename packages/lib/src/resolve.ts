@@ -63,7 +63,18 @@ export async function verifyAttestation(create: CreateOp, resolveLog: LogResolve
 
   const rootLog = await resolveLog(rootDid);
   if (!rootLog) return "invalid";
-  const opIndex = await findByHash(rootLog, version);
+  // F-8 (audit): rootLog comes from resolveLog -- another party's own
+  // log, fetched over the network for a registrar, never something
+  // this function already validated. A malformed entry in it (not
+  // even JCS-safe content, say) would otherwise throw out of
+  // findByHash's own operationHash call, turning what this function
+  // documents as "invalid" into an uncaught exception instead.
+  let opIndex: number;
+  try {
+    opIndex = await findByHash(rootLog, version);
+  } catch {
+    return "invalid";
+  }
   if (opIndex === -1) return "invalid";
 
   const prefixResult = await verifyLog(rootDid, rootLog.slice(0, opIndex + 1), implementedExtensions);
@@ -102,7 +113,16 @@ export async function resolve(
 ): Promise<ResolveResult> {
   let effectiveLog = log;
   if (versionId !== undefined) {
-    const index = await findByHash(log, versionId);
+    // F-8 (same class): `log` hasn't been through verifyLog yet at
+    // this point either, so a malformed entry could throw out of
+    // findByHash's own hashing -- caught the same way as
+    // verifyAttestation's own rootLog scan, below.
+    let index: number;
+    try {
+      index = await findByHash(log, versionId);
+    } catch {
+      return { result: "invalid", reason: "REQ-9-5: the log could not be hashed to look for that version" };
+    }
     if (index === -1) return { result: "invalid", reason: `REQ-9-5: no operation with hash ${versionId} in this log` };
     effectiveLog = log.slice(0, index + 1);
   }

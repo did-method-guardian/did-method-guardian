@@ -323,6 +323,14 @@ function decompressPoint(compressed: Uint8Array): { x: Uint8Array; y: Uint8Array
   if (prefix !== 0x02 && prefix !== 0x03) throw new Error("expected a compressed EC point (0x02 or 0x03 prefix)");
   const xBytes = compressed.slice(1, 33);
   const x = bytesToBigInt(xBytes);
+  // F-9 (audit): an x >= p isn't a valid field element -- every modular
+  // operation below would silently reduce it anyway, so an
+  // out-of-range encoding would otherwise still decompress to a real
+  // point (REQ-5-9), just one with more than one 33-byte encoding of
+  // the same key (x and x + p both producing it) -- the same class of
+  // non-canonical-encoding problem F-2 fixed for the multicodec
+  // varint.
+  if (x >= P256_P) throw new Error("x coordinate is not less than the field prime p (REQ-5-9)");
   let rhs = (modpow(x, 3n, P256_P) - (3n * x) % P256_P + P256_B) % P256_P; // y^2 = x^3 - 3x + b mod p
   if (rhs < 0n) rhs += P256_P;
   let y = modpow(rhs, (P256_P + 1n) / 4n, P256_P);

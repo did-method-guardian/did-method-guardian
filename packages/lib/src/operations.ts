@@ -539,8 +539,16 @@ export function checkCreateShape(op: Record<string, unknown>): ShapeResult {
     const attestationShape = checkProofShape(op.attestation, true);
     if (!attestationShape.valid) return attestationShape;
     const vm = (op.attestation as DataIntegrityProof).verificationMethod;
-    if (!new RegExp(`^did:guardian:${escapeRegExp(domain)}\\?versionId=[^#]+#key-(0|[1-9][0-9]*)$`).test(vm)) {
+    const vmMatch = new RegExp(`^did:guardian:${escapeRegExp(domain)}\\?versionId=([^#]+)#key-(0|[1-9][0-9]*)$`).exec(vm);
+    if (!vmMatch) {
       return invalid("REQ-7-9: attestation.verificationMethod must be did:guardian:<domain-of-did>?versionId=<version>#key-<n>");
+    }
+    // F-10 (audit): `<version>` is a version of the root identity's
+    // log -- i.e. an operation hash (REQ-5-6) -- not an arbitrary
+    // non-"#" string. `[^#]+` alone accepted anything that fit the
+    // surrounding syntax.
+    if (!isValidHash(vmMatch[1])) {
+      return invalid("REQ-7-9: attestation.verificationMethod's versionId must be a hash");
     }
   }
   const extensions = (op as { extensions?: Record<string, unknown> }).extensions;

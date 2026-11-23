@@ -1,5 +1,5 @@
 import { anchorOf, isSupportedOperationType, keyOfVerificationMethod, operationHash, sameEntry, verifyProofSignature } from "./operations.js";
-import { checkMutuality, findByHash, sameKeys, type LogResolver } from "./resolve.js";
+import { checkMutuality, findByHash, sameKeys, verifyAttestation, type LogResolver } from "./resolve.js";
 import { verifyLog } from "./verifyLog.js";
 import type { CreateOp, Did, Entry, Key, Log, Operation, State } from "./types.js";
 
@@ -181,20 +181,36 @@ export async function checkAcceptance(
   if (verified.result === "unsupported") return reject("REQ-10-5: an unsupported result is a rejection");
   if (verified.result !== "valid") return reject(`REQ-10-5: ${verified.reason}`);
 
-  // REQ-10-9: a create's attestation must use the CURRENT version of the
-  // root identity's log -- not merely a version that was once valid.
-  // (REQ-10-9 names this as part of producing the attestation; checked
-  // again here in case it is stale by the time this operation is
-  // accepted, e.g. the root rotated in between.)
+  // REQ-10-9/REQ-10-10 (F-11, audit): two distinct requirements, both
+  // needed -- neither alone is REQ-10-9's "using ... the CURRENT
+  // version of the root identity's log":
+  //
+  // 1. The attestation must still be genuinely valid right now: its
+  //    own signature verifies, the root isn't deactivated, the key
+  //    index exists. The previous code never checked any of this at
+  //    acceptance time -- it only compared the versionId string.
+  //    verifyAttestation (resolve.ts) is the real, complete check for
+  //    this (REQ-11-2); it also covers REQ-10-10 (the root must exist
+  //    first), since a missing/empty root log is "invalid" there.
+  //
+  // 2. The versionId must still be the root's CURRENT head, not
+  //    merely some version that was once (and may still be)
+  //    genuinely valid -- an attestation signed just before the root
+  //    rotates must not go on being accepted afterward. The previous
+  //    code's own version of this check was right in spirit, but
+  //    skipped it entirely (treating it as passing) whenever the root
+  //    log could not be fetched, which is exactly backwards: that
+  //    case must reject, not silently let it through.
   if (candidate.type === "create" && candidate.attestation) {
+    const attestationResult = await verifyAttestation(candidate, resolveLog, implementedExtensions);
+    if (attestationResult === "unsupported") return reject("REQ-10-9: the attestation's cryptosuite is not implemented");
+    if (attestationResult !== "valid") return reject("REQ-10-9/REQ-10-10: the attestation does not verify");
+
     const m = /^(did:guardian:[^?#]+)\?versionId=([^#]+)#key-(0|[1-9][0-9]*)$/.exec(candidate.attestation.verificationMethod);
-    if (m) {
-      const rootLog = await resolveLog(m[1] as Did);
-      if (rootLog && rootLog.length > 0) {
-        const currentRootVersion = await operationHash(rootLog[rootLog.length - 1]);
-        if (m[2] !== currentRootVersion) return reject("REQ-10-9: the attestation must use the current version of the root identity's log");
-      }
-    }
+    const rootLog = m ? await resolveLog(m[1] as Did) : undefined;
+    if (!rootLog || rootLog.length === 0) return reject("REQ-10-10: the root identity does not exist");
+    const currentRootVersion = await operationHash(rootLog[rootLog.length - 1]);
+    if (m![2] !== currentRootVersion) return reject("REQ-10-9: the attestation must use the current version of the root identity's log");
   }
 
   // REQ-10-5 step 3 (REQ-10-7).
