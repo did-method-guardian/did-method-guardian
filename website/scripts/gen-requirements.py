@@ -46,13 +46,30 @@ def main():
         m = REQ_RE.match(line)
         if m:
             req_anchor, req_id, rest = m.groups()
+            # WS-M18 (audit): this used to stop at the first blank line,
+            # which is also where a REQ's own clarifying table or list
+            # starts (REQ-10-1's own resource table, say) -- the real
+            # boundary is the next REQ anchor or heading, not the next
+            # blank line. Collecting through blank lines keeps a table
+            # or list that belongs to this REQ; stopping at the next
+            # REQ_RE/HEADING_RE match keeps the next REQ's own text out.
             text_lines = [rest]
             j = i + 1
-            while j < len(lines) and lines[j].strip() != '':
+            while j < len(lines) and not REQ_RE.match(lines[j]) and not HEADING_RE.match(lines[j]):
                 text_lines.append(lines[j])
                 j += 1
-            text = ' '.join(t.strip() for t in text_lines).strip()
-            tests = [path for path, content in test_files.items() if req_id in content]
+            while text_lines and text_lines[-1].strip() == '':
+                text_lines.pop()
+            text = '\n'.join(t.rstrip() for t in text_lines).strip('\n')
+            # WS-M18 (audit): `req_id in content` is a bare substring
+            # check -- "REQ-10-1" is itself a substring of "REQ-10-15"
+            # (and REQ-10-10 through REQ-10-19), so a test file citing
+            # a different, higher-numbered requirement in the same
+            # section falsely credited this one too. Every id already
+            # starts at its own word boundary, so only the trailing one
+            # needs checking: never followed by another digit.
+            id_pattern = re.compile(re.escape(req_id) + r'(?!\d)')
+            tests = [path for path, content in test_files.items() if id_pattern.search(content)]
             reqs.append({
                 'id': req_id,
                 'anchor': BASE_URL + '#' + req_anchor,

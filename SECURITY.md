@@ -17,7 +17,7 @@ Please include:
 
 In scope:
 - The `did:guardian` method itself (`packages/lib`) — operation validation, guardian threshold logic, signature verification, DID/document resolution
-- The reference registrar (`packages/server`) — authentication, session handling, OIDC/OAuth flows, the pending-operations signature-collection machine, cross-registrar relay
+- The reference registrar (`packages/server`) — authentication, session handling, OIDC/OAuth flows, pending-operations signature collection, cross-registrar relay
 - The reference CLI (`packages/cli`) — local key storage/handling, offline verification
 - The two live reference deployments, `zzmq.dev` and `guardianspec.org`
 

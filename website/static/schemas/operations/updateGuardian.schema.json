@@ -6,8 +6,8 @@
   "type": "object",
   "properties": {
     "type": { "const": "updateGuardian" },
-    "guardian": { "type": "string", "description": "REQ-7-15: the DID of a current guardian or of the successor." },
-    "keys": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-16: replaces that entry's own `keys`." },
+    "guardian": { "type": "string", "pattern": "^did:guardian:[a-z0-9-]+(\\.[a-z0-9-]+)+(:[a-z0-9-]{3,32})?$", "description": "REQ-7-15: the DID of a current guardian or of the successor." },
+    "keys": { "type": "array", "items": { "type": "string", "pattern": "^z[1-9A-HJ-NP-Za-km-z]{46,50}$" }, "minItems": 1, "maxItems": 8, "uniqueItems": true, "description": "REQ-7-16: replaces that entry's own `keys` -- 1 to 8 distinct Multikey strings (REQ-6-2/REQ-5-8)." },
     "prev": { "type": "string" },
     "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: every key in `keys`; and either a key in the named entry, or one current key together with one guardian other than the named one." },
     "extensions": { "type": "object", "description": "REQ-5-3: optional." }

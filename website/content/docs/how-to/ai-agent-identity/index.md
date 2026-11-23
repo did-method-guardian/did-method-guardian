@@ -75,7 +75,7 @@ did-guardian guardian deactivate did:guardian:guardianspec.org:support-bot-7 did
 
 This works in one call whenever `policy.deactivation` lets a guardian approve alone (`by: "guardians"` or `"either"`, with `priya`'s own signature meeting `policy.deactivation.threshold`) -- the default policy (`by: "both"`) also needs the agent's own key, so with no change to policy this command reports what else is needed instead of succeeding; the generic multi-signer path (`did-guardian operation propose`/`operation sign`, [registrar API doc](/docs/registrar/) §3) collects whatever that turns out to be.
 
-Either way this deactivates the agent's identity permanently -- its log stays public and readable, but no further operation on it is accepted. If you want deactivation to need more than one guardian to agree, set that in `policy.deactivation` at registration, or with a later `setPolicy` (through the generic multi-signer path -- there's no dedicated command for it yet).
+Either way this deactivates the agent's identity permanently -- its log stays public and readable, but no further operation on it is accepted. Registration always starts an identity on the default policy; if you want deactivation to need more than one guardian to agree, change `policy.deactivation` afterward with `setPolicy` (through the generic multi-signer path -- there's no dedicated command for it yet).
 
 ## Short-lived agents
 

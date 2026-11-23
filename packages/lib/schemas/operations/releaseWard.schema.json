@@ -6,7 +6,7 @@
   "type": "object",
   "properties": {
     "type": { "const": "releaseWard" },
-    "ward": { "type": "string", "description": "REQ-7-25: the DID of a record in `wards`." },
+    "ward": { "type": "string", "pattern": "^did:guardian:[a-z0-9-]+(\\.[a-z0-9-]+)+(:[a-z0-9-]{3,32})?$", "description": "REQ-7-25: the DID of a record in `wards`." },
     "prev": { "type": "string" },
     "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: one current key, or guardians per `recovery`." },
     "extensions": { "type": "object", "description": "REQ-5-3: optional." }

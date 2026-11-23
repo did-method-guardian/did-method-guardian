@@ -3,7 +3,7 @@
   "$id": "https://guardianspec.org/schemas/policy.schema.json",
   "title": "Policy",
   "description": "Formal spec §6.3. The configurable consensus thresholds governing a ward's guardians.",
-  "$comment": "REQ-5-3: `extensions` is the forward-compatibility member -- a verifier that doesn't recognize a given extension key ignores it, rather than refusing the whole policy.",
+  "$comment": "REQ-7-29/REQ-7-34: `extensions` is the forward-compatibility member -- a verifier ignores an extension whose name is NOT in the operation's `critical` (REQ-7-34), whether or not it implements it. One that IS in `critical` and isn't implemented makes the verification result unsupported instead (REQ-8-1), not ignored.",
   "type": "object",
   "properties": {
     "recovery": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of update, acceptWard and releaseWard. Allowed: \"any\", \"majority\", \"all\", integer k (REQ-6-13: 1-32). Default \"majority\"." },
@@ -27,7 +27,11 @@
       "description": "REQ-6-11/REQ-6-14: the change applied by REQ-6-10 when a removeGuardian leaves `guardians` empty. MUST be \"successor\" if this identity's `successor` is an entry, and MUST NOT be \"successor\" if `successor` is null. Default \"deactivate\"."
     },
     "maxWards": { "type": "integer", "minimum": 1, "description": "REQ-6-11/REQ-6-15: the largest allowed size of `wards`. Absent means no limit." },
-    "extensions": { "type": "object", "description": "REQ-5-3: additional members a verifier that doesn't recognize them ignores." }
+    "extensions": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:%[0-9A-Fa-f]{2}|[A-Za-z0-9._~!$&'()*+,;=:/?@\\[\\]-])*$" },
+      "description": "REQ-7-29: each member name is an extension name (an absolute URI); each value is defined by that extension. Ignored by a verifier when the name isn't in `critical` (REQ-7-34); makes the result unsupported, not ignored, when it is and the verifier doesn't implement it (REQ-8-1)."
+    }
   },
   "additionalProperties": false
 }

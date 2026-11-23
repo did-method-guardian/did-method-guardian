@@ -12,7 +12,6 @@ This folder holds a test suite for the did:guardian method spec (`did-guardian-s
   It is not normative. Use it only to compare against your own implementation.
 - **`gen.py`** regenerates the vectors. The output is deterministic.
 - **`run.py`** runs the vectors against `verifier.py`, then runs the cross-checks and the W3C cryptosuite vectors.
-- The `r1/` to `r6/` folders, `vectors/`, `vectors-r2/` to `vectors-r6/` and `FINDINGS*.md` are history from earlier spec revisions. **Ignore them** when testing against the final spec.
 
 ## Running
 

@@ -5,9 +5,9 @@
   "description": "Formal spec REQ-6-2. A guardian or successor entry -- a snapshot of that identity's own log at the time it was recorded.",
   "type": "object",
   "properties": {
-    "did": { "type": "string", "description": "The guardian or successor's own did:guardian DID." },
-    "anchor": { "type": "string", "description": "The anchor of that DID's log at snapshot time." },
-    "keys": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 8, "description": "1 to 8 distinct Multikey strings, that DID's own keys at snapshot time." },
+    "did": { "type": "string", "pattern": "^did:guardian:[a-z0-9-]+(\\.[a-z0-9-]+)+(:[a-z0-9-]{3,32})?$", "description": "The guardian or successor's own did:guardian DID (REQ-4-1 through REQ-4-3)." },
+    "anchor": { "type": "string", "description": "That DID's own anchor (REQ-5-7) -- fixed for the life of the identity, not something that changes between snapshots." },
+    "keys": { "type": "array", "items": { "type": "string", "pattern": "^z[1-9A-HJ-NP-Za-km-z]{46,50}$" }, "minItems": 1, "maxItems": 8, "uniqueItems": true, "description": "1 to 8 distinct Multikey strings (REQ-5-8), that DID's own keys as they were when this entry was recorded." },
     "consent": { "type": "string", "description": "The operation hash of an acceptWard in that DID's own log, naming the ward this entry belongs to." }
   },
   "required": ["did", "anchor", "keys", "consent"],

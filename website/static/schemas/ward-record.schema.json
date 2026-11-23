@@ -5,7 +5,7 @@
   "description": "Formal spec REQ-6-4. A record in `wards`.",
   "type": "object",
   "properties": {
-    "did": { "type": "string", "description": "The ward's own did:guardian DID." },
+    "did": { "type": "string", "pattern": "^did:guardian:[a-z0-9-]+(\\.[a-z0-9-]+)+(:[a-z0-9-]{3,32})?$", "description": "The ward's own did:guardian DID." },
     "anchor": { "type": "string", "description": "The anchor of that DID's log." }
   },
   "required": ["did", "anchor"],

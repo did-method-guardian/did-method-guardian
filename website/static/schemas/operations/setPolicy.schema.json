@@ -10,7 +10,7 @@
     "successor": { "oneOf": [{ "$ref": "../entry.schema.json" }, { "type": "null" }], "description": "REQ-7-20: replaces the state's `successor`." },
     "prev": { "type": "string" },
     "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: one current key; guardians per `membership`, if N > 0; and every key in `successor`, if it is an entry that differs from the current `successor`." },
-    "critical": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "REQ-7-30: optional, non-empty, distinct extension names, each a member of `policy.extensions`." },
+    "critical": { "type": "array", "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:(?:%[0-9A-Fa-f]{2}|[A-Za-z0-9._~!$&'()*+,;=:/?@\\[\\]-])*$" }, "minItems": 1, "uniqueItems": true, "description": "REQ-7-30: optional, non-empty list of distinct extension names (each an absolute URI per RFC 3986, REQ-7-29), each a member of `policy.extensions`." },
     "extensions": { "type": "object", "description": "REQ-5-3: optional." }
   },
   "required": ["type", "policy", "successor", "prev", "proof"],

@@ -6,9 +6,9 @@
   "type": "object",
   "properties": {
     "type": { "const": "update" },
-    "keys": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-11: replaces the state's `keys`." },
-    "services": { "type": "array", "items": { "$ref": "../service.schema.json" }, "description": "REQ-7-11: replaces the state's `services`." },
-    "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-11: replaces the state's `alsoKnownAs`." },
+    "keys": { "type": "array", "items": { "type": "string", "pattern": "^z[1-9A-HJ-NP-Za-km-z]{46,50}$" }, "minItems": 1, "maxItems": 8, "uniqueItems": true, "description": "REQ-7-11: replaces the state's `keys` -- 1 to 8 distinct Multikey strings (REQ-6-1/REQ-5-8)." },
+    "services": { "type": "array", "items": { "$ref": "../service.schema.json" }, "maxItems": 32, "description": "REQ-7-11: replaces the state's `services` -- 0 to 32 services with distinct `id` values (REQ-6-1)." },
+    "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "maxItems": 32, "description": "REQ-7-11: replaces the state's `alsoKnownAs` -- 0 to 32 distinct URIs (REQ-6-1)." },
     "prev": { "type": "string", "description": "REQ-7-4: the operation hash of the preceding operation." },
     "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: every key in `keys`; and either one current key or guardians per `recovery`." },
     "extensions": { "type": "object", "description": "REQ-5-3: optional." }
