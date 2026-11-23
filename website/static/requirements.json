@@ -12,14 +12,18 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-4-2",
       "section": "4. Identifier",
       "text": "`<domain>` MUST be a DNS hostname of two or more labels, in lowercase, at most 253 characters long. Each label MUST be 1 to 63 characters from `a`\u2013`z`, `0`\u2013`9` and `-`, and MUST begin and end with a letter or a digit. Internationalized names MUST use their A-label form. The last label MUST NOT consist only of digits.",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/resolve.test.ts"
+      ]
     },
     {
       "id": "REQ-4-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-4-3",
       "section": "4. Identifier",
       "text": "`<name>` MUST be 3 to 32 characters from `a`\u2013`z`, `0`\u2013`9` and `-`. It MUST begin and end with a letter or a digit.",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/resolve.test.ts"
+      ]
     },
     {
       "id": "REQ-4-4",
@@ -56,7 +60,10 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-2",
       "section": "5.1 Values",
       "text": "Every number in an operation MUST have an integer value between 0 and 2^53 \u2212 1.",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/crypto.test.ts",
+        "packages/lib/tests/f4-f6-f7.test.ts"
+      ]
     },
     {
       "id": "REQ-5-3",
@@ -308,7 +315,11 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-7-7",
       "section": "7.3 create",
       "text": "A `create` MUST contain the members `type`, `did`, `keys`, `guardians`, `successor`, `policy`, `services`, `alsoKnownAs`, `prev` and `proof`. The `create` of an identity other than a root identity MUST contain the member `attestation`. The `create` of a root identity MUST NOT contain it.",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/f3-evidence-standing.test.ts",
+        "packages/lib/tests/resolve-versionid.test.ts",
+        "packages/server/tests/registrar-session-scope.test.ts"
+      ]
     },
     {
       "id": "REQ-7-8",
@@ -553,7 +564,9 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-9-5",
       "section": "9. DID document",
       "text": "Resolving a DID URL with the parameter `versionId=<version>` yields the DID document derived from the state after the operation whose operation hash is `<version>`. Only the log up to and including that operation needs to verify.",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/resolve-versionid.test.ts"
+      ]
     },
     {
       "id": "REQ-10-1",
@@ -561,6 +574,7 @@
       "section": "10.1 Resources",
       "text": "The registrar for a domain MUST serve these resources over HTTPS at `https://<domain>/.well-known/guardian/<segment>`, where `<segment>` is the path segment of the identity (REQ-4-5):",
       "tests": [
+        "packages/lib/tests/pin.test.ts",
         "packages/server/tests/db.test.ts",
         "packages/server/tests/http-endpoints.test.ts"
       ]
@@ -603,14 +617,18 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-10-6",
       "section": "10.2 Accepting operations",
       "text": "An entry has standing for an identity if the current log of the entry's `did` verifies and, in that log:",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/f3-evidence-standing.test.ts"
+      ]
     },
     {
       "id": "REQ-10-7",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-10-7",
       "section": "10.2 Accepting operations",
       "text": "Before accepting an operation, a registrar MUST fetch the current log of each other identity that the operation involves, and check:",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/f3-evidence-standing.test.ts"
+      ]
     },
     {
       "id": "REQ-10-8",
@@ -688,14 +706,19 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-11-3",
       "section": "11. Resolution",
       "text": "A resolver SHOULD record the anchor and the version of each log it fetches.",
-      "tests": []
+      "tests": [
+        "packages/cli/tests/state.test.ts",
+        "packages/lib/tests/pin.test.ts"
+      ]
     },
     {
       "id": "REQ-11-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-11-4",
       "section": "11. Resolution",
       "text": "If a later fetch of a log yields a different anchor, the resolver MUST report that the DID refers to a different identity. If it yields a log that does not contain the recorded version, the resolver MUST report that the log was rolled back or forked.",
-      "tests": []
+      "tests": [
+        "packages/lib/tests/pin.test.ts"
+      ]
     },
     {
       "id": "REQ-11-5",

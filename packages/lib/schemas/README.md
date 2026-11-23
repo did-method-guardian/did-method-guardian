@@ -1,6 +1,8 @@
 # JSON Schemas
 
-Draft 2020-12 JSON Schemas for `did:guardian`'s own wire formats, hand-written to match `packages/lib/src/types.ts` (a small, stable set -- not worth a generator dependency). Each `description` cites the formal spec requirement it encodes; update both together if either changes.
+Draft 2020-12 JSON Schemas for `did:guardian`'s own wire formats, matching `packages/lib/src/types.ts` (a small, stable set -- not worth a generator dependency). Each `description` cites the formal spec requirement it encodes; update both together if either changes.
+
+This copy is generated, not hand-written here: `website/static/schemas/` is the source of truth; `website/scripts/sync-schemas.py` copies it into this directory byte-identically. Edit there, then rerun that script -- CI's `website-sync` job fails the build if this directory would still differ from the result.
 
 - `policy.schema.json` -- `Policy` (spec §6.3).
 - `setting.schema.json` -- the `Setting` union `policy.recovery`/`membership`/`removal` and `policy.deactivation.threshold` use (REQ-6-11/REQ-6-12).
