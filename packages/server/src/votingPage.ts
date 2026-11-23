@@ -54,6 +54,22 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
   if (status.did !== wardDid) return html(pageShell("Not found", `<h1>Not found</h1><p class="error">No such pending operation for this identity.</p>`), 404);
   const opType = (status.operation as { type: string }).type;
 
+  // F2, corrected per review: a genuine addGuardian (checkAcceptance's
+  // own standing check already refuses a fabricated one) can still
+  // name a guardian the ward never meant to pick -- acceptWard is
+  // one-sided, so anyone can genuinely consent to guard someone and
+  // then propose themselves this way. The raw JSON below has
+  // `entry.did` in it either way, but WHO this adds is the one fact
+  // that must never be buried in a JSON blob a person skims past.
+  const summary =
+    opType === "addGuardian"
+      ? `<p class="hint"><strong>This would add ${escapeHtml(String((status.operation as { entry?: { did?: string } }).entry?.did ?? "(unknown)"))} as a guardian of ${escapeHtml(wardDid)}.</strong> Make sure that's a guardian you actually chose before signing.</p>`
+      : opType === "update"
+        ? `<p class="hint"><strong>This would replace ${escapeHtml(wardDid)}'s own keys.</strong> If you didn't just ask for a key recovery or rotation, don't sign this.</p>`
+        : opType === "deactivate"
+          ? `<p class="hint"><strong>This would permanently deactivate ${escapeHtml(wardDid)}.</strong></p>`
+          : "";
+
   let actions = "";
   if (sessionWardDid) {
     // F2 (confused deputy): the digest is a hidden field in this same
@@ -81,6 +97,7 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
       <dt>Proofs collected so far</dt><dd>${status.proofsCollected}</dd>
       <dt>Expires</dt><dd>${escapeHtml(status.expiresAt)}</dd>
     </dl>
+    ${summary}
     <h2>Full operation content -- review before signing</h2>
     <pre style="background:var(--muted-200,#f0f0f0); padding:12px; border-radius:6px; overflow-x:auto; font-size:13px;"><code>${escapeHtml(JSON.stringify(status.operation, null, 2))}</code></pre>
     ${actions}

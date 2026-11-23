@@ -119,13 +119,20 @@ export async function proposeAdopt(wardDid: Did, guardianSessionCookie: string):
   return { pendingId: body.pendingId };
 }
 
-/** Step 2 of adopt: authenticated as the ward itself, completing the pending addGuardian `proposeAdopt` started. */
-export async function confirmAdopt(wardDid: Did, wardSessionCookie: string, pendingId: string): Promise<{ accepted: boolean; reason?: string }> {
+/**
+ * Step 2 of adopt: authenticated as the ward itself, completing the
+ * pending addGuardian `proposeAdopt` started. `digest` must be the one
+ * the caller got back from fetchPendingStatus for this same pendingId
+ * -- the server refuses to sign unless it matches, so a caller can't
+ * confirm this without having actually fetched (and, ideally, shown
+ * the ward) the specific guardian this would add.
+ */
+export async function confirmAdopt(wardDid: Did, wardSessionCookie: string, pendingId: string, digest: string): Promise<{ accepted: boolean; reason?: string }> {
   const { domain, name } = parseDid(wardDid);
   const res = await fetch(`https://${domain}${wellKnownPath(name)}/adopt/confirm`, {
     method: "POST",
     headers: { cookie: `gw_session=${wardSessionCookie}`, "content-type": "application/json" },
-    body: JSON.stringify({ pending_id: pendingId }),
+    body: JSON.stringify({ pending_id: pendingId, digest }),
   });
   const body = (await res.json()) as { ok?: boolean; error?: string };
   if (!res.ok) return { accepted: false, reason: body.error ?? `HTTP ${res.status}` };

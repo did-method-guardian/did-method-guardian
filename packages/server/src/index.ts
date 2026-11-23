@@ -254,9 +254,9 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         // Step 2 of adopt: authenticated as the WARD.
         const auth = await authenticateRequest(request, env, did);
         if (!auth) return error("must be signed in as this identity (or a trusted client acting on its behalf) to confirm a guardian", 403);
-        const body = (await request.json()) as { pending_id?: string };
-        if (!body.pending_id) return error("pending_id is required", 400);
-        const result = await confirmAdopt(env, auth, did, body.pending_id);
+        const body = (await request.json()) as { pending_id?: string; digest?: string };
+        if (!body.pending_id || !body.digest) return error("pending_id and digest (from GET .../pending/<id>, after reviewing who it names as the guardian) are required", 400);
+        const result = await confirmAdopt(env, auth, did, body.pending_id, body.digest);
         return result.accepted ? json({ ok: true, did }) : error(result.reason ?? "not accepted yet", 400);
       }
     } catch (e) {

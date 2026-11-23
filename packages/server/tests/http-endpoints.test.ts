@@ -182,10 +182,18 @@ test("two-step adopt: the guardian accepts, then the ward confirms, and the ward
   const { pendingId } = (await step1.json()) as { pendingId: string };
   assert.ok(pendingId);
 
+  // alice reviews the pending op (its own digest, and -- per F2 review
+  // -- who specifically it names as the guardian) before confirming.
+  const pendingStatus = (await (await fetch(`${BASE}/.well-known/guardian/pending/${pendingId}`, { headers: { accept: "application/json" } })).json()) as {
+    digest: string;
+    operation: { entry?: { did?: string } };
+  };
+  assert.equal(pendingStatus.operation.entry?.did, bob.did);
+
   const step2 = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt/confirm`, {
     method: "POST",
     headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/json" },
-    body: JSON.stringify({ pending_id: pendingId }),
+    body: JSON.stringify({ pending_id: pendingId, digest: pendingStatus.digest }),
   });
   assert.equal(step2.status, 200);
   const confirmed = (await step2.json()) as { ok: boolean };
@@ -195,6 +203,36 @@ test("two-step adopt: the guardian accepts, then the ward confirms, and the ward
   const addGuardianOp = log.find((op) => op.type === "addGuardian");
   assert.ok(addGuardianOp);
   assert.equal(addGuardianOp!.entry!.did, bob.did);
+});
+
+test("F2 (reviewed): confirm-adopt requires the digest of the pending op actually shown -- missing or stale is refused", async () => {
+  const aliceName = uniqueName("alice");
+  const bobName = uniqueName("bob");
+  const alice = await registerHeld(aliceName);
+  const bob = await registerHeld(bobName);
+  const aliceCookie = await loginAs(aliceName, alice.loginSecret);
+  const bobCookie = await loginAs(bobName, bob.loginSecret);
+
+  const step1 = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt`, { method: "POST", headers: { cookie: `gw_session=${bobCookie}` } });
+  const { pendingId } = (await step1.json()) as { pendingId: string };
+
+  const noDigest = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt/confirm`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/json" },
+    body: JSON.stringify({ pending_id: pendingId }),
+  });
+  assert.equal(noDigest.status, 400, "no digest at all must be refused");
+
+  const wrongDigest = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt/confirm`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/json" },
+    body: JSON.stringify({ pending_id: pendingId, digest: "not-the-real-digest" }),
+  });
+  assert.equal(wrongDigest.status, 400, "a wrong digest must be refused");
+
+  // Alice never actually confirmed -- bob is not her guardian.
+  const log = (await (await fetch(`${BASE}/.well-known/guardian/${aliceName}/log`)).json()) as Array<{ type: string }>;
+  assert.ok(!log.some((op) => op.type === "addGuardian"));
 });
 
 test("F2: confirm-adopt refuses to sign a pending op that isn't a genuine addGuardian for alice", async () => {
@@ -222,13 +260,15 @@ test("F2: confirm-adopt refuses to sign a pending op that isn't a genuine addGua
   const { id: pendingId } = (await proposeResp.json()) as { id: string };
   assert.ok(pendingId);
 
-  // alice, not knowing any better, tries to "confirm" it the way the
-  // adopt flow's own docs describe -- this must be refused, never
-  // signed with her held key.
+  // alice, not knowing any better, fetches and reviews it first (the
+  // way the real flow requires) and tries to "confirm" it -- this must
+  // be refused, never signed with her held key, even with the correct
+  // digest attached.
+  const pendingStatus = (await (await fetch(`${BASE}/.well-known/guardian/pending/${pendingId}`, { headers: { accept: "application/json" } })).json()) as { digest: string };
   const confirmResp = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt/confirm`, {
     method: "POST",
     headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/json" },
-    body: JSON.stringify({ pending_id: pendingId }),
+    body: JSON.stringify({ pending_id: pendingId, digest: pendingStatus.digest }),
   });
   assert.equal(confirmResp.status, 400, "confirm-adopt must refuse anything that isn't a genuine addGuardian");
 

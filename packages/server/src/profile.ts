@@ -232,21 +232,36 @@ export async function proposeAdopt(env: Env, auth: AuthenticatedRequest, guardia
  * required approval (one current key) to the pending `addGuardian` and
  * finalizes it.
  *
- * F2 (confused deputy): `/propose` is unauthenticated, so a pending
- * operation naming this ward as `did` could be anything an attacker
- * built -- a key-rotation disguised as a guardian request, say, or (even
- * restricted to addGuardian) a well-shaped but fabricated entry, since
- * REQ-6-2 only checks that `entry.consent` looks like a hash, not that
- * it's a genuine one. This must never sign with the ward's held key for
- * anything but a real addGuardian whose entry is a current, mutual
- * guardian relationship -- the same check resolution itself reports
- * (checkMutuality), run here proactively before signing rather than
- * only discovered afterward as a "withdrawn" mutuality report once it's
- * already in the log.
+ * F2 (confused deputy), corrected per thoward-59's review of a59e733:
+ * `/propose` is unauthenticated, so a pending operation naming this
+ * ward as `did` could be anything an attacker built. But REQ-10-7's own
+ * standing check (hasStanding, accept.ts, itself built on
+ * checkMutuality) ALREADY refuses a fabricated entry at acceptance --
+ * `entry.consent` being well-shaped (REQ-6-2) but not a genuine
+ * acceptWard is caught there regardless of what's signed here. The
+ * checkMutuality call below is therefore redundant with that, kept
+ * only for a clearer, earlier rejection reason than contributeProof's
+ * generic one.
+ *
+ * The real remaining risk: `acceptWard` is one-sided (spec's "One-sided
+ * records") -- anyone can genuinely accept this ward without its
+ * cooperation, then propose themselves as its guardian through the
+ * ordinary /adopt flow. That consent is completely genuine, so
+ * checkMutuality reports "mutual" correctly. The only thing standing
+ * between that and a real, unwanted guardian is the ward actually
+ * recognizing which guardian it's about to confirm -- so this requires
+ * `expectedDigest` to match the pending op's own content hash (the
+ * same binding sign-as-self uses), and the caller (CLI or any other
+ * client) is responsible for having shown the ward exactly who --
+ * `entry.did`, with its domain -- this would add before asking for
+ * that digest back.
  */
-export async function confirmAdopt(env: Env, auth: AuthenticatedRequest, wardDid: Did, pendingId: string): Promise<{ accepted: boolean; reason?: string }> {
+export async function confirmAdopt(env: Env, auth: AuthenticatedRequest, wardDid: Did, pendingId: string, expectedDigest: string): Promise<{ accepted: boolean; reason?: string }> {
   const pending = await getPendingOperationStatus(env, pendingId);
   if (pending.did !== wardDid) throw new RegistrarError("no such pending operation for this identity", 404);
+  if (expectedDigest !== pending.digest) {
+    throw new RegistrarError("this confirmation doesn't match the pending operation's current content -- fetch it again and confirm the guardian it actually names", 400);
+  }
 
   const op = pending.operation as { type?: string; entry?: Entry };
   if (op.type !== "addGuardian" || !op.entry) {

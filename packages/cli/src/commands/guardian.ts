@@ -56,27 +56,38 @@ export function registerGuardianCommand(program: Command): void {
         throw new Error(`logged in as ${session.did}, not ${wardDid} -- run "did-guardian login ${wardDid} --login-secret <secret>" first.`);
       }
 
-      // F2 (confused deputy): /propose has no auth gate, so a pending
-      // id someone hands you could be anything targeting your own DID
-      // -- never confirm one blind. The server itself also now refuses
-      // to sign anything here but a genuine addGuardian for a real,
-      // mutual guardian, but showing it here first is the chance for a
-      // person to notice something's wrong before that.
+      // F2 (confused deputy), corrected per review: /propose has no
+      // auth gate, so a pending id someone hands you could be anything
+      // targeting your own DID. The server itself already refuses to
+      // sign anything here but a genuine addGuardian for a real,
+      // mutual guardian -- but a genuine guardian request can still be
+      // from a guardian you never meant to pick (acceptWard is
+      // one-sided: anyone can genuinely consent to guard you without
+      // your cooperation, then propose themselves this way). So the
+      // one thing that actually matters here is showing WHICH
+      // guardian this adds, explicitly, not just dumping the raw
+      // operation -- and confirming against the server's own current
+      // digest for it, so a stale confirmation can't slip through.
       const { domain } = parseDid(wardDid);
       const status = await fetchPendingStatus(domain, pendingId);
-      console.log(`This will confirm the following operation on ${wardDid}'s own log:`);
+      const op = status.operation as unknown as { type?: string; entry?: { did?: string } };
+      if (op.type !== "addGuardian" || !op.entry?.did) {
+        throw new Error(`this pending operation is a "${op.type}", not a guardian request -- confirm-adopt only ever confirms an addGuardian. Refusing to confirm it.`);
+      }
+      console.log(`This will add ${op.entry.did} as a guardian of ${wardDid}.`);
       console.log("");
+      console.log("Full operation:");
       console.log(JSON.stringify(status.operation, null, 2));
       console.log("");
-      if (!(await confirm("Confirm this exact operation?", opts.yes))) {
+      if (!(await confirm(`Add ${op.entry.did} as your guardian?`, opts.yes))) {
         console.log("Not confirmed.");
         process.exitCode = 1;
         return;
       }
 
-      const result = await confirmAdopt(wardDid, session.cookie, pendingId);
+      const result = await confirmAdopt(wardDid, session.cookie, pendingId, status.digest);
       if (!result.accepted) process.exitCode = 1;
-      console.log(result.accepted ? `Done -- ${wardDid} now has that guardian.` : `Rejected: ${result.reason}`);
+      console.log(result.accepted ? `Done -- ${wardDid} now has ${op.entry.did} as a guardian.` : `Rejected: ${result.reason}`);
     });
 
   guardian

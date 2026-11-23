@@ -34,6 +34,7 @@ const {
   fetchLog,
   proposeAdopt,
   confirmAdopt,
+  fetchPendingStatus,
   submitOperation,
   takeCustody,
   makeLiveResolver,
@@ -110,7 +111,8 @@ test("two-step adopt, then resolve()'s own mutuality report says mutual", async 
 
   const step1 = await proposeAdopt(alice.did, bobCookie);
   assert.ok(step1.pendingId);
-  const step2 = await confirmAdopt(alice.did, aliceCookie, step1.pendingId);
+  const pendingStatus = await fetchPendingStatus(DOMAIN, step1.pendingId);
+  const step2 = await confirmAdopt(alice.did, aliceCookie, step1.pendingId, pendingStatus.digest);
   assert.equal(step2.accepted, true);
 
   const aliceLog = await fetchLog(alice.did);
