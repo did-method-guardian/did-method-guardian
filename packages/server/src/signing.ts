@@ -6,15 +6,50 @@ import { getHeldKey, getLog, type HeldKeyRow } from "./db.js";
 import { decryptSecret } from "./secretBox.js";
 import { didFor, type Env } from "./env.js";
 import { RegistrarError } from "./registrarError.js";
+import { readCookie, resolveSession } from "./login.js";
+import { authenticateOidcClient } from "./clientAuth.js";
+
+declare const authenticatedRequestBrand: unique symbol;
 
 /**
- * REQ-10-13: creates a proof with a held key only for the identity a
- * request is authenticated as. `authenticatedIdentity` is the caller's
- * own verified identity (from the session or bearer token) -- never the
- * request body's own claims about who it's signing for.
+ * Proof that SOME request was actually checked against `identity` --
+ * the only way to produce one is authenticateRequest, below. signAs
+ * takes this instead of a bare Did specifically so a call site can't
+ * satisfy REQ-10-13's own check by just passing the same value twice
+ * (every call site used to read `signAs(env, did, did, op)`, which is
+ * trivially always true and proves nothing about whether this request
+ * was ever actually authenticated -- the real protection was always
+ * that every caller happened to check authenticatedAs/callerIdentity
+ * first, a convention the type system couldn't enforce).
  */
-export async function signAs(env: Env, authenticatedIdentity: Did, did: Did, op: object): Promise<DataIntegrityProof> {
-  if (authenticatedIdentity !== did) throw new RegistrarError("REQ-10-13: a held key signs only on a request authenticated as that identity");
+export interface AuthenticatedRequest {
+  readonly identity: Did;
+  readonly [authenticatedRequestBrand]: true;
+}
+
+/**
+ * REQ-10-13: checks whether `request` is actually authenticated as
+ * `did` -- a gw_session for that exact identity, or a trusted OIDC
+ * client (which has no identity of its own, so it may act as any).
+ * Returns null, never throws, on a mismatch or no authentication at
+ * all -- the caller decides how to report that.
+ */
+export async function authenticateRequest(request: Request, env: Env, did: Did): Promise<AuthenticatedRequest | null> {
+  const sessionId = readCookie(request, "gw_session");
+  const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
+  if (sessionDid === did) return { identity: did } as AuthenticatedRequest;
+  if (sessionDid) return null; // signed in as someone else -- a trusted client never overrides an existing session's own identity
+  const trustedClient = await authenticateOidcClient(request, env);
+  return trustedClient ? ({ identity: did } as AuthenticatedRequest) : null;
+}
+
+/**
+ * REQ-10-13: creates a proof with a held key only for the identity
+ * `auth` was actually checked against -- `auth.identity` can only have
+ * come from authenticateRequest, never a caller's own say-so.
+ */
+export async function signAs(env: Env, auth: AuthenticatedRequest, did: Did, op: object): Promise<DataIntegrityProof> {
+  if (auth.identity !== did) throw new RegistrarError("REQ-10-13: a held key signs only on a request authenticated as that identity");
   const held = await getHeldKey(env, did);
   if (!held) throw new RegistrarError("this registrar does not hold a key for this identity");
   return proofFromHeldKey(env, held, op);

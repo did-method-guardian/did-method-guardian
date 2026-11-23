@@ -5,6 +5,7 @@
 // part of REQ-10-5/10-7 -- that's checkAcceptance's job alone.
 import {
   anchorOf,
+  checkMutuality,
   createProof,
   generateKeypair,
   isValidName,
@@ -24,7 +25,8 @@ import {
 } from "@did-guardian/lib";
 import { getHeldKey, getLog, insertHeldKey, replaceHeldKey, deleteHeldKey, setHeldKeyLoginSecretHash, type HeldKeyRow } from "./db.js";
 import { didForSegment, submitOperation } from "./registrar.js";
-import { signAs } from "./signing.js";
+import { makeResolveLog } from "./logResolver.js";
+import { signAs, type AuthenticatedRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { encryptSecret, hashPassword, randomSecret } from "./secretBox.js";
 import { proposeOperation, contributeProof, getPendingOperationStatus } from "./pendingProofs.js";
@@ -125,7 +127,7 @@ async function currentPrev(env: Env, did: Did): Promise<string> {
  * current key) this registrar can both produce itself, since it holds
  * the old key and is about to hold the new one.
  */
-export async function rotateHeldKey(env: Env, did: Did): Promise<void> {
+export async function rotateHeldKey(env: Env, auth: AuthenticatedRequest, did: Did): Promise<void> {
   const held = await getHeldKey(env, did);
   if (!held) throw new RegistrarError("this registrar does not hold a key for this identity", 404);
   const { services, alsoKnownAs, prev } = await currentServicesAndAkas(env, did);
@@ -133,7 +135,7 @@ export async function rotateHeldKey(env: Env, did: Did): Promise<void> {
   const newKeypair = await generateKeypair();
   const base: Omit<UpdateOp, "proof"> = { type: "update", keys: [newKeypair.publicKey as Key], services, alsoKnownAs, prev };
   const newKeyProof = await createProof(base, newKeypair.publicKey as Key, newKeypair.privateKey);
-  const oldKeyProof = await signAs(env, did, did, base);
+  const oldKeyProof = await signAs(env, auth, did, base);
   const op: UpdateOp = { ...base, proof: sortProofs([newKeyProof, oldKeyProof]) };
 
   await submitOperation(env, did, op);
@@ -147,10 +149,10 @@ export async function rotateHeldKey(env: Env, did: Did): Promise<void> {
  * and, once accepted, forgets the key it held for this identity for
  * good (REQ-10-13: it can never produce a proof for this identity again).
  */
-export async function takeCustody(env: Env, did: Did, callerProvidedOp: Omit<UpdateOp, "proof">, callerProof: DataIntegrityProof): Promise<void> {
+export async function takeCustody(env: Env, auth: AuthenticatedRequest, did: Did, callerProvidedOp: Omit<UpdateOp, "proof">, callerProof: DataIntegrityProof): Promise<void> {
   const held = await getHeldKey(env, did);
   if (!held) throw new RegistrarError("this registrar does not hold a key for this identity", 404);
-  const oldKeyProof = await signAs(env, did, did, callerProvidedOp);
+  const oldKeyProof = await signAs(env, auth, did, callerProvidedOp);
   const op: UpdateOp = { ...callerProvidedOp, proof: sortProofs([callerProof, oldKeyProof]) };
   await submitOperation(env, did, op);
   await deleteHeldKey(env, did);
@@ -165,18 +167,18 @@ export async function takeCustody(env: Env, did: Did, callerProvidedOp: Omit<Upd
  * the caller falls back to the multi-signer proposal flow
  * (pendingProofs.ts) instead.
  */
-export async function deactivateSelf(env: Env, did: Did): Promise<void> {
+export async function deactivateSelf(env: Env, auth: AuthenticatedRequest, did: Did): Promise<void> {
   const prev = await currentPrev(env, did);
   const base: Omit<DeactivateOp, "proof"> = { type: "deactivate", prev };
-  const proof = await signAs(env, did, did, base);
+  const proof = await signAs(env, auth, did, base);
   await submitOperation(env, did, { ...base, proof: [proof] });
 }
 
 /** A guardian resigning itself from `wardDid`'s own guardians -- REQ-7-6's "the removed guardian itself, if N >= 2" path, a single signature from the guardian's own held key. */
-export async function removeGuardianSelf(env: Env, wardDid: Did, guardianDid: Did): Promise<void> {
+export async function removeGuardianSelf(env: Env, auth: AuthenticatedRequest, wardDid: Did, guardianDid: Did): Promise<void> {
   const prev = await currentPrev(env, wardDid);
   const base: Omit<RemoveGuardianOp, "proof"> = { type: "removeGuardian", guardian: guardianDid, prev };
-  const proof = await signAs(env, guardianDid, guardianDid, base);
+  const proof = await signAs(env, auth, guardianDid, base);
   await submitOperation(env, wardDid, { ...base, proof: [proof] });
 }
 
@@ -186,10 +188,10 @@ export async function removeGuardianSelf(env: Env, wardDid: Did, guardianDid: Di
  * alone, naming a deactivate or a releaseWard on the guardian's own log
  * as evidence (REQ-10-7's own cross-log check does the rest).
  */
-export async function removeGuardianWithEvidence(env: Env, wardDid: Did, guardianDid: Did, evidence: string): Promise<void> {
+export async function removeGuardianWithEvidence(env: Env, auth: AuthenticatedRequest, wardDid: Did, guardianDid: Did, evidence: string): Promise<void> {
   const prev = await currentPrev(env, wardDid);
   const base: Omit<RemoveGuardianOp, "proof"> = { type: "removeGuardian", guardian: guardianDid, evidence, prev };
-  const proof = await signAs(env, wardDid, wardDid, base);
+  const proof = await signAs(env, auth, wardDid, base);
   await submitOperation(env, wardDid, { ...base, proof: [proof] });
 }
 
@@ -202,13 +204,13 @@ export async function removeGuardianWithEvidence(env: Env, wardDid: Did, guardia
  * in a second, separate request (confirmAdopt), authenticated as the
  * ward.
  */
-export async function proposeAdopt(env: Env, guardianDid: Did, wardDid: Did): Promise<{ pendingId: string }> {
+export async function proposeAdopt(env: Env, auth: AuthenticatedRequest, guardianDid: Did, wardDid: Did): Promise<{ pendingId: string }> {
   const wardLog = await getLog(env, wardDid);
   if (wardLog.length === 0) throw new RegistrarError("no such identity", 404);
   const wardAnchor = await anchorOf(wardLog[0] as CreateOp);
 
   const acceptBase: Omit<AcceptWardOp, "proof"> = { type: "acceptWard", ward: { did: wardDid, anchor: wardAnchor }, prev: await currentPrev(env, guardianDid) };
-  const acceptProof = await signAs(env, guardianDid, guardianDid, acceptBase);
+  const acceptProof = await signAs(env, auth, guardianDid, acceptBase);
   const acceptOp = (await submitOperation(env, guardianDid, { ...acceptBase, proof: [acceptProof] })) as AcceptWardOp;
   const consentHash = await operationHash(acceptOp);
 
@@ -218,18 +220,46 @@ export async function proposeAdopt(env: Env, guardianDid: Did, wardDid: Did): Pr
   const entry: Entry = { did: guardianDid, anchor: guardianAnchor, keys: guardianVerified.state!.keys, consent: consentHash };
 
   const addGuardianBase: Omit<AddGuardianOp, "proof"> = { type: "addGuardian", entry, prev: await currentPrev(env, wardDid) };
-  const guardianProofOnAddGuardian = await signAs(env, guardianDid, guardianDid, addGuardianBase);
+  const guardianProofOnAddGuardian = await signAs(env, auth, guardianDid, addGuardianBase);
 
   const outcome = await proposeOperation(env, wardDid, addGuardianBase, guardianProofOnAddGuardian);
   if (outcome.status === "finalized") throw new Error("addGuardian requires the ward's own approval too; it cannot finalize from the guardian's proof alone");
   return { pendingId: outcome.id };
 }
 
-/** Step 2 of adopt: the ward, authenticated as itself, adds the other required approval (one current key) to the pending `addGuardian` and finalizes it. */
-export async function confirmAdopt(env: Env, wardDid: Did, pendingId: string): Promise<{ accepted: boolean; reason?: string }> {
+/**
+ * Step 2 of adopt: the ward, authenticated as itself, adds the other
+ * required approval (one current key) to the pending `addGuardian` and
+ * finalizes it.
+ *
+ * F2 (confused deputy): `/propose` is unauthenticated, so a pending
+ * operation naming this ward as `did` could be anything an attacker
+ * built -- a key-rotation disguised as a guardian request, say, or (even
+ * restricted to addGuardian) a well-shaped but fabricated entry, since
+ * REQ-6-2 only checks that `entry.consent` looks like a hash, not that
+ * it's a genuine one. This must never sign with the ward's held key for
+ * anything but a real addGuardian whose entry is a current, mutual
+ * guardian relationship -- the same check resolution itself reports
+ * (checkMutuality), run here proactively before signing rather than
+ * only discovered afterward as a "withdrawn" mutuality report once it's
+ * already in the log.
+ */
+export async function confirmAdopt(env: Env, auth: AuthenticatedRequest, wardDid: Did, pendingId: string): Promise<{ accepted: boolean; reason?: string }> {
   const pending = await getPendingOperationStatus(env, pendingId);
   if (pending.did !== wardDid) throw new RegistrarError("no such pending operation for this identity", 404);
-  const proof = await signAs(env, wardDid, wardDid, pending.operation);
+
+  const op = pending.operation as { type?: string; entry?: Entry };
+  if (op.type !== "addGuardian" || !op.entry) {
+    throw new RegistrarError("this pending operation is not a guardian request -- confirm-adopt only ever signs an addGuardian", 400);
+  }
+  const wardLog = await getLog(env, wardDid);
+  const wardAnchor = await anchorOf(wardLog[0] as CreateOp);
+  const mutuality = await checkMutuality(wardDid, wardAnchor, op.entry, makeResolveLog(env));
+  if (mutuality !== "mutual") {
+    throw new RegistrarError(`this guardian request isn't a genuine, current guardian relationship (${mutuality}) -- refusing to sign it`, 400);
+  }
+
+  const proof = await signAs(env, auth, wardDid, pending.operation);
   const outcome = await contributeProof(env, pendingId, proof);
   return outcome.status === "finalized" ? { accepted: true } : { accepted: false, reason: outcome.reason };
 }

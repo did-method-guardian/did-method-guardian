@@ -197,6 +197,46 @@ test("two-step adopt: the guardian accepts, then the ward confirms, and the ward
   assert.equal(addGuardianOp!.entry!.did, bob.did);
 });
 
+test("F2: confirm-adopt refuses to sign a pending op that isn't a genuine addGuardian for alice", async () => {
+  const aliceName = uniqueName("alice");
+  const alice = await registerHeld(aliceName);
+  const aliceCookie = await loginAs(aliceName, alice.loginSecret);
+
+  // The attack: /propose has no auth gate at all, so anyone can plant a
+  // pending operation naming alice as its target -- here, a key
+  // rotation to a key the attacker controls, disguised as something
+  // alice might be lured into "confirming" as if it were an ordinary
+  // guardian request.
+  const log = (await (await fetch(`${BASE}/.well-known/guardian/${aliceName}/log`)).json()) as object[];
+  const prev = await operationHash(log[log.length - 1] as never);
+  const attackerKey = await generateKeypair();
+  const maliciousUpdate = { type: "update" as const, keys: [attackerKey.publicKey], services: [], alsoKnownAs: [], prev };
+  const attackerProof = await createProof(maliciousUpdate, attackerKey.publicKey, attackerKey.privateKey);
+
+  const proposeResp = await fetch(`${BASE}/.well-known/guardian/${aliceName}/propose`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: maliciousUpdate, proof: attackerProof }),
+  });
+  assert.equal(proposeResp.status, 202, "stored as collecting, not finalized -- the attacker's key alone isn't enough");
+  const { id: pendingId } = (await proposeResp.json()) as { id: string };
+  assert.ok(pendingId);
+
+  // alice, not knowing any better, tries to "confirm" it the way the
+  // adopt flow's own docs describe -- this must be refused, never
+  // signed with her held key.
+  const confirmResp = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt/confirm`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/json" },
+    body: JSON.stringify({ pending_id: pendingId }),
+  });
+  assert.equal(confirmResp.status, 400, "confirm-adopt must refuse anything that isn't a genuine addGuardian");
+
+  // alice's key is unchanged -- the attacker never got a proof out of this.
+  const rotateStillWorks = await fetch(`${BASE}/.well-known/guardian/${aliceName}/rotate`, { method: "POST", headers: { cookie: `gw_session=${aliceCookie}` } });
+  assert.equal(rotateStillWorks.status, 200, "alice's own session still controls her identity -- it was never taken over");
+});
+
 test("take-custody: the caller's own freshly-generated key replaces this registrar's held key", async () => {
   const name = uniqueName("alice");
   const alice = await registerHeld(name);

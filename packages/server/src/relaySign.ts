@@ -18,14 +18,33 @@ import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { html, escapeHtml, pageShell } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
-import { signAs } from "./signing.js";
+import { signAs, authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
-import { parseGuardianDid, type DataIntegrityProof, type Did } from "@did-guardian/lib";
+import { getLog } from "./db.js";
+import { parseGuardianDid, verifyLog, type DataIntegrityProof, type Did } from "@did-guardian/lib";
+
+/**
+ * F6 (SSRF + sign-arbitrary-operation): `domain` used to be a free-text
+ * field, so this page would fetch and sign whatever an attacker named --
+ * an SSRF to any host, and a proof over an operation the signer has no
+ * actual relationship to. Relay-signing exists for a guardian to sign
+ * for a ward hosted elsewhere, so the only domains ever fetched are
+ * domains of this signer's OWN current wards (never a caller-supplied
+ * string), and the target DID the remote operation claims must actually
+ * be one of them too.
+ */
+async function allowedWardDids(env: Env, signerDid: Did): Promise<Set<Did>> {
+  const log = await getLog(env, signerDid);
+  if (log.length === 0) return new Set();
+  const verified = await verifyLog(signerDid, log);
+  if (verified.result !== "valid") return new Set();
+  return new Set(verified.state!.wards.map((w) => w.did));
+}
 
 interface RemotePendingStatus {
   did: Did;
   operation: { type: string };
-  proofs: DataIntegrityProof[];
+  proofsCollected: number;
   expiresAt: string;
 }
 
@@ -50,7 +69,7 @@ function reviewBody(opId: string, status: RemotePendingStatus, signerDid: string
     <p class="hint">A <strong>${escapeHtml(status.operation.type)}</strong> operation on ${escapeHtml(status.did)} (hosted on a different registrar) needs your signature.</p>
     ${opts.error ? `<p class="error">${escapeHtml(opts.error)}</p>` : ""}
     <dl>
-      <dt>Proofs collected so far</dt><dd>${status.proofs.length}</dd>
+      <dt>Proofs collected so far</dt><dd>${status.proofsCollected}</dd>
       <dt>Expires</dt><dd>${escapeHtml(status.expiresAt)}</dd>
     </dl>
     <h2>Operation</h2>
@@ -76,12 +95,20 @@ export async function handleRelaySignPage(request: Request, env: Env, url: URL):
     return new Response(null, { status: 302, headers: { location: `/guardian-login?return_to=${encodeURIComponent(returnTo)}` } });
   }
 
+  const wardDids = await allowedWardDids(env, signerDid as Did);
+  if (![...wardDids].some((w) => parseGuardianDid(w)?.domain === domain)) {
+    return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">You aren't a guardian of any ward on ${escapeHtml(domain)}.</p>`), 403);
+  }
+
   let status: RemotePendingStatus;
   try {
     status = await fetchRemoteStatus(domain, opId);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;
+  }
+  if (!wardDids.has(status.did)) {
+    return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">This operation isn't for a ward you're a guardian of.</p>`), 403);
   }
   return html(pageShell("Sign elsewhere", reviewBody(opId, status, signerDid)));
 }
@@ -96,6 +123,16 @@ export async function handleRelaySignSubmit(request: Request, env: Env): Promise
   const sessionId = readCookie(request, "gw_session");
   const signerDid = (sessionId ? await resolveSession(env, sessionId) : null) as Did | null;
   if (!signerDid) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
+  const auth = await authenticateRequest(request, env, signerDid);
+  if (!auth) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
+
+  // F6: domain and opId are caller-supplied, but this registrar only
+  // ever fetches/signs for a domain and DID that this signer's own
+  // current log actually lists as a ward -- never a free-text target.
+  const wardDids = await allowedWardDids(env, signerDid);
+  if (![...wardDids].some((w) => parseGuardianDid(w)?.domain === domain)) {
+    return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">You aren't a guardian of any ward on ${escapeHtml(domain)}.</p>`), 403);
+  }
 
   let status: RemotePendingStatus;
   try {
@@ -104,10 +141,13 @@ export async function handleRelaySignSubmit(request: Request, env: Env): Promise
     if (e instanceof RegistrarError) return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;
   }
+  if (!wardDids.has(status.did)) {
+    return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">This operation isn't for a ward you're a guardian of.</p>`), 403);
+  }
 
   let proof: DataIntegrityProof;
   try {
-    proof = await signAs(env, signerDid, signerDid, status.operation);
+    proof = await signAs(env, auth, signerDid, status.operation);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Sign elsewhere", reviewBody(opId, status, signerDid, { error: e.message })), e.status);
     throw e;

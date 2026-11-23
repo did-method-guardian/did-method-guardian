@@ -1,10 +1,10 @@
-import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
-import { anchorOf, createProof, generateKeypair, operationHash, sortProofs, verifyLog } from "@did-guardian/lib";
+import { anchorOf, createProof, generateKeypair, operationHash, parseDid, sortProofs, verifyLog } from "@did-guardian/lib";
 import type { AcceptWardOp, AddGuardianOp, CreateOp, DeactivateOp, Did, Entry, UpdateOp } from "@did-guardian/lib";
-import { confirmAdopt, confirmKeyIsCurrent, fetchLog, proposeAdopt, submitOperation } from "../registrar-client.js";
+import { confirmAdopt, confirmKeyIsCurrent, fetchLog, fetchPendingStatus, proposeAdopt, submitOperation } from "../registrar-client.js";
 import { loadKey, saveKey, type StoredKey } from "../keystore.js";
 import { loadSession } from "../state.js";
+import { confirmYesNo as confirm } from "../confirm.js";
 
 async function currentState(did: Did) {
   const log = await fetchLog(did);
@@ -12,14 +12,6 @@ async function currentState(did: Did) {
   const verified = await verifyLog(did, log);
   if (verified.result !== "valid") throw new Error(`${did}'s own log does not verify: ${verified.reason}`);
   return { log, state: verified.state! };
-}
-
-async function confirm(prompt: string, assumeYes?: boolean): Promise<boolean> {
-  if (assumeYes) return true;
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question(`${prompt} [y/N] `);
-  rl.close();
-  return answer.trim().toLowerCase() === "y";
 }
 
 async function printOrSubmit(did: Did, op: UpdateOp | DeactivateOp, submit?: boolean): Promise<void> {
@@ -57,12 +49,33 @@ export function registerGuardianCommand(program: Command): void {
   guardian
     .command("confirm-adopt <ward-did> <pending-id>")
     .description("step 2 of adopt: log in as the ward first, then finish adding the guardian that already accepted it in step 1")
-    .action(async (wardDid: Did, pendingId: string) => {
+    .option("-y, --yes", "confirm without asking")
+    .action(async (wardDid: Did, pendingId: string, opts: { yes?: boolean }) => {
       const session = loadSession();
       if (session.did !== wardDid) {
         throw new Error(`logged in as ${session.did}, not ${wardDid} -- run "did-guardian login ${wardDid} --login-secret <secret>" first.`);
       }
+
+      // F2 (confused deputy): /propose has no auth gate, so a pending
+      // id someone hands you could be anything targeting your own DID
+      // -- never confirm one blind. The server itself also now refuses
+      // to sign anything here but a genuine addGuardian for a real,
+      // mutual guardian, but showing it here first is the chance for a
+      // person to notice something's wrong before that.
+      const { domain } = parseDid(wardDid);
+      const status = await fetchPendingStatus(domain, pendingId);
+      console.log(`This will confirm the following operation on ${wardDid}'s own log:`);
+      console.log("");
+      console.log(JSON.stringify(status.operation, null, 2));
+      console.log("");
+      if (!(await confirm("Confirm this exact operation?", opts.yes))) {
+        console.log("Not confirmed.");
+        process.exitCode = 1;
+        return;
+      }
+
       const result = await confirmAdopt(wardDid, session.cookie, pendingId);
+      if (!result.accepted) process.exitCode = 1;
       console.log(result.accepted ? `Done -- ${wardDid} now has that guardian.` : `Rejected: ${result.reason}`);
     });
 

@@ -24,7 +24,7 @@ import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
 import { readCookie, resolveSession, verifyLogin, createLoginSession, endSession } from "./login.js";
 import { getPendingOperationStatus, contributeProof, cancelPendingOperation } from "./pendingProofs.js";
 import { checkRateLimit, clientIp } from "./rateLimit.js";
-import { signAs } from "./signing.js";
+import { signAs, authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import type { Did } from "@did-guardian/lib";
 
@@ -56,7 +56,12 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
 
   let actions = "";
   if (sessionWardDid) {
-    actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/sign-as-self"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}</button></form>`;
+    // F2 (confused deputy): the digest is a hidden field in this same
+    // form, not something the signer types -- it binds the sign
+    // request to the exact operation content rendered below, so a
+    // held key is never signed onto something other than what was
+    // actually shown here.
+    actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/sign-as-self"><input type="hidden" name="digest" value="${escapeHtml(status.digest)}"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}, for exactly the operation shown below</button></form>`;
     if (sessionWardDid === wardDid) {
       actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/withdraw"><button type="submit" class="danger">Withdraw this proposal</button></form>`;
     }
@@ -65,13 +70,19 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
     actions += `<p><a href="/guardian-login?return_to=${encodeURIComponent(selfUrl)}">Log in to sign</a></p>`;
   }
 
+  // F2: the type alone ("update") doesn't tell a reviewer what actually
+  // changes -- showing the full operation content is what lets someone
+  // notice a key-rotation disguised as a benign-looking request, rather
+  // than trusting a one-word label.
   const body = `
     <h1>${escapeHtml(opType)}</h1>
     <p class="hint">for ${escapeHtml(wardDid)}</p>
     <dl>
-      <dt>Proofs collected so far</dt><dd>${status.proofs.length}</dd>
+      <dt>Proofs collected so far</dt><dd>${status.proofsCollected}</dd>
       <dt>Expires</dt><dd>${escapeHtml(status.expiresAt)}</dd>
     </dl>
+    <h2>Full operation content -- review before signing</h2>
+    <pre style="background:var(--muted-200,#f0f0f0); padding:12px; border-radius:6px; overflow-x:auto; font-size:13px;"><code>${escapeHtml(JSON.stringify(status.operation, null, 2))}</code></pre>
     ${actions}
   `;
   return html(pageShell(`${opType} -- did:guardian`, body));
@@ -82,8 +93,10 @@ export async function signAsSelf(request: Request, env: Env, wardName: string, i
   const sessionId = readCookie(request, SESSION_COOKIE);
   const signerDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
   if (!signerDid) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
+  const auth = await authenticateRequest(request, env, signerDid);
+  if (!auth) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
 
-  let status: { operation: object };
+  let status: { operation: object; digest: string };
   try {
     status = await getPendingOperationStatus(env, id);
   } catch (e) {
@@ -91,9 +104,19 @@ export async function signAsSelf(request: Request, env: Env, wardName: string, i
     throw e;
   }
 
+  // F2 (confused deputy): the form that renders this operation carries
+  // its digest as a hidden field (renderPendingOpPage, above) -- this
+  // request must echo it back, so a held key never signs anything the
+  // signer wasn't actually just shown on this exact page.
+  const form = await safeFormData(request);
+  const submittedDigest = String(form.get("digest") ?? "");
+  if (submittedDigest !== status.digest) {
+    return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">This confirmation doesn't match the operation's current content -- reload the page and try again.</p>`), 400);
+  }
+
   let proof;
   try {
-    proof = await signAs(env, signerDid, signerDid, status.operation);
+    proof = await signAs(env, auth, signerDid, status.operation);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;

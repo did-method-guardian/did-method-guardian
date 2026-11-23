@@ -2,7 +2,7 @@
 // own proof. The registrar submits the operation once the approvals are
 // met." `checkAcceptance` is the single oracle for "is this enough" --
 // there is no separate per-type threshold rule to maintain here.
-import { checkAcceptance, sortProofs, type DataIntegrityProof, type Did, type Operation } from "@did-guardian/lib";
+import { checkAcceptance, contentRef, sortProofs, type DataIntegrityProof, type Did, type Operation } from "@did-guardian/lib";
 import { deletePendingProof, getLog, getPendingProof, insertPendingProof, appendPendingProof, listAllPendingProofs, listPendingProofsForDid, type PendingProofRow } from "./db.js";
 import { makeResolveLog } from "./logResolver.js";
 import { submitOperation } from "./registrar.js";
@@ -78,10 +78,25 @@ export async function cancelPendingOperation(env: Env, id: string): Promise<void
   await deletePendingProof(env, id);
 }
 
-export async function getPendingOperationStatus(env: Env, id: string): Promise<{ did: Did; operation: object; proofs: DataIntegrityProof[]; expiresAt: string }> {
+/**
+ * F2 (confused deputy): this is the status shown to an anonymous
+ * caller (GET .../pending/<id>, with no auth gate, by design -- a
+ * required signer with no account here must still be able to look up
+ * what it's being asked to sign). It never carries the proofs already
+ * collected -- those were replayable to /operations by anyone who could
+ * read them, even for a proposal that never finalizes. `digest` is a
+ * stable reference to this proposal's own operation content (the part
+ * that never changes once proposed -- see candidateFrom/row.operation),
+ * so a held-key signing endpoint can require the caller to echo it
+ * back, proving the signature they're about to produce is for the
+ * exact content they were just shown.
+ */
+export async function getPendingOperationStatus(env: Env, id: string): Promise<{ did: Did; operation: object; proofsCollected: number; digest: string; expiresAt: string }> {
   const row = await getPendingProof(env, id);
   if (!row) throw new RegistrarError("no such pending operation", 404);
-  return { did: row.did as Did, operation: JSON.parse(row.operation), proofs: JSON.parse(row.proofs), expiresAt: row.expires_at };
+  const operation = JSON.parse(row.operation);
+  const proofsCollected = (JSON.parse(row.proofs) as DataIntegrityProof[]).length;
+  return { did: row.did as Did, operation, proofsCollected, digest: await contentRef(operation), expiresAt: row.expires_at };
 }
 
 /** Every proposal collecting on `did`'s own log -- the account dashboard's own "needs a signature" list. */

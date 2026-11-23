@@ -13,6 +13,7 @@ import { html, escapeHtml, pageShell, secretBox, policyTable } from "./htmlPage.
 import type { PolicyField } from "./htmlPage.js";
 import { readCookie, resolveSession } from "./login.js";
 import { rotateHeldKey, deactivateSelf, reissueLoginSecret } from "./profile.js";
+import { authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { listPendingForDid } from "./pendingProofs.js";
 import { requestEmailForwarding } from "./email.js";
@@ -184,8 +185,13 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
 export async function handleAccountRotate(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (session instanceof Response) return session;
+  // requireSession already confirmed this exact gw_session resolves to
+  // session.wardDid, so this always succeeds -- it exists to produce the
+  // AuthenticatedRequest signAs itself now requires (REQ-10-13 can't be
+  // satisfied by a caller just asserting its own identity).
+  const auth = (await authenticateRequest(request, env, session.wardDid))!;
   try {
-    await rotateHeldKey(env, session.wardDid);
+    await rotateHeldKey(env, auth, session.wardDid);
   } catch (e) {
     if (e instanceof RegistrarError) return redirectToAccount(`Couldn't rotate: ${e.message}`, "error");
     throw e;
@@ -262,8 +268,9 @@ export async function handleAccountTombstone(request: Request, env: Env): Promis
   if (String(form.get("confirm") ?? "") !== confirmName) {
     return html(pageShell("Confirm deactivation", `<h1>Confirm deactivation</h1><p class="error">That didn't match "${escapeHtml(confirmName)}" -- nothing was changed.</p><p><a href="/account/tombstone">Try again</a></p>`), 400);
   }
+  const auth = (await authenticateRequest(request, env, session.wardDid))!;
   try {
-    await deactivateSelf(env, session.wardDid);
+    await deactivateSelf(env, auth, session.wardDid);
   } catch (e) {
     if (e instanceof RegistrarError) {
       return html(

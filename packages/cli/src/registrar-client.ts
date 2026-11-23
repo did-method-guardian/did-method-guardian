@@ -155,7 +155,8 @@ export async function proposeOperation(did: Did, operation: Omit<Operation, "pro
 export interface PendingStatus {
   did: Did;
   operation: Operation;
-  proofs: DataIntegrityProof[];
+  proofsCollected: number;
+  digest: string;
   expiresAt: string;
 }
 

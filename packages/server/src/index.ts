@@ -5,6 +5,7 @@ import { didFor } from "./env.js";
 import { getResourceDocument, getResourceLog, submitOperation } from "./registrar.js";
 import { registerIdentity, reissueLoginSecret, rotateHeldKey, takeCustody, deactivateSelf, removeGuardianSelf, removeGuardianWithEvidence, proposeAdopt, confirmAdopt } from "./profile.js";
 import { proposeOperation, contributeProof, cancelPendingOperation, getPendingOperationStatus, listPendingForDid, expirePendingOperations } from "./pendingProofs.js";
+import { authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
@@ -47,12 +48,7 @@ function html(body: string, status = 200): Response {
 
 /** The caller authenticated as `did` on this request -- a gw_session for that exact identity, or a trusted OIDC client. Never trusts a route parameter alone. */
 async function authenticatedAs(request: Request, env: Env, did: Did): Promise<boolean> {
-  const sessionId = readCookie(request, "gw_session");
-  const sessionDid = sessionId ? await resolveSession(env, sessionId) : null;
-  if (sessionDid === did) return true;
-  if (sessionDid) return false; // signed in as someone else -- a trusted client never overrides an existing session's own identity
-  const trustedClient = await authenticateOidcClient(request, env);
-  return trustedClient !== null;
+  return (await authenticateRequest(request, env, did)) !== null;
 }
 
 /**
@@ -194,10 +190,9 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
       }
 
       if (suffix === "/rotate" && request.method === "POST") {
-        if (!(await authenticatedAs(request, env, did))) {
-          return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
-        }
-        await rotateHeldKey(env, did);
+        const auth = await authenticateRequest(request, env, did);
+        if (!auth) return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
+        await rotateHeldKey(env, auth, did);
         return json({ ok: true, did });
       }
 
@@ -206,12 +201,11 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         // every endpoint above that signs on this identity's own behalf
         // (rotate, login-secret, tombstone, remove-self) starts
         // refusing (this registrar no longer holds a key for it).
-        if (!(await authenticatedAs(request, env, did))) {
-          return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
-        }
+        const auth = await authenticateRequest(request, env, did);
+        if (!auth) return error("must be signed in as this identity (or a trusted client acting on its behalf) to take custody of its key", 403);
         const body = (await request.json()) as { operation?: Omit<UpdateOp, "proof">; proof?: DataIntegrityProof };
         if (!body.operation || !body.proof) return error("operation (an update naming the new keys) and proof are required", 400);
-        await takeCustody(env, did, body.operation, body.proof);
+        await takeCustody(env, auth, did, body.operation, body.proof);
         return json({ ok: true, did });
       }
 
@@ -221,7 +215,9 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         const body = (await request.json().catch(() => ({}))) as { guardian_did?: string };
         const callerDid = await callerIdentity(request, env, body);
         if (!callerDid) return error("must be signed in, or a trusted client naming guardian_did, to remove yourself as a guardian", 403);
-        await removeGuardianSelf(env, did, callerDid);
+        const auth = await authenticateRequest(request, env, callerDid);
+        if (!auth) return error("must be signed in, or a trusted client naming guardian_did, to remove yourself as a guardian", 403);
+        await removeGuardianSelf(env, auth, did, callerDid);
         return json({ ok: true, did });
       }
 
@@ -231,12 +227,11 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         // forced removal by vote of the OTHER guardians, with no
         // evidence, goes through /propose instead -- it needs more than
         // one signature.
-        if (!(await authenticatedAs(request, env, did))) {
-          return error("must be signed in as this identity (or a trusted client acting on its behalf) to remove a guardian with evidence", 403);
-        }
+        const auth = await authenticateRequest(request, env, did);
+        if (!auth) return error("must be signed in as this identity (or a trusted client acting on its behalf) to remove a guardian with evidence", 403);
         const body = (await request.json().catch(() => ({}))) as { guardian_did?: string; evidence?: string };
         if (!body.guardian_did || !body.evidence) return error("guardian_did and evidence (an operation hash in that guardian's own log) are required", 400);
-        await removeGuardianWithEvidence(env, did, body.guardian_did as Did, body.evidence);
+        await removeGuardianWithEvidence(env, auth, did, body.guardian_did as Did, body.evidence);
         return json({ ok: true, did });
       }
 
@@ -249,18 +244,19 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         const sessionId = readCookie(request, "gw_session");
         const guardianDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
         if (!guardianDid) return error("must be signed in as the guardian accepting this ward", 401);
-        const { pendingId } = await proposeAdopt(env, guardianDid, did);
+        const auth = await authenticateRequest(request, env, guardianDid);
+        if (!auth) return error("must be signed in as the guardian accepting this ward", 401);
+        const { pendingId } = await proposeAdopt(env, auth, guardianDid, did);
         return json({ ok: true, pendingId, message: "accepted on the guardian's own log; waiting on the ward's own approval to finish adding it (adopt/confirm)" }, 202);
       }
 
       if (suffix === "/adopt/confirm" && request.method === "POST") {
         // Step 2 of adopt: authenticated as the WARD.
-        if (!(await authenticatedAs(request, env, did))) {
-          return error("must be signed in as this identity (or a trusted client acting on its behalf) to confirm a guardian", 403);
-        }
+        const auth = await authenticateRequest(request, env, did);
+        if (!auth) return error("must be signed in as this identity (or a trusted client acting on its behalf) to confirm a guardian", 403);
         const body = (await request.json()) as { pending_id?: string };
         if (!body.pending_id) return error("pending_id is required", 400);
-        const result = await confirmAdopt(env, did, body.pending_id);
+        const result = await confirmAdopt(env, auth, did, body.pending_id);
         return result.accepted ? json({ ok: true, did }) : error(result.reason ?? "not accepted yet", 400);
       }
     } catch (e) {
