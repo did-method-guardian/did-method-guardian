@@ -3,7 +3,7 @@ import { anchorOf, createProof, generateKeypair, operationHash, parseDid, sortPr
 import type { AcceptWardOp, AddGuardianOp, CreateOp, DeactivateOp, Did, Entry, UpdateOp } from "@did-guardian/lib";
 import { confirmAdopt, confirmKeyIsCurrent, fetchLog, fetchPendingStatus, proposeAdopt, submitOperation } from "../registrar-client.js";
 import { loadKey, saveKey, type StoredKey } from "../keystore.js";
-import { loadSession } from "../state.js";
+import { loadSession, requireSessionFor } from "../state.js";
 import { confirmYesNo as confirm } from "../confirm.js";
 
 async function currentState(did: Did) {
@@ -38,7 +38,7 @@ export function registerGuardianCommand(program: Command): void {
     .command("adopt <ward-did>")
     .description("step 1 of adopt: log in as the incoming guardian first (\"did-guardian login\"), then accept a still registrar-held ward -- the ward must separately confirm with \"guardian confirm-adopt\"")
     .action(async (wardDid: Did) => {
-      const session = loadSession();
+      const session = requireSessionFor(wardDid);
       const { pendingId } = await proposeAdopt(wardDid, session.cookie);
       console.log(`${session.did} has accepted ${wardDid} as its own ward.`);
       console.log("");
