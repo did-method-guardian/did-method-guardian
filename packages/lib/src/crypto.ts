@@ -351,6 +351,20 @@ const SPKI_P256_HEADER = new Uint8Array(
  */
 export function multikeyToSpki(multikey: string): string {
   const decoded = fromMultibaseBase58btc(multikey);
+  // F-2 (audit, HIGH): decodeVarint accepts any valid (not necessarily
+  // minimal) varint encoding of 0x1200 -- a non-canonical encoding
+  // padded with extra continuation bytes decodes to the identical
+  // value and the identical 33-byte point, but is a DIFFERENT Multikey
+  // *string*. Since REQ-5-15/REQ-6-3's own key-distinctness checks
+  // compare Multikey strings, that would let the same P-256 key count
+  // as two distinct keys. The canonical encoding of 0x1200 is exactly
+  // two bytes, 0x80 0x24 (verified once, below, rather than trusting
+  // decodeVarint's own byte count); the whole decoded buffer must then
+  // be exactly 35 bytes -- that prefix plus a 33-byte compressed point
+  // -- with nothing left over and nothing missing.
+  if (decoded.length !== 35 || decoded[0] !== 0x80 || decoded[1] !== 0x24) {
+    throw new Error("not a canonically-encoded p256-pub Multikey -- expected exactly 35 bytes starting with the multicodec varint 80 24");
+  }
   const [codec, rest] = decodeVarint(decoded);
   if (codec !== P256_PUB_MULTICODEC) throw new Error(`expected the p256-pub multicodec (0x1200), got 0x${codec.toString(16)}`);
   if (rest.length !== 33) throw new Error(`expected a 33-byte compressed P-256 point, got ${rest.length} bytes`);

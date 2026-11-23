@@ -243,6 +243,26 @@ export function checkKeysShape(keys: unknown): ShapeResult {
   return VALID;
 }
 
+/**
+ * F-1 (audit): two entries are the same entry only if every member
+ * matches -- `did` alone used to stand in for the whole entry when
+ * deciding whether a `setPolicy` "names a new successor" (REQ-7-6) or
+ * "adds or replaces an entry" (REQ-10-7). A same-DID entry with a
+ * changed `anchor`, `consent` or `keys` IS a different entry (a
+ * refreshed consent after a release, say, or new keys installed with
+ * no proof of possession) and must go through the same checks a
+ * genuinely new successor would. (Lives here, not alongside resolve.ts's
+ * own sameKeys, because rules.ts needs it too and already sits
+ * underneath resolve.ts in the import graph -- importing the other way
+ * would cycle through verifyLog.ts.)
+ */
+export function sameEntry(a: Entry, b: Entry): boolean {
+  if (a.did !== b.did || a.anchor !== b.anchor || a.consent !== b.consent) return false;
+  if (a.keys.length !== b.keys.length) return false;
+  const bKeys = new Set(b.keys);
+  return a.keys.every((k) => bKeys.has(k));
+}
+
 /** REQ-6-2: an entry. */
 export function checkEntryShape(entry: unknown): ShapeResult {
   if (!isPlainObject(entry)) return invalid("REQ-6-2: an entry must be an object");

@@ -1,5 +1,5 @@
 import { guardiansCanApprove, requiredApprovals } from "./quorum.js";
-import { invalid, VALID, type ShapeResult } from "./operations.js";
+import { invalid, sameEntry, VALID, type ShapeResult } from "./operations.js";
 import type { Entry, Key, Operation, State } from "./types.js";
 import { DEFAULT_POLICY } from "./types.js";
 
@@ -101,7 +101,7 @@ export function checkSetPolicyApprovals(op: Extract<Operation, { type: "setPolic
     if (!guardiansCanApprove(required, e)) return invalid("REQ-6-9: guardians cannot approve this setPolicy");
     if (countApprovingGuardians(validKeys, stateBefore.guardians) < required) return invalid("REQ-7-6: setPolicy requires enough guardian approvals per membership when there are guardians");
   }
-  const successorChanged = op.successor !== null && op.successor.did !== stateBefore.successor?.did;
+  const successorChanged = op.successor !== null && !(stateBefore.successor && sameEntry(op.successor, stateBefore.successor));
   if (op.successor !== null && successorChanged && !allApprove(validKeys, op.successor.keys)) {
     return invalid("REQ-7-6: setPolicy requires a proof of possession for every key in successor, when it names a new successor");
   }

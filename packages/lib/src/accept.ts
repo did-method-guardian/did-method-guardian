@@ -1,4 +1,4 @@
-import { anchorOf, isSupportedOperationType, keyOfVerificationMethod, operationHash, verifyProofSignature } from "./operations.js";
+import { anchorOf, isSupportedOperationType, keyOfVerificationMethod, operationHash, sameEntry, verifyProofSignature } from "./operations.js";
 import { checkMutuality, findByHash, sameKeys, type LogResolver } from "./resolve.js";
 import { verifyLog } from "./verifyLog.js";
 import type { CreateOp, Did, Entry, Key, Log, Operation, State } from "./types.js";
@@ -76,7 +76,7 @@ async function checkCrossLogRules(
       return ACCEPT;
     }
     case "setPolicy": {
-      const successorChanged = candidate.successor !== null && candidate.successor.did !== successor?.did;
+      const successorChanged = candidate.successor !== null && !(successor && sameEntry(candidate.successor, successor));
       if (candidate.successor !== null && successorChanged) {
         if (!(await hasStanding(wardDid, wardAnchor, candidate.successor, resolveLog, implementedExtensions))) return reject(`REQ-10-7: the new entry for ${candidate.successor.did} does not have standing`);
       }

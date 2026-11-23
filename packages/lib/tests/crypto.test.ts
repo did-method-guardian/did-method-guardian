@@ -1,6 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeypair, spkiToMultikey, multikeyToSpki, signPayload, verifyPayload, assertJCSSafe, contentRef, canonicalize } from "../src/crypto.js";
+import {
+  generateKeypair,
+  spkiToMultikey,
+  multikeyToSpki,
+  signPayload,
+  verifyPayload,
+  assertJCSSafe,
+  contentRef,
+  canonicalize,
+  toMultibaseBase58btc,
+  fromMultibaseBase58btc,
+} from "../src/crypto.js";
 
 // Known-answer test: this exact base64url SPKI key (the live root identity's
 // own key on guardianspec.org, at the time this test was written) was
@@ -45,6 +56,41 @@ test("spkiToMultikey(multikeyToSpki(k)) round-trips for freshly generated keypai
 test("multikeyToSpki rejects malformed input rather than silently returning a wrong key", () => {
   assert.throws(() => multikeyToSpki("notz-prefixed"));
   assert.throws(() => multikeyToSpki("z123")); // far too short to contain a multicodec + 33-byte point
+});
+
+// --- F-2 (audit, HIGH): non-canonical Multikey varint ---------------------
+
+test("F-2: a non-canonical (padded) varint encoding of the SAME key is rejected, even though it decodes to the identical point", () => {
+  const canonicalMultikey = "zDnaeUm9Y89WYEtwDKgGeqUnWkUUp2C1cg7tcvhSh6syqzkjL";
+  const decoded = fromMultibaseBase58btc(canonicalMultikey);
+  assert.equal(decoded.length, 35);
+  assert.equal(decoded[0], 0x80);
+  assert.equal(decoded[1], 0x24);
+
+  // Re-encode the multicodec varint (0x1200) non-minimally: 0x80 0xA4
+  // 0x00 instead of 0x80 0x24 -- a standard varint decoder reads the
+  // identical value (0 | (0x24 << 7) | (0 << 14) == 0x1200) from
+  // either, so this is still, bit for bit, the same 33-byte point
+  // underneath; only the encoded STRING differs.
+  const nonCanonical = new Uint8Array(36);
+  nonCanonical[0] = 0x80;
+  nonCanonical[1] = 0xa4;
+  nonCanonical[2] = 0x00;
+  nonCanonical.set(decoded.slice(2), 3);
+  const nonCanonicalMultikey = toMultibaseBase58btc(nonCanonical);
+
+  assert.notEqual(nonCanonicalMultikey, canonicalMultikey, "a genuinely different string from the canonical one");
+  assert.doesNotThrow(() => multikeyToSpki(canonicalMultikey));
+  assert.throws(() => multikeyToSpki(nonCanonicalMultikey), /canonically-encoded/);
+});
+
+test("F-2: a Multikey one byte too long or too short (even with a canonical-looking prefix) is rejected", () => {
+  const canonicalMultikey = "zDnaeUm9Y89WYEtwDKgGeqUnWkUUp2C1cg7tcvhSh6syqzkjL";
+  const decoded = fromMultibaseBase58btc(canonicalMultikey);
+  const oneByteLonger = new Uint8Array([...decoded, 0x00]);
+  const oneByteShorter = decoded.slice(0, -1);
+  assert.throws(() => multikeyToSpki(toMultibaseBase58btc(oneByteLonger)), /canonically-encoded/);
+  assert.throws(() => multikeyToSpki(toMultibaseBase58btc(oneByteShorter)), /canonically-encoded/);
 });
 
 // --- Fix 3: low-S normalization and rejection ---------------------------
