@@ -122,7 +122,7 @@
         push("removeGuardian", "sig: " + outgoing.name);
       });
     });
-    finish(450 * signers.length + 400 + 3000);
+    finish(450 * (continuing.length + 1) + 400 + 3000);
   }
 
   function impersonate() {
