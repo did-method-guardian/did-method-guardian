@@ -5,11 +5,11 @@ The reference, self-hostable registrar + OIDC provider + email proxy for the [`d
 ## What this is
 
 A single Cloudflare Worker implementing:
-- **The registrar**: `GET /.well-known/guardian/:name[/log][/log-head]`, `POST /.well-known/guardian/:name/operations` -- the method-required surface every conformant registrar exposes (formal spec REQ-8-2) -- plus `POST /register`, this registrar's own convenience for a server-generated key (a registrar-profile feature, not part of the method itself).
+- **The registrar**: `GET /.well-known/guardian/:name[/log]`, `POST /.well-known/guardian/:name/operations` -- the method-required surface every conformant registrar exposes ([REQ-10-1](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-10-1)) -- plus `POST /register`, this registrar's own convenience for a server-generated key (a registrar-profile feature, not part of the method itself).
 - **An OIDC provider**: authorization code + mandatory PKCE, refresh tokens, revocation, JWT ID tokens, JWKS, discovery, and self-service dynamic client registration (`POST /oauth/register-client`, RFC 7591) -- "Sign in with did:guardian" for any relying party.
 - **An account dashboard** (`GET /account`): a real page for a person to log in and manage their own identity directly -- activity, guardians, connected apps, key rotation, deactivation.
-- **An admin console** (`GET /admin`): for the root identity specifically -- lists every account on this deployment, creates new ones (with an optional initial guardian), and manages registered OAuth clients. Useful on any deployment, but the only way to create accounts on a **closed** one (`REGISTRATION_MODE=closed`), which blocks anonymous public self-service at `/register`.
-- **Email proxying**: receive-and-forward (not mailbox hosting) for `name@your-domain`, plus outbound transactional send (verification links, pending-operation notifications) via a configurable provider -- never locked to one vendor (see §5 below).
+- **An admin console** (`GET /admin`): for the root identity specifically -- lists every account on this deployment, creates new ones, and manages registered OAuth clients. A guardian can't be set at creation time here either -- its own cooperation can't be assumed -- add one afterward through the adopt flow, same as any other account. Useful on any deployment, but the only way to create accounts on a **closed** one (`REGISTRATION_MODE=closed`), which blocks anonymous public self-service at `/register`.
+- **Email proxying**: receive-and-forward (not mailbox hosting) for `name@your-domain`, plus the outbound forwarding-verification send that goes with it, via a configurable provider -- never locked to one vendor (see §5 below).
 
 ## Setting up your own instance
 
@@ -46,7 +46,7 @@ Self-service: `POST /oauth/register-client` (RFC 7591) -- see the registrar API 
 Two separate things to set up, matching the two separate things this does:
 
 - **Receiving** (`name@your-domain` -> forwarded to a real inbox): enable Cloudflare Email Routing for your zone, and add a route sending incoming mail to this Worker (Cloudflare dashboard: Email > Email Routing > Email Workers). No code or binding changes needed on this side -- the `email()` handler already exported here is what Cloudflare Email Routing invokes.
-- **Sending** (verification links, pending-operation notifications, from `postmaster@your-domain`): pick a provider and set `EMAIL_PROVIDER` (in `wrangler.jsonc`'s own `vars`) to one of `cloudflare-native` | `mailchannels` | `resend`. Never locked to one vendor -- see `emailProviders.ts` for the full list and how to add another (one small function, same shape, registered in `EMAIL_PROVIDERS`).
+- **Sending** (the email-forwarding verification link, from `postmaster@your-domain`): pick a provider and set `EMAIL_PROVIDER` (in `wrangler.jsonc`'s own `vars`) to one of `cloudflare-native` | `mailchannels` | `resend`. Never locked to one vendor -- see `emailProviders.ts` for the full list and how to add another (one small function, same shape, registered in `EMAIL_PROVIDERS`).
 
   **Easiest if you're already on Cloudflare: `cloudflare-native`.** No external account, no API key -- Cloudflare's own native Email Sending binding (public beta). One-time setup per domain:
 
@@ -80,7 +80,7 @@ KEY_ENCRYPTION_KEY="<base64, 32 bytes>"
 EMAIL_PROVIDER="log"
 ```
 
-`EMAIL_PROVIDER="log"` prints every outbound email to this Worker's own console instead of actually sending it -- real local testing of the email-verification and pending-operation-notification flows, without needing a real provider account. Never set this in a real deployment; there's no delivery behind it.
+`EMAIL_PROVIDER="log"` prints every outbound email to this Worker's own console instead of actually sending it -- real local testing of the email-forwarding verification flow, without needing a real provider account. Never set this in a real deployment; there's no delivery behind it.
 
 ## Tests
 
@@ -88,4 +88,4 @@ EMAIL_PROVIDER="log"
 npm test
 ```
 
-Covers the email-proxying decision logic (reject unknown/unverified recipients, forward verified ones) against mocked D1/message objects. The registrar and OIDC layers are verified live against a real local `wrangler dev` + D1 instance rather than mocked -- see the project's own commit history for the exact manual verification each pass went through.
+Most of this (OIDC client auth, D1 query helpers, the registrar's own acceptance logic, email-proxying's decision logic) runs against a minimal fake D1 binding, not a live database -- fast, and enough for anything that's really testing one query or one function's own logic. `http-endpoints.test.ts` is the exception: it spins up a real local `wrangler dev` plus a scratch D1 and drives the actual HTTP surface end to end (registration, login, adopt, confirm-adopt, take-custody, the voting page's own form flow, and more) -- see that file for which parts of the registrar/OIDC/account surface are covered live versus by a narrower unit test elsewhere.
