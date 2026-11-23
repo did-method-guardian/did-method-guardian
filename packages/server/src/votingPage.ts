@@ -77,12 +77,17 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
     // request to the exact operation content rendered below, so a
     // held key is never signed onto something other than what was
     // actually shown here.
-    actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/sign-as-self"><input type="hidden" name="digest" value="${escapeHtml(status.digest)}"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}, for exactly the operation shown below</button></form>`;
+    // F7 (audit r3): these used to be nested under the ward's own name
+    // segment (/.well-known/guardian/<name>/pending/<id>/...), but the
+    // actually-routed path (index.ts's own pendingMatch) is top-level,
+    // /.well-known/guardian/pending/<id>/... -- every button on this
+    // page 404ed.
+    actions += `<form method="post" action="/.well-known/guardian/pending/${id}/sign-as-self"><input type="hidden" name="digest" value="${escapeHtml(status.digest)}"><button type="submit">Sign as ${escapeHtml(sessionWardDid)}, for exactly the operation shown below</button></form>`;
     if (sessionWardDid === wardDid) {
-      actions += `<form method="post" action="/.well-known/guardian/${wardName}/pending/${id}/withdraw"><button type="submit" class="danger">Withdraw this proposal</button></form>`;
+      actions += `<form method="post" action="/.well-known/guardian/pending/${id}/withdraw"><button type="submit" class="danger">Withdraw this proposal</button></form>`;
     }
   } else {
-    const selfUrl = `/.well-known/guardian/${wardName}/pending/${id}`;
+    const selfUrl = `/.well-known/guardian/pending/${id}`;
     actions += `<p><a href="/guardian-login?return_to=${encodeURIComponent(selfUrl)}">Log in to sign</a></p>`;
   }
 
@@ -106,7 +111,7 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
 }
 
 /** POST .../pending/<id>/sign-as-self -- gw_session-gated. Signs server-side with the key this registrar already custodies for the logged-in identity, same model as /rotate; never for an identity hosted elsewhere, which this registrar has no key for. */
-export async function signAsSelf(request: Request, env: Env, wardName: string, id: string): Promise<Response> {
+export async function signAsSelf(request: Request, env: Env, id: string): Promise<Response> {
   const sessionId = readCookie(request, SESSION_COOKIE);
   const signerDid = sessionId ? ((await resolveSession(env, sessionId)) as Did | null) : null;
   if (!signerDid) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
@@ -146,7 +151,7 @@ export async function signAsSelf(request: Request, env: Env, wardName: string, i
     throw e;
   }
 
-  return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/${wardName}/pending/${id}` } });
+  return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/pending/${id}` } });
 }
 
 /** POST .../pending/<id>/withdraw -- gw_session-gated, and only the proposal's own did may withdraw it (checked by the caller before this is reached). */

@@ -308,12 +308,7 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         return json(outcome, outcome.status === "finalized" ? 200 : 202);
       }
       if (pendingSuffix === "/sign-as-self" && request.method === "POST") {
-        const status = await getPendingOperationStatus(env, id);
-        const name = (() => {
-          const m = /^did:guardian:[^:]+:(.+)$/.exec(status.did);
-          return m ? m[1] : "_";
-        })();
-        return await signAsSelf(request, env, name, id);
+        return await signAsSelf(request, env, id);
       }
       if (pendingSuffix === "/withdraw" && request.method === "POST") {
         const status = await getPendingOperationStatus(env, id);

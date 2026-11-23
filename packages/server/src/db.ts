@@ -369,7 +369,22 @@ export async function deleteLoginSession(env: Env, sessionId: string): Promise<v
   await env.DB.prepare("DELETE FROM login_sessions WHERE session_id = ?").bind(sessionId).run();
 }
 
-/** R2-0.5 (round-2 audit): every session for one ward, not just one by id -- used when an externally-produced rotation (registrar.ts's submitOperation, after accepting a custodial_rotate it didn't itself sign) means whoever's holding this ward's OLD login secret might not be its legitimate owner any more. */
+/**
+ * R2-0.5 (round-2 audit): every session for one ward, not just one by
+ * id -- called from registrar.ts's submitOperation whenever an
+ * `update` is accepted, regardless of who signed it or which path
+ * produced it (self-service /rotate, take-custody, a guardian's own
+ * CLI-signed recovery submitted directly, or the generic multi-signer
+ * proposal flow). A key rotation and a login session are unrelated
+ * credentials here (login_secret, not the operational key, is what a
+ * session actually proves) -- without this, whoever holds a ward's old
+ * login_secret keeps a working session through a rotation that was
+ * specifically meant to recover from exactly that kind of compromise.
+ *
+ * Audit r3 (F7/dead-code review): this function itself survived, but
+ * nothing called it any more -- the Step 5 server rewrite carried the
+ * helper over without its own caller. Re-wired below.
+ */
 export async function deleteAllLoginSessionsForWard(env: Env, wardDid: string): Promise<void> {
   await env.DB.prepare("DELETE FROM login_sessions WHERE ward_did = ?").bind(wardDid).run();
 }
@@ -405,126 +420,3 @@ export async function getVerifiedForwardingByDid(env: Env, did: string): Promise
   return row ?? null;
 }
 
-export interface PendingOperationRow {
-  id: string;
-  ward_did: string;
-  op_type: string;
-  partial_op: string; // JSON
-  required_signers: string; // JSON array of DIDs
-  collected_sigs: string; // JSON object, signer DID -> DataIntegrityProof
-  /** JSON object, signer DID -> ISO timestamp of when THIS registrar collected that signer's own signature -- REQ-4-2's point-in-time key resolution needs this at finalize time, since a signer may have rotated their own key in the meantime (see rules.ts's VerificationContext.sigTimestamps). Mirrors collected_sigs' own keys exactly. */
-  sig_timestamps: string;
-  state: string;
-  created_at: string;
-  expires_at: string;
-}
-
-export async function insertPendingOperation(env: Env, row: PendingOperationRow): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO pending_operations (id, ward_did, op_type, partial_op, required_signers, collected_sigs, sig_timestamps, state, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-  )
-    .bind(
-      row.id,
-      row.ward_did,
-      row.op_type,
-      row.partial_op,
-      row.required_signers,
-      row.collected_sigs,
-      row.sig_timestamps,
-      row.state,
-      row.created_at,
-      row.expires_at,
-    )
-    .run();
-}
-
-export async function getPendingOperation(env: Env, id: string): Promise<PendingOperationRow | null> {
-  const row = await env.DB.prepare("SELECT * FROM pending_operations WHERE id = ?").bind(id).first<PendingOperationRow>();
-  return row ?? null;
-}
-
-export async function updatePendingOperationState(env: Env, id: string, state: string, collectedSigs: string, sigTimestamps: string): Promise<void> {
-  await env.DB.prepare("UPDATE pending_operations SET state = ?, collected_sigs = ?, sig_timestamps = ? WHERE id = ?")
-    .bind(state, collectedSigs, sigTimestamps, id)
-    .run();
-}
-
-/** Every still-live (not finalized/declined/expired) proposal naming `signerDid` somewhere in its own `required_signers` -- advisory, same spirit as that column itself (rules.ts's own isSatisfied is the real gate, this is just who to show/notify). */
-export async function listPendingOperationsForSigner(env: Env, signerDid: string): Promise<PendingOperationRow[]> {
-  const result = await env.DB.prepare(
-    "SELECT * FROM pending_operations WHERE state NOT IN ('finalized', 'declined', 'expired') ORDER BY created_at ASC",
-  ).all<PendingOperationRow>();
-  return result.results.filter((row) => (JSON.parse(row.required_signers) as string[]).includes(signerDid));
-}
-
-/** Every still-pending (any state, including satisfied/finalized -- a caller deciding whether to send a reminder filters that itself) proposal naming `wardDid`, newest first. Used by the daily reminder cron (task #113) to scan every ward's own pending_operations without needing a signer to filter by. */
-export async function listPendingOperationsCollecting(env: Env): Promise<PendingOperationRow[]> {
-  const result = await env.DB.prepare("SELECT * FROM pending_operations WHERE state = 'collecting'").all<PendingOperationRow>();
-  return result.results;
-}
-
-export interface PendingOperationTokenRow {
-  pending_op_id: string;
-  signer_did: string;
-  token: string;
-  created_at: string;
-  last_notified_at: string;
-}
-
-/** The existing token for (pendingOpId, signerDid), if one has already been issued -- reused across every notification about the same proposal so earlier email links keep working. */
-export async function getPendingOperationToken(env: Env, pendingOpId: string, signerDid: string): Promise<PendingOperationTokenRow | null> {
-  const row = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE pending_op_id = ? AND signer_did = ?").bind(pendingOpId, signerDid).first<PendingOperationTokenRow>();
-  return row ?? null;
-}
-
-export async function insertPendingOperationToken(env: Env, row: PendingOperationTokenRow): Promise<void> {
-  await env.DB.prepare("INSERT INTO pending_operation_tokens (pending_op_id, signer_did, token, created_at, last_notified_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(row.pending_op_id, row.signer_did, row.token, row.created_at, row.last_notified_at)
-    .run();
-}
-
-export async function touchPendingOperationToken(env: Env, pendingOpId: string, signerDid: string, now: string): Promise<void> {
-  await env.DB.prepare("UPDATE pending_operation_tokens SET last_notified_at = ? WHERE pending_op_id = ? AND signer_did = ?").bind(now, pendingOpId, signerDid).run();
-}
-
-/** Resolves a one-click email link's token back to which proposal and which signer it was issued for -- the token itself is the proof (email possession), no signature needed. */
-export async function getPendingOperationByToken(env: Env, token: string): Promise<PendingOperationTokenRow | null> {
-  const row = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE token = ?").bind(token).first<PendingOperationTokenRow>();
-  return row ?? null;
-}
-
-/** Every token row for a pending op whose last_notified_at is more than `olderThanMs` ago -- the daily reminder cron's own candidate set. */
-export async function listStaleTokensForPendingOp(env: Env, pendingOpId: string, olderThanIso: string): Promise<PendingOperationTokenRow[]> {
-  const result = await env.DB.prepare("SELECT * FROM pending_operation_tokens WHERE pending_op_id = ? AND last_notified_at < ?").bind(pendingOpId, olderThanIso).all<PendingOperationTokenRow>();
-  return result.results;
-}
-
-export interface RelayInboxRow {
-  signer_did: string;
-  pending_operation_id: string;
-  ward_did: string;
-  op_type: string;
-  status: string;
-  created_at: string;
-}
-
-/** handleRelayNotify's own durable record (pendingOps.ts) -- see migration 0010's header comment for why this exists and what it does/doesn't guarantee. An upsert: the same (signer, op) pair can be notified more than once as an operation progresses, and re-opens a previously resolved entry if relay-notify somehow fires again for it (shouldn't happen once genuinely resolved, but never silently drop a real notification over it). */
-export async function upsertRelayInboxEntry(env: Env, row: { signer_did: string; pending_operation_id: string; ward_did: string; op_type: string; created_at: string }): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO relay_inbox (signer_did, pending_operation_id, ward_did, op_type, status, created_at) VALUES (?, ?, ?, ?, 'open', ?) " +
-      "ON CONFLICT(signer_did, pending_operation_id) DO UPDATE SET status = 'open', resolved_at = NULL",
-  )
-    .bind(row.signer_did, row.pending_operation_id, row.ward_did, row.op_type, row.created_at)
-    .run();
-}
-
-/** The account dashboard's own "needs your signature on another registrar" section -- open entries only; a resolved one has already been signed or declined through this registrar's /relay-sign. */
-export async function listOpenRelayInboxForSigner(env: Env, signerDid: string): Promise<RelayInboxRow[]> {
-  const result = await env.DB.prepare("SELECT * FROM relay_inbox WHERE signer_did = ? AND status = 'open' ORDER BY created_at DESC").bind(signerDid).all<RelayInboxRow>();
-  return result.results;
-}
-
-/** Marks an inbox entry resolved once this registrar has actually signed or declined it on the signer's behalf (relaySign.ts) -- a no-op if no matching row exists (e.g. the signer acted before any notification ever arrived). */
-export async function resolveRelayInboxEntry(env: Env, signerDid: string, pendingOperationId: string, now: string): Promise<void> {
-  await env.DB.prepare("UPDATE relay_inbox SET status = 'resolved', resolved_at = ? WHERE signer_did = ? AND pending_operation_id = ?").bind(now, signerDid, pendingOperationId).run();
-}

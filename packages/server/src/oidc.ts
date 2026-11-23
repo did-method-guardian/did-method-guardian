@@ -1,6 +1,7 @@
-import { generateKeypair, parseDid, verifyLog, type Did } from "@did-guardian/lib";
+import { anchorOf, checkMutuality, generateKeypair, parseDid, verifyLog, type CreateOp, type Did } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
+import { makeResolveLog } from "./logResolver.js";
 import {
   getOidcClient,
   getSigningKey,
@@ -20,6 +21,7 @@ import {
   insertRevokedJti,
   isJtiRevoked,
   getVerifiedForwardingByDid,
+  type OidcClientRow,
 } from "./db.js";
 import { encryptSecret, decryptSecret, randomSecret, hashSecret } from "./secretBox.js";
 import { importSigningKeypair, signJwt, verifyJwt, verifyPkce, decodeJwtUnsafe, type SigningKeypair } from "./jwt.js";
@@ -28,6 +30,23 @@ import { html, escapeHtml, authPageShell } from "./htmlPage.js";
 
 const SESSION_COOKIE = "gw_session";
 const AUTH_CODE_TTL_MS = 1000 * 60 * 5; // 5 minutes
+
+/**
+ * F5 (audit, MEDIUM): every grant handler used to check the client
+ * secret only `if (clientSecret)` was actually supplied, silently
+ * skipping the check (not failing) for a confidential client that
+ * omitted it -- the three token-endpoint grants (authorization_code,
+ * refresh_token, token-exchange) all had the identical gap. A public
+ * client (`token_endpoint_auth_method === "none"`, dynamic
+ * registration's own default) genuinely has no real secret -- its
+ * stored hash is a throwaway value never issued to it -- so it's
+ * still exempt; every other client MUST supply a correct one.
+ */
+export async function requireClientAuth(client: OidcClientRow, clientSecret: string | undefined): Promise<boolean> {
+  if (client.token_endpoint_auth_method === "none") return true;
+  if (!clientSecret) return false;
+  return (await hashSecret(clientSecret)) === client.client_secret_hash;
+}
 const ID_TOKEN_TTL_S = 60 * 60; // 1 hour
 const REFRESH_TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
@@ -627,9 +646,7 @@ async function handleToken(request: Request, env: Env): Promise<Response> {
 
   const client = await getOidcClient(env, authCode.client_id);
   if (!client) return err("unknown client", 400);
-  if (clientSecret) {
-    if ((await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
-  }
+  if (!(await requireClientAuth(client, clientSecret))) return err("invalid client credentials", 401);
 
   // PKCE is mandatory (handleAuthorize refuses to issue a code without a
   // code_challenge), so a stored auth code missing one is an invariant
@@ -673,7 +690,7 @@ async function handleRefreshGrant(b: Record<string, string>, clientSecret: strin
 
   const client = await getOidcClient(env, stored.client_id);
   if (!client) return err("unknown client", 400);
-  if (clientSecret && (await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
+  if (!(await requireClientAuth(client, clientSecret))) return err("invalid client credentials", 401);
 
   // RFC 8707 §2: a refresh request may narrow (never widen) the resource a
   // new token is scoped to. Only accepted when one was already established
@@ -704,13 +721,14 @@ async function handleRefreshGrant(b: Record<string, string>, clientSecret: strin
  * grant_type=urn:ietf:params:oauth:grant-type:token-exchange (RFC 8693,
  * registrar API spec §10) -- mints a token to act *as* `resource` (the
  * target DID), on behalf of whoever `subject_token` proves is actually
- * calling. Authorization is the same live-guardian check this registrar
- * already uses everywhere else a guardian's own standing matters
- * (rules.ts's liveGuardians, via @did-guardian/lib -- never a
- * reimplementation): the caller must be the target itself, or a current,
- * live guardian of it, checked fresh against the target's own operation
- * log every time, never cached. `resource` must be a ward this registrar
- * itself custodies -- there's no key material to produce a token for an
+ * calling. Authorization is checkMutuality (@did-guardian/lib), the
+ * same standing check resolution itself reports -- not just "is this
+ * DID listed in guardians," which says nothing about whether it still
+ * verifies, is deactivated, withdrew consent, or has rotated away from
+ * the keys its entry names (F5, audit r3: the previous check was a
+ * bare list membership test, despite its own comment claiming
+ * otherwise). `resource` must be a ward this registrar itself
+ * custodies -- there's no key material to produce a token for an
  * identity it doesn't hold.
  */
 async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret: string | undefined, env: Env): Promise<Response> {
@@ -720,7 +738,7 @@ async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret:
 
   const client = await getOidcClient(env, b.client_id);
   if (!client) return err("unknown client", 400);
-  if (clientSecret && (await hashSecret(clientSecret)) !== client.client_secret_hash) return err("invalid client credentials", 401);
+  if (!(await requireClientAuth(client, clientSecret))) return err("invalid client credentials", 401);
 
   const verified = await verifyAccessToken(env, b.subject_token);
   if (!verified) return err("subject_token is invalid, expired, or revoked", 400);
@@ -734,9 +752,11 @@ async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret:
     const targetLog = await getLog(env, targetDid);
     const verified = targetLog.length > 0 ? await verifyLog(targetDid as Did, targetLog) : undefined;
     const state = verified?.result === "valid" ? verified.state : undefined;
-    const isCurrentGuardianOrSuccessor = state ? state.guardians.some((g) => g.did === actorDid) || state.successor?.did === actorDid : false;
-    if (!isCurrentGuardianOrSuccessor) {
-      return err(`"${actorDid}" is neither "${targetDid}" itself, nor a current guardian of it`, 403);
+    const targetAnchor = verified?.result === "valid" ? await anchorOf(targetLog[0] as CreateOp) : undefined;
+    const entry = state ? (state.guardians.find((g) => g.did === actorDid) ?? (state.successor?.did === actorDid ? state.successor : undefined)) : undefined;
+    const standing = entry && targetAnchor ? await checkMutuality(targetDid as Did, targetAnchor, entry, makeResolveLog(env)) : "unavailable";
+    if (standing !== "mutual") {
+      return err(`"${actorDid}" is neither "${targetDid}" itself, nor a current, standing guardian of it (${standing})`, 403);
     }
   }
 

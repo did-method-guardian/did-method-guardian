@@ -154,6 +154,28 @@ test("login, the account dashboard, and self-rotate", async () => {
   assert.equal(rotateResp.status, 200);
 });
 
+test("R2-0.5 (re-wired): an accepted key rotation revokes every existing session for that DID", async () => {
+  const name = uniqueName("alice");
+  const { loginSecret } = await registerHeld(name);
+  const cookie = await loginAs(name, loginSecret);
+
+  // Someone who separately holds this session cookie (e.g. a leaked
+  // login_secret, used earlier to log in) still has a working session
+  // right up until the rotation below -- login_secret and the
+  // operational key are unrelated credentials.
+  const beforeRotate = await fetch(`${BASE}/account`, { headers: { cookie: `gw_session=${cookie}` } });
+  assert.equal(beforeRotate.status, 200);
+
+  const rotateResp = await fetch(`${BASE}/.well-known/guardian/${name}/rotate`, { method: "POST", headers: { cookie: `gw_session=${cookie}` } });
+  assert.equal(rotateResp.status, 200);
+
+  // The very same session cookie must now be dead -- the rotation
+  // just invalidated it, not only for /rotate but for the dashboard
+  // too.
+  const afterRotate = await fetch(`${BASE}/account`, { headers: { cookie: `gw_session=${cookie}` }, redirect: "manual" });
+  assert.notEqual(afterRotate.status, 200, "the old session must not still work after a key rotation");
+});
+
 test("REQ-10-13/10-14 negative: a held key signs only on a request authenticated as that exact identity", async () => {
   const aliceName = uniqueName("alice");
   const bobName = uniqueName("bob");
@@ -301,6 +323,45 @@ test("take-custody: the caller's own freshly-generated key replaces this registr
   assert.notEqual(rotateAfter.status, 200);
 });
 
+test("F7: the voting page's own Sign/Withdraw form actions route to a real endpoint, not a 404", async () => {
+  const aliceName = uniqueName("alice");
+  const bobName = uniqueName("bob");
+  const alice = await registerHeld(aliceName);
+  const bob = await registerHeld(bobName);
+  const aliceCookie = await loginAs(aliceName, alice.loginSecret);
+  const bobCookie = await loginAs(bobName, bob.loginSecret);
+
+  const step1 = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt`, { method: "POST", headers: { cookie: `gw_session=${bobCookie}` } });
+  const { pendingId } = (await step1.json()) as { pendingId: string };
+
+  // The HTML voting page, as alice (the pending op's own target) --
+  // its Sign-as-self and Withdraw forms used to post to a nested path
+  // (/.well-known/guardian/<name>/pending/<id>/...) that no route
+  // actually matched.
+  const page = await fetch(`${BASE}/.well-known/guardian/pending/${pendingId}`, {
+    headers: { accept: "text/html", cookie: `gw_session=${aliceCookie}` },
+  });
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  const signAction = /action="([^"]*\/sign-as-self)"/.exec(html)?.[1];
+  const withdrawAction = /action="([^"]*\/withdraw)"/.exec(html)?.[1];
+  assert.ok(signAction, "the page renders a sign-as-self form");
+  assert.ok(withdrawAction, "the page renders a withdraw form (alice is the proposal's own target)");
+  assert.equal(signAction, `/.well-known/guardian/pending/${pendingId}/sign-as-self`);
+  assert.equal(withdrawAction, `/.well-known/guardian/pending/${pendingId}/withdraw`);
+
+  const digest = /name="digest" value="([^"]*)"/.exec(html)?.[1];
+  assert.ok(digest);
+  const signResp = await fetch(`${BASE}${signAction}`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ digest: digest! }),
+  });
+  assert.notEqual(signResp.status, 404, "the sign-as-self form action must route to a real endpoint");
+  assert.equal(signResp.status, 302, "and finalizing alice's own addGuardian redirects back to the (now-gone) pending op's own page");
+});
+
 test("REQ-10-4: a rejected operation gets HTTP 400 with an error message", async () => {
   const name = uniqueName("carol");
   const resp = await fetch(`${BASE}/.well-known/guardian/${name}/operations`, {
@@ -311,4 +372,25 @@ test("REQ-10-4: a rejected operation gets HTTP 400 with an error message", async
   assert.equal(resp.status, 400);
   const body = (await resp.json()) as { error: string };
   assert.equal(typeof body.error, "string");
+});
+
+test("F4: setting up email forwarding writes to the DB without hitting the dropped wards FK (migration 0014)", async () => {
+  const name = uniqueName("dana");
+  const { loginSecret } = await registerHeld(name);
+  const cookie = await loginAs(name, loginSecret);
+
+  const resp = await fetch(`${BASE}/account/email`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${cookie}`, "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ forward_to: "dana@example.com" }),
+  });
+  // Before migration 0014, the INSERT itself threw (D1_ERROR: no such
+  // table: main.wards), surfacing as a 500 regardless of whether an
+  // email provider is configured. This test's own environment has none
+  // configured, so success here is the redirect-with-a-message path
+  // (requestEmailForwarding's own graceful "no provider" case) -- what
+  // matters is that it's never a 500.
+  assert.notEqual(resp.status, 500, "the email_forwarding INSERT must not throw on the dropped wards FK");
+  assert.equal(resp.status, 302);
 });

@@ -15,7 +15,7 @@ import {
   type Log,
   type Operation,
 } from "@did-guardian/lib";
-import { appendOperation, getHeldKey, getLog, getNameEntry, insertHeldKey, insertNameEntry, setHeldKeyLoginSecretHash } from "./db.js";
+import { appendOperation, deleteAllLoginSessionsForWard, getHeldKey, getLog, getNameEntry, insertHeldKey, insertNameEntry, setHeldKeyLoginSecretHash } from "./db.js";
 import { makeResolveLog } from "./logResolver.js";
 import { signAttestation } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
@@ -169,6 +169,19 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
   const prev = seq === 0 ? "" : (toAccept as { prev: string }).prev;
   const appended = await appendOperation(env, did, seq, prev, toAccept, new Date().toISOString());
   if (!appended) throw new RegistrarError("REQ-10-8: the log has moved on since this operation was prepared; retry against its current version");
+
+  // R2-0.5 (round-2 audit, re-wired per audit r3's dead-code review):
+  // login_secret/sessions and the operational key are unrelated
+  // credentials -- a session proves login_secret, not possession of
+  // any key -- so an accepted key rotation must invalidate every
+  // existing session for this DID regardless of who signed it or
+  // which path produced it (self-service, take-custody, or a
+  // guardian's own recovery), or whoever holds a stolen login_secret
+  // keeps a working session straight through the rotation meant to
+  // recover from exactly that.
+  if (toAccept.type === "update") {
+    await deleteAllLoginSessionsForWard(env, did);
+  }
 
   return toAccept;
 }
