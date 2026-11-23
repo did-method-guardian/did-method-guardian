@@ -2,14 +2,26 @@
 // fixes, each small enough not to need its own file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkValuesShape, isValidUri, isValidFragment, verifyLog, createProof, generateKeypair, operationHash, DEFAULT_POLICY } from "../src/index.js";
+import { checkValuesShape, isValidUri, isValidFragment, verifyLog, createProof, generateKeypair, operationHash, canonicalize, DEFAULT_POLICY } from "../src/index.js";
 import type { CreateOp, DeactivateOp, Did } from "../src/index.js";
 
 // --- F-4: -0 ---------------------------------------------------------------
 
-test("F-4: -0 is rejected by checkValuesShape itself (REQ-5-2), not left to crash canonicalization later", () => {
-  const result = checkValuesShape({ x: -0 });
-  assert.equal(result.valid, false);
+// Corrected per thoward-59's review: REQ-5-2 is value-based -- the
+// value of -0 IS the integer 0 (a Python `json` parse of "-0" can't
+// even see the sign), and JS's own JSON.stringify(-0) already
+// produces "0", RFC 8785's own canonical form. The original bug was
+// never "-0 should be rejected" -- it was "-0 crashes canonicalization
+// instead of cleanly validating or rejecting." -0 must be ACCEPTED,
+// same as 0, and canonicalize without throwing.
+
+test("F-4: -0 is accepted by checkValuesShape (REQ-5-2) -- its value is the integer 0", () => {
+  assert.equal(checkValuesShape({ x: -0 }).valid, true);
+});
+
+test("F-4: canonicalize(-0) does not throw, and produces the same output as canonicalize(0)", () => {
+  assert.doesNotThrow(() => canonicalize({ x: -0 }));
+  assert.equal(canonicalize({ x: -0 }), canonicalize({ x: 0 }));
 });
 
 test("F-4 (sanity): ordinary 0 and other integers still pass", () => {

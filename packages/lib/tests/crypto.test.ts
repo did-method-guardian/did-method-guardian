@@ -126,11 +126,19 @@ test("verifyPayload rejects a high-S signature outright -- malleability must not
 
 // --- Fix 4: JCS safety ----------------------------------------------------
 
-test("assertJCSSafe rejects a non-integer number, -0, and a lone surrogate, but accepts ordinary content", () => {
+test("assertJCSSafe rejects a non-integer number and a lone surrogate, but accepts ordinary content", () => {
   assert.throws(() => assertJCSSafe({ x: 1.5 }));
-  assert.throws(() => assertJCSSafe({ x: -0 }));
   assert.throws(() => assertJCSSafe({ x: "\uD800" })); // lone high surrogate, no following low surrogate
   assert.doesNotThrow(() => assertJCSSafe({ x: 1, y: "ok", z: [1, 2, { nested: "ok" }], w: null }));
+});
+
+// F-4 (audit, corrected per thoward-59's review): -0's value IS the
+// integer 0 (REQ-5-2 is value-based), and JS's own
+// JSON.stringify(-0) already produces "0" -- RFC 8785's own canonical
+// form -- so there is no actual cross-implementation divergence to
+// guard against. -0 must be accepted, not rejected.
+test("assertJCSSafe accepts -0 -- its value is the integer 0, and it canonicalizes identically to 0", () => {
+  assert.doesNotThrow(() => assertJCSSafe({ x: -0 }));
 });
 
 test("signPayload refuses to sign JCS-unsafe content rather than producing a signature nobody else can reproduce the hash of", async () => {
@@ -166,8 +174,12 @@ test("audit WS-3.1: canonicalize matches plain JSON.stringify whenever key order
 
 test("audit WS-3.1: canonicalize rejects JCS-unsafe content itself, without a separate assertJCSSafe call", () => {
   assert.throws(() => canonicalize({ x: 1.5 }));
-  assert.throws(() => canonicalize({ x: -0 }));
   assert.throws(() => canonicalize({ "\uD800": "lone surrogate in a KEY, not just a value" }));
+});
+
+test("F-4 (audit, corrected): canonicalize(-0) does not throw, and matches canonicalize(0) exactly", () => {
+  assert.doesNotThrow(() => canonicalize({ x: -0 }));
+  assert.equal(canonicalize({ x: -0 }), canonicalize({ x: 0 }));
 });
 
 test("audit WS-3.1: a lone surrogate in an object KEY is rejected, not just in a value", () => {

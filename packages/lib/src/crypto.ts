@@ -73,19 +73,29 @@ const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDB
  * Rejects the input shapes that would otherwise make RFC 8785's own
  * number-serialization rules (ECMA-262 `Number::toString`) and lone
  * surrogates in strings matter for interop: no non-integer number, no
- * `-0` (serializes as "-0" in JS but "0" under some other JCS
- * implementations), no number outside JS's own safe-integer range (a
- * round-trip through a non-JS implementation could lose precision), and
- * no unpaired UTF-16 surrogate (undefined behavior once re-encoded as
- * UTF-8). None of this method's own operation content ever legitimately
- * needs any of these, so forbidding them outright is simpler than
+ * number outside JS's own safe-integer range (a round-trip through a
+ * non-JS implementation could lose precision), and no unpaired UTF-16
+ * surrogate (undefined behavior once re-encoded as UTF-8). `-0` is
+ * NOT one of these -- JSON.stringify(-0) already produces "0" in JS,
+ * matching RFC 8785's own canonical form exactly, so it round-trips
+ * identically to 0 with no divergence risk. None of this method's own
+ * operation content ever legitimately needs a non-integer or
+ * out-of-range number, so forbidding those outright is simpler than
  * matching every other implementation's number formatting exactly.
  */
 export function assertJCSSafe(value: unknown): void {
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new Error("JCS: number must be finite");
     if (!Number.isInteger(value)) throw new Error("JCS: floating-point numbers are not allowed");
-    if (Object.is(value, -0)) throw new Error("JCS: -0 is not allowed");
+    // F-4 (audit, corrected per thoward-59's review): -0 is not
+    // actually unsafe here -- REQ-5-2 is value-based (the value of -0
+    // IS the integer 0, same as a Python `json` parse of "-0" can't
+    // even see the sign), and canonicalizeUnchecked's own
+    // JSON.stringify(-0) already produces "0" in JS (verified: it does
+    // NOT produce "-0", contrary to this function's own former
+    // comment) -- exactly RFC 8785's own canonical form. -0 was never
+    // actually rejected here for a real cross-implementation
+    // divergence; it's accepted and canonicalizes identically to 0.
     if (!Number.isSafeInteger(value)) throw new Error("JCS: integer exceeds the safe range");
     return;
   }

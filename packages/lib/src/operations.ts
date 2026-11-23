@@ -93,13 +93,14 @@ function isUtf8SafeString(value: unknown): boolean {
 }
 
 function isOperationInteger(value: unknown): boolean {
-  // F-4 (audit): -0 passes `Number.isInteger` and `-0 >= 0` (both true
-  // in JS, since -0 === 0 numerically), so this used to accept it here
-  // only for assertJCSSafe to throw on it later, during
-  // canonicalization -- turning a clean "invalid" into an uncaught
-  // 500. Object.is distinguishes -0 from 0, which neither
-  // Number.isInteger nor a plain >= comparison can.
-  return typeof value === "number" && Number.isInteger(value) && !Object.is(value, -0) && value >= 0 && value <= 2 ** 53 - 1;
+  // F-4 (audit, corrected per thoward-59's review): REQ-5-2 is
+  // value-based -- the value of -0 IS the integer 0 (a Python `json`
+  // parse of "-0" can't even see the sign), and -0 >= 0 and
+  // Number.isInteger(-0) are both true in JS precisely because -0 ===
+  // 0 numerically. -0 is accepted here like any other 0; it
+  // canonicalizes identically to 0 (assertJCSSafe's own comment has
+  // the detail).
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 2 ** 53 - 1;
 }
 
 /** REQ-5-2/REQ-5-1 (I-JSON has no unpaired surrogates): every number and every string anywhere in the value. */
