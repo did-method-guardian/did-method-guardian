@@ -15,7 +15,7 @@
     "alsoKnownAs": { "type": "array", "items": { "type": "string" }, "description": "REQ-7-8: sets the initial `alsoKnownAs`." },
     "prev": { "const": null, "description": "REQ-7-4: MUST be null." },
     "proof": { "type": "array", "items": { "$ref": "../data-integrity-proof.schema.json" }, "description": "REQ-7-6: every key in `keys`, every key in each entry in `guardians`, and every key in `successor` if it is an entry." },
-    "attestation": { "$ref": "../data-integrity-proof.schema.json", "description": "REQ-7-7/REQ-7-9: required unless `did` names a root identity, forbidden if it does. A looser proof shape -- see REQ-7-9." },
+    "attestation": { "$ref": "../attestation.schema.json", "description": "REQ-7-7/REQ-7-9: required unless `did` names a root identity, forbidden if it does." },
     "critical": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "REQ-7-30: optional, non-empty, distinct extension names, each a member of `policy.extensions`." },
     "extensions": { "type": "object", "description": "REQ-5-3/REQ-7-29: optional. Each member name is an absolute URI." }
   },

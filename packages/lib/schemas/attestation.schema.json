@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardianspec.org/schemas/attestation.schema.json",
+  "title": "Attestation",
+  "description": "Formal spec REQ-7-9. A create's `attestation`: a Data Integrity proof as in REQ-5-11, except `cryptosuite` may be any string (a resolver that does not implement it reports the attestation as unsupported, REQ-11-2) and `verificationMethod` is `did:guardian:<domain>?versionId=<version>#key-<n>` naming a key of the root identity's log, not a did:key reference.",
+  "type": "object",
+  "properties": {
+    "type": { "const": "DataIntegrityProof" },
+    "cryptosuite": { "type": "string" },
+    "verificationMethod": {
+      "type": "string",
+      "pattern": "^did:guardian:[^?#]+\\?versionId=[^#]+#key-(0|[1-9][0-9]*)$",
+      "description": "did:guardian:<domain>?versionId=<version>#key-<n>."
+    },
+    "proofPurpose": { "const": "capabilityInvocation" },
+    "proofValue": { "type": "string", "description": "Multibase base58btc ('z'-prefixed) encoding of the raw, low-S signature bytes (REQ-5-13)." }
+  },
+  "required": ["type", "cryptosuite", "verificationMethod", "proofPurpose", "proofValue"],
+  "additionalProperties": false
+}

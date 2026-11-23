@@ -7,7 +7,10 @@
   "type": "object",
   "properties": {
     "recovery": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of update, acceptWard and releaseWard. Allowed: \"any\", \"majority\", \"all\", integer k (REQ-6-13: 1-32). Default \"majority\"." },
-    "membership": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of addGuardian and setPolicy. Allowed: \"majority\", \"all\", integer k -- never \"any\" (REQ-6-13: 1-32). Default \"majority\"." },
+    "membership": {
+      "oneOf": [{ "const": "majority" }, { "const": "all" }, { "type": "integer", "minimum": 1, "maximum": 32 }],
+      "description": "REQ-6-11: governs guardian approval of addGuardian and setPolicy. Allowed: \"majority\", \"all\", integer k (REQ-6-13: 1-32) -- never \"any\". Default \"majority\"."
+    },
     "removal": { "$ref": "setting.schema.json", "description": "REQ-6-11: governs guardian approval of removeGuardian. Allowed: \"any\", \"majority\", \"all\", integer k (REQ-6-13: 1-32). Default \"majority\"." },
     "deactivation": {
       "type": "object",

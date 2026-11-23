@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://guardianspec.org/schemas/setting.schema.json",
   "title": "Setting",
-  "description": "Formal spec REQ-6-11/REQ-6-12. The value of policy.recovery, policy.membership, policy.removal, or policy.deactivation.threshold.",
+  "description": "Formal spec REQ-6-11/REQ-6-12. The value of policy.recovery, policy.removal, or policy.deactivation.threshold -- not policy.membership, which excludes \"any\" (see policy.schema.json's own inline schema for it). The number of guardian approvals a value actually requires is computed by REQ-6-8's three-step algorithm, not by the value alone.",
   "oneOf": [
-    { "const": "any", "description": "M = 1 if N > 0, else unsatisfiable." },
-    { "const": "majority", "description": "M = floor(N/2) + 1." },
-    { "const": "all", "description": "M = N." },
-    { "type": "integer", "minimum": 0, "description": "M = this exact value." }
+    { "const": "any" },
+    { "const": "majority" },
+    { "const": "all" },
+    { "type": "integer", "minimum": 1, "maximum": 32, "description": "REQ-6-13: 1 to 32." }
   ]
 }

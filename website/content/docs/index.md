@@ -55,7 +55,7 @@ A few rules hold regardless of how many guardians there are or who they are:
 - **A guardian can act on the ward's behalf for things the ward can't authorize alone.** This covers recovery, but also ongoing authorization, similar to how a legal guardian already can act on behalf of a dependent, like a minor child.
 - **A threshold decides how many guardians need to act together.** A ward can require any one guardian, a majority, all of them, or a specific count, choosing the appropriate policy for the level of trust the situation calls for.
 - **Each guardian action is signed with that specific guardian's key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to whichever guardian performed it, in the identity's history.
-- **Guardianship is temporary by design.** It can be handed off, shared among several guardians, reduced to none at all, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor).
+- **Guardianship is temporary by design.** It can be handed off, shared among several guardians, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor). Removing the last guardian deactivates the identity by default; an identity whose policy opts into guardian-less operation ahead of time keeps going without one instead.
 
 See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise definitions of each operation and signature.
 
@@ -112,7 +112,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 **Recover an identity after losing access to it.** If a ward's key is lost, a group of its guardians (meeting the threshold configured in its policy) can issue it a fresh key. Without a guardian, there's no recovery -- a deliberate difference from `did:plc`'s ordered recovery-key list, not a gap: `did:guardian` uses guardianship for this instead of a second key, and a guardian doesn't have to be a separate person. Naming a cold-storage identity (a key generated once and kept offline) as its guardian covers the same need with nobody else involved.
 
 
-**Hand off responsibility cleanly.** Adding a guardian, removing one, or dissolving guardianship entirely is each its own signed operation, recorded permanently in the identity's history.
+**Hand off responsibility cleanly.** Adding or removing a guardian is each its own signed operation, recorded permanently in the identity's history. Removing the last one deactivates the identity, unless its policy was set up ahead of time to keep it going guardian-less instead.
 
 ## The parts of this project
 
