@@ -81,12 +81,16 @@ export async function verifyLog(did: Did, log: Log, implementedExtensions: Reado
   for (let i = 0; i < log.length; i++) {
     const op: unknown = log[i];
 
-    // REQ-8-1 step 4: no operation follows a state in which deactivated is true.
-    if (state?.deactivated) return result("invalid", "REQ-8-1: no operation may follow a deactivate", state);
-
-    // REQ-8-1 intro: unsupported conditions are checked before the steps.
+    // F-6 (audit): REQ-8-1's own intro says unsupported conditions are
+    // checked before the steps, for this same operation -- step 4
+    // (deactivated) is one of those steps, so it must come after, not
+    // before. An unsupported operation following a deactivate must be
+    // reported unsupported, not invalid.
     const unsupported = unsupportedReason(op, state?.critical ?? [], implementedExtensions);
     if (unsupported) return result("unsupported", unsupported, state);
+
+    // REQ-8-1 step 4: no operation follows a state in which deactivated is true.
+    if (state?.deactivated) return result("invalid", "REQ-8-1: no operation may follow a deactivate", state);
 
     // REQ-8-1 step 5.1 (Sections 5 and 7).
     const shape = checkOperationShape(op);

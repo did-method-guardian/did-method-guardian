@@ -93,7 +93,13 @@ function isUtf8SafeString(value: unknown): boolean {
 }
 
 function isOperationInteger(value: unknown): boolean {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 2 ** 53 - 1;
+  // F-4 (audit): -0 passes `Number.isInteger` and `-0 >= 0` (both true
+  // in JS, since -0 === 0 numerically), so this used to accept it here
+  // only for assertJCSSafe to throw on it later, during
+  // canonicalization -- turning a clean "invalid" into an uncaught
+  // 500. Object.is distinguishes -0 from 0, which neither
+  // Number.isInteger nor a plain >= comparison can.
+  return typeof value === "number" && Number.isInteger(value) && !Object.is(value, -0) && value >= 0 && value <= 2 ** 53 - 1;
 }
 
 /** REQ-5-2/REQ-5-1 (I-JSON has no unpaired surrogates): every number and every string anywhere in the value. */
@@ -220,18 +226,30 @@ export function isValidHash(value: unknown): value is string {
   }
 }
 
-const URI_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:\S*$/;
+// F-7 (audit): RFC 3986's own grammar restricts every part of a URI
+// (after the scheme) to unreserved characters, reserved (gen-delims +
+// sub-delims) characters, and pct-encoded triplets -- `\S` (anything
+// non-whitespace) and `[^\s#]` (the previous patterns here) both
+// accepted far more than that: "{}", "|", "<", "\", """ and non-ASCII
+// characters like "é" all matched, and a malformed pct-encoding like
+// "%zz" was accepted outright rather than rejected for not being a
+// real pct-encoded octet.
+const PCT_ENCODED = "%[0-9A-Fa-f]{2}";
+const URI_CHAR = `(?:${PCT_ENCODED}|[A-Za-z0-9\\-._~!$&'()*+,;=:/?#@\\[\\]])`;
+const URI_RE = new RegExp(`^[a-zA-Z][a-zA-Z0-9+.-]*:${URI_CHAR}*$`);
+const ABSOLUTE_URI_CHAR = `(?:${PCT_ENCODED}|[A-Za-z0-9\\-._~!$&'()*+,;=:/?@\\[\\]])`; // same, minus "#" -- an absolute URI has no fragment
 
 /** A URI (RFC 3986) -- requires at least a scheme, since this library has no need to resolve relative references. */
 export function isValidUri(value: unknown): value is string {
   return typeof value === "string" && URI_RE.test(value);
 }
 
-const FRAGMENT_CHARS_RE = /^[A-Za-z0-9\-._~%!$&'()*+,;=:@/?]+$/;
+const FRAGMENT_CHAR = `(?:${PCT_ENCODED}|[A-Za-z0-9\\-._~!$&'()*+,;=:@/?])`;
+const FRAGMENT_CHARS_RE = new RegExp(`^${FRAGMENT_CHAR}*$`);
 
-/** A DID URL fragment (RFC 3986 fragment grammar, minus "#"): unreserved / pct-encoded / sub-delims / ":" / "@" / "/" / "?". */
+/** A DID URL fragment (RFC 3986 fragment grammar, minus "#"): unreserved / pct-encoded / sub-delims / ":" / "@" / "/" / "?". RFC 3986's fragment is zero or more of these -- "#" alone (an empty fragment) is valid. */
 export function isValidFragment(value: unknown): value is string {
-  return typeof value === "string" && value.length > 1 && value.startsWith("#") && FRAGMENT_CHARS_RE.test(value.slice(1));
+  return typeof value === "string" && value.startsWith("#") && FRAGMENT_CHARS_RE.test(value.slice(1));
 }
 
 /** REQ-6-1: keys, 1 to 8 distinct entries. */
@@ -411,8 +429,8 @@ function isValidSetting(value: unknown, allowAny: boolean): boolean {
   return allowAny ? SETTING_WITH_ANY.has(value) : SETTING_NO_ANY.has(value);
 }
 
-// RFC 3986 absolute-URI: scheme ":" hier-part [ "?" query ] -- no fragment, unlike an ordinary URI reference.
-const ABSOLUTE_URI_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s#]*$/;
+// RFC 3986 absolute-URI: scheme ":" hier-part [ "?" query ] -- no fragment, unlike an ordinary URI reference. F-7 (audit): same character-class fix as isValidUri, above.
+const ABSOLUTE_URI_RE = new RegExp(`^[a-zA-Z][a-zA-Z0-9+.-]*:${ABSOLUTE_URI_CHAR}*$`);
 
 /** REQ-7-29: `extensions` is an object whose member names are absolute URIs. */
 export function checkExtensionsShape(extensions: unknown): ShapeResult {
