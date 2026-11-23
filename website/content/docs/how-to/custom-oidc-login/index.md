@@ -44,7 +44,7 @@ Use `client_id` and `client_secret` wherever the relying party asks for them. Th
 
 ## Prompt behavior
 
-If the relying party asks which `prompt` values to request (some expose this as checkboxes in their setup screen): `consent` alone is enough for an ordinary sign-in. `login` forces re-authentication even if a session already exists; `select_account` is only meaningful for a provider showing a multi-account picker, which a registrar doesn't -- one Guardian ID signs in, with nothing to pick between. `none` suppresses any interactive prompt entirely and fails if one turns out to be required.
+This registrar doesn't read the `prompt` parameter at all -- if the relying party's own setup screen asks which values to request, leave it unset or pick whichever it's happy with; none of them change what actually happens here. The flow it runs is always the same: show the login form if there's no existing `gw_session`, then show the consent page unless this client already has a recorded decision for the scope being requested.
 
 ## Signing in as the root identity
 

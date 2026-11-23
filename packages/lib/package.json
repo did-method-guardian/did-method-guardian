@@ -14,13 +14,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "test": "npm run build && node --test dist/tests",
-    "gen-fixtures": "npm run build && node dist/scripts/gen-fixtures.js"
+    "test": "npm run build && node --test dist/tests"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "ajv": "^8.20.0",
-    "fast-check": "^3.23.0",
     "typescript": "^5.6.0"
   },
   "license": "MIT OR Apache-2.0",

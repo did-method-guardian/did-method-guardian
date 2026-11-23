@@ -48,7 +48,6 @@ Each of these corresponds to an operation whose own required approvals a single 
 | `POST` | `.../take-custody` | `update` to a caller-supplied key | the caller's own proof of possession for the new key, combined with this registrar's proof using the key it's about to stop holding |
 | `POST` | `.../remove-self` | `removeGuardian`, the departing guardian itself | needs only the departing guardian's own approval -- the "removed guardian itself, if there are at least two" path |
 | `POST` | `.../remove` | `removeGuardian`, with evidence | the *ward's own* key, naming evidence (a `deactivate` or `releaseWard` already in the departing guardian's own log) that the guardian already lost standing |
-| `POST` | `.../tombstone` | `deactivate`, ward-signed | works only when `policy.deactivation` lets the ward's own key approve alone (`by: "self"` or `"either"`, with `N = 0` guardians); otherwise rejected, with the reason naming what else is needed |
 
 A forced removal by vote of the *other* guardians, with no evidence, or a deactivation needing guardian cooperation too, needs more than this registrar can produce from one call -- see §3.
 
