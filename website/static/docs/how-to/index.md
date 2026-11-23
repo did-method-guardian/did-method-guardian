@@ -80,7 +80,7 @@ did-guardian login did:guardian:guardianspec.org:alice --login-secret <alice's s
 did-guardian key take-custody did:guardian:guardianspec.org:alice
 ```
 
-That `take-custody` command ends the registrar's custody of `alice`'s key for good -- `did-guardian guardian add`/`recover`/`deactivate` then sign and submit directly with keys you hold, no session needed.
+That `take-custody` command ends the registrar's custody of `alice`'s key for good -- `did-guardian guardian add`/`recover`/`deactivate` then sign and submit directly with keys you hold, no session needed. If `alice` is herself a guardian of some other ward, its own entry for her goes stale the moment this succeeds (it recorded her keys as they were when she was added) -- see the [registrar doc](/docs/registrar/#2-self-contained-convenience-endpoints) for why, and re-seat that entry with an `updateGuardian` *before* taking custody, not after.
 
 For a brand-new identity, `did-guardian create <name> --registrar <domain>` builds a create operation with a key you generate yourself and never hand to any registrar, then submits it for real. `create <name> --domain <domain>` (no `--registrar`) builds the same operation fully offline instead, with no network call at all -- useful for understanding the mechanics or embedding [`@did-guardian/lib`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/lib) directly, but the result is a draft until something actually accepts it.
 
