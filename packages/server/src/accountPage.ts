@@ -17,7 +17,7 @@ import { authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { listPendingForDid } from "./pendingProofs.js";
 import { requestEmailForwarding } from "./email.js";
-import { getLogWithTimestamps, getNameEntryByDid, getVerifiedForwardingByDid, listOidcConsentsForWard, deleteOidcConsent, revokeRefreshTokensForWardAndClient } from "./db.js";
+import { getHeldKey, getLogWithTimestamps, getNameEntryByDid, getVerifiedForwardingByDid, listOidcConsentsForWard, deleteOidcConsent, revokeRefreshTokensForWardAndClient } from "./db.js";
 import { verifyLog, DEFAULT_POLICY, type Did, type Entry, type Operation, type Policy, type Setting, type State } from "@did-guardian/lib";
 import { getLog } from "./db.js";
 
@@ -120,6 +120,7 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
   const forwarding = await getVerifiedForwardingByDid(env, wardDid);
   const pending = await listPendingForDid(env, wardDid);
   const consents = await listOidcConsentsForWard(env, wardDid);
+  const held = await getHeldKey(env, wardDid);
 
   const pendingList = pending.length
     ? `<ul class="signers">${pending
@@ -147,6 +148,11 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
     <p class="hint">${escapeHtml(wardDid)}</p>
     <form method="post" action="/guardian-logout" class="inline"><button type="submit" class="neutral">Log out</button></form>
     ${banner(message ?? null, messageKind)}
+    ${
+      held?.must_change_password
+        ? `<p class="error">A guardian-approved recovery just issued this account a new login secret, chosen by this registrar, not by you -- <a href="#login-secret">set your own password now</a>, below.</p>`
+        : ""
+    }
     <dl>
       <dt>Status</dt><dd><span class="state">${state.deactivated ? "Deactivated" : "Active"}</span></dd>
       <dt>Guardians</dt><dd>${guardiansList(state)}</dd>
@@ -158,12 +164,14 @@ export async function handleAccountPage(request: Request, env: Env): Promise<Res
 
     <h2>Account actions</h2>
     <form method="post" action="/account/rotate"><button type="submit">Rotate operational key</button></form>
-    <form method="post" action="/account/login-secret/reissue"><button type="submit" class="neutral">Get a new generated login secret</button></form>
-    <form method="post" action="/account/login-secret/reissue">
-      <label>Or set your own password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input type="password" name="password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
-      <label>Confirm <input type="password" name="password_confirm" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
-      <button type="submit" class="neutral">Set password</button>
-    </form>
+    <div id="login-secret">
+      <form method="post" action="/account/login-secret/reissue"><button type="submit" class="neutral">Get a new generated login secret</button></form>
+      <form method="post" action="/account/login-secret/reissue">
+        <label>Or set your own password <small>(at least ${MIN_PASSWORD_LENGTH} characters)</small> <input type="password" name="password" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
+        <label>Confirm <input type="password" name="password_confirm" autocomplete="new-password" minlength="${MIN_PASSWORD_LENGTH}" required></label>
+        <button type="submit" class="neutral">Set password</button>
+      </form>
+    </div>
     ${
       forwarding
         ? `<p class="hint">Email forwarding: ${escapeHtml(forwarding.forward_to)} (verified)</p>`

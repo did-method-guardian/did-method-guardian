@@ -6,6 +6,7 @@ import {
   createProof,
   DEFAULT_POLICY,
   generateKeypair,
+  keyOfVerificationMethod,
   parseGuardianDid,
   resolve as resolveDid,
   sameKeys,
@@ -27,12 +28,13 @@ import {
   insertNameEntry,
   invalidateLoginSecretHash,
   setHeldKeyLoginSecretHash,
+  setHeldKeyLoginSecretHashForRecovery,
 } from "./db.js";
 import { makeResolveLog } from "./logResolver.js";
 import { signAttestation } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { didFor, type Env } from "./env.js";
-import { encryptSecret, hashSecret } from "./secretBox.js";
+import { encryptSecret, hashPassword, hashSecret, randomSecret } from "./secretBox.js";
 
 export { RegistrarError };
 
@@ -124,6 +126,20 @@ export async function getResourceDocument(env: Env, segment: string): Promise<Di
   return result.result === "valid" ? result.document : undefined;
 }
 
+export interface SubmitOperationResult {
+  operation: Operation;
+  /**
+   * Set only when this request is the one that just finalized a
+   * keys-changing `update` for a registrar-held identity, accepted on
+   * guardian approval rather than any current key (a recovery, not a
+   * self-service rotation) -- the ward's own old login secret was just
+   * invalidated below, along with every session, so there's otherwise
+   * no way back in. Present exactly once, here, in this response; never
+   * stored in plaintext and never retrievable again afterward.
+   */
+  newLoginSecret?: string;
+}
+
 /**
  * REQ-10-1: `POST .../<segment>/operations`, the one acceptance path.
  * `candidate` must already carry every proof it needs -- a route that
@@ -131,7 +147,7 @@ export async function getResourceDocument(env: Env, segment: string): Promise<Di
  * signAttestation) before calling this; this function only ever adds
  * the create attestation (REQ-10-9), never an ordinary proof.
  */
-export async function submitOperation(env: Env, did: Did, candidate: Operation): Promise<Operation> {
+export async function submitOperation(env: Env, did: Did, candidate: Operation): Promise<SubmitOperationResult> {
   const parsed = parseGuardianDid(did);
   if (!parsed) throw new RegistrarError("REQ-4-1: not a valid did:guardian identifier");
 
@@ -183,26 +199,47 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
   if (!appended) throw new RegistrarError("REQ-10-8: the log has moved on since this operation was prepared; retry against its current version");
 
   // R2-0.5 (round-2 audit, re-wired; scope and login_secret coverage
-  // per thoward-59's review): login_secret/sessions and the
-  // operational key are unrelated credentials -- a session proves
-  // login_secret, not possession of any key -- so an accepted `update`
-  // that actually changes `keys` must invalidate every existing
-  // session AND the login_secret itself for this DID, regardless of
-  // who signed it or which path produced it (self-service,
-  // take-custody, or a guardian's own recovery), or whoever holds a
-  // stolen login_secret just keeps a working session (or logs back in
-  // outright) straight through the rotation meant to recover from
-  // exactly that. Scoped to an actual keys change, not every update --
-  // editing a service endpoint or alsoKnownAs alone must not log
-  // anyone out.
+  // per thoward-59's review): login_secret/sessions and the identity's
+  // key are unrelated credentials -- a session proves login_secret,
+  // not possession of any key -- so an accepted `update` that actually
+  // changes `keys` must invalidate every existing session AND the
+  // login_secret itself for this DID, regardless of who signed it or
+  // which path produced it (self-service, take-custody, or a
+  // guardian's own recovery), or whoever holds a stolen login_secret
+  // just keeps a working session (or logs back in outright) straight
+  // through the rotation meant to recover from exactly that. Scoped to
+  // an actual keys change, not every update -- editing a service
+  // endpoint or alsoKnownAs alone must not log anyone out.
+  let newLoginSecret: string | undefined;
   if (toAccept.type === "update" && existingLog.length > 0) {
     const priorVerified = await verifyLog(did, existingLog);
     const priorKeys = priorVerified.result === "valid" ? priorVerified.state!.keys : [];
     if (!sameKeys(priorKeys, toAccept.keys)) {
       await deleteAllLoginSessionsForWard(env, did);
       await invalidateLoginSecretHash(env, did);
+
+      // Post-recovery reissue (user-decided design, 2026-11-23): the
+      // secret just invalidated above was this ward's only way back
+      // in -- if it was lost or compromised badly enough that its
+      // guardians had to rotate the key *for* it (no proof here came
+      // from any of priorKeys, so this wasn't a current-key-signed
+      // self-service rotation), and this registrar actually holds a
+      // key for it (a self-held/take-custody'd identity has no
+      // login_secret concept at all), issue a fresh one now rather
+      // than leaving the ward locked out until it can reach the
+      // registrar through some other channel. Returned once, below,
+      // to whichever request just finalized this operation -- that's
+      // the guardian's own authenticated request, not the ward's.
+      const signerKeys = new Set(
+        toAccept.proof.map((p) => keyOfVerificationMethod(p.verificationMethod)).filter((k): k is Key => k !== undefined),
+      );
+      const signedByCurrentKey = priorKeys.some((k) => signerKeys.has(k));
+      if (!signedByCurrentKey && (await getHeldKey(env, did))) {
+        newLoginSecret = randomSecret();
+        await setHeldKeyLoginSecretHashForRecovery(env, did, await hashPassword(newLoginSecret));
+      }
     }
   }
 
-  return toAccept;
+  return { operation: toAccept, newLoginSecret };
 }

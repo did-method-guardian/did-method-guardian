@@ -103,7 +103,7 @@ test("submitOperation: a services-only update (same keys) does NOT revoke sessio
   const updateOp: UpdateOp = { ...updateBase, proof: [updateProof] };
 
   const result = await submitOperation(env, did, updateOp);
-  assert.equal(result.type, "update");
+  assert.equal(result.operation.type, "update");
   assert.equal(env.sawSessionRevocation, false, "a same-keys update must not revoke sessions");
   assert.equal(env.sawLoginSecretInvalidation, false, "a same-keys update must not invalidate the login_secret");
 });

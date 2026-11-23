@@ -12,7 +12,7 @@ import type { Env } from "./env.js";
 const EXPIRY_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
 export type PendingOutcome =
-  | { status: "finalized"; operation: Operation }
+  | { status: "finalized"; operation: Operation; login_secret?: string }
   | { status: "collecting"; id: string; reason?: string };
 
 function candidateFrom(row: PendingProofRow, proofs: DataIntegrityProof[]): Operation {
@@ -30,8 +30,8 @@ export async function proposeOperation(env: Env, did: Did, candidateWithoutProof
   const existingLog = await getLog(env, did);
   const result = await checkAcceptance(did, existingLog, candidate, makeResolveLog(env));
   if (result.accepted) {
-    const operation = await submitOperation(env, did, candidate);
-    return { status: "finalized", operation };
+    const submitted = await submitOperation(env, did, candidate);
+    return { status: "finalized", operation: submitted.operation, ...(submitted.newLoginSecret ? { login_secret: submitted.newLoginSecret } : {}) };
   }
 
   const id = crypto.randomUUID();
@@ -64,9 +64,9 @@ export async function contributeProof(env: Env, id: string, proof: DataIntegrity
   const existingLog = await getLog(env, row.did);
   const result = await checkAcceptance(row.did, existingLog, candidate, makeResolveLog(env));
   if (result.accepted) {
-    const operation = await submitOperation(env, row.did, candidate);
+    const submitted = await submitOperation(env, row.did, candidate);
     await deletePendingProof(env, id);
-    return { status: "finalized", operation };
+    return { status: "finalized", operation: submitted.operation, ...(submitted.newLoginSecret ? { login_secret: submitted.newLoginSecret } : {}) };
   }
   return { status: "collecting", id, reason: result.reason };
 }

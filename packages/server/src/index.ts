@@ -139,8 +139,8 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         const gated = await checkCreateGate(env, request, op.type);
         if (gated) return gated;
         try {
-          const accepted = await submitOperation(env, did, op);
-          return json({ accepted: true, operation: accepted }, 201);
+          const result = await submitOperation(env, did, op);
+          return json({ accepted: true, operation: result.operation, ...(result.newLoginSecret ? { login_secret: result.newLoginSecret } : {}) }, 201);
         } catch (e) {
           if (e instanceof RegistrarError) return error(e.message, e.status);
           throw e;

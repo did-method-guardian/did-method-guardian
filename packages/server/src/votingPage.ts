@@ -144,11 +144,26 @@ export async function signAsSelf(request: Request, env: Env, id: string): Promis
     throw e;
   }
 
+  let outcome;
   try {
-    await contributeProof(env, id, proof);
+    outcome = await contributeProof(env, id, proof);
   } catch (e) {
     if (e instanceof RegistrarError) return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">${escapeHtml(e.message)}</p>`), e.status);
     throw e;
+  }
+
+  // A fresh login secret, issued because this signature was the one
+  // that just finalized a guardian-approved recovery, is shown here
+  // once and never again -- a bare redirect to the pending-op page
+  // would lose it for good, and it must never ride along in that
+  // redirect's own URL (query strings get logged, cached, shared).
+  if (outcome.status === "finalized" && outcome.login_secret) {
+    return html(
+      pageShell(
+        "Signed",
+        `<h1>Signed</h1><p>This operation is now finalized.</p><p><strong>New login secret for this identity (shown once -- copy it now and pass it to the owner out of band; it can't be shown again):</strong></p><p><code>${escapeHtml(outcome.login_secret)}</code></p><p><a href="/.well-known/guardian/pending/${id}">Continue</a></p>`,
+      ),
+    );
   }
 
   return new Response(null, { status: 302, headers: { location: `/.well-known/guardian/pending/${id}` } });

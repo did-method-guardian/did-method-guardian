@@ -64,7 +64,7 @@ export async function registerIdentity(env: Env, name: string, options: { public
 
   if (keypair) {
     const proof = await createProof(createOp, publicKey, keypair.privateKey);
-    const accepted = (await submitOperation(env, did, { ...createOp, proof: [proof] } as CreateOp)) as CreateOp;
+    const accepted = (await submitOperation(env, did, { ...createOp, proof: [proof] } as CreateOp)).operation as CreateOp;
     const now = new Date().toISOString();
     let loginSecret: string | undefined;
     let loginSecretHash: string | null = null;
@@ -211,7 +211,7 @@ export async function proposeAdopt(env: Env, auth: AuthenticatedRequest, guardia
 
   const acceptBase: Omit<AcceptWardOp, "proof"> = { type: "acceptWard", ward: { did: wardDid, anchor: wardAnchor }, prev: await currentPrev(env, guardianDid) };
   const acceptProof = await signAs(env, auth, guardianDid, acceptBase);
-  const acceptOp = (await submitOperation(env, guardianDid, { ...acceptBase, proof: [acceptProof] })) as AcceptWardOp;
+  const acceptOp = (await submitOperation(env, guardianDid, { ...acceptBase, proof: [acceptProof] })).operation as AcceptWardOp;
   const consentHash = await operationHash(acceptOp);
 
   const guardianLog = await getLog(env, guardianDid);

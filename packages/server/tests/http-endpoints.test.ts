@@ -239,6 +239,83 @@ test("two-step adopt: the guardian accepts, then the ward confirms, and the ward
   assert.equal(addGuardianOp!.entry!.did, bob.did);
 });
 
+test("post-recovery login secret reissue (user-decided design, 2026-11-23): a guardian-only recovery issues alice a fresh login secret, usable once; the old secret and session are both dead", async () => {
+  const aliceName = uniqueName("alice");
+  const bobName = uniqueName("bob");
+  const alice = await registerHeld(aliceName);
+  const bob = await registerHeld(bobName);
+  const aliceCookie = await loginAs(aliceName, alice.loginSecret);
+  const bobCookie = await loginAs(bobName, bob.loginSecret);
+
+  // bob becomes alice's guardian (same two-step flow as above) -- the
+  // default policy's recovery threshold is "majority" of N=1, so bob
+  // alone is enough to approve the recovery below.
+  const adoptStep1 = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt`, { method: "POST", headers: { cookie: `gw_session=${bobCookie}` } });
+  const { pendingId: adoptPendingId } = (await adoptStep1.json()) as { pendingId: string };
+  const adoptStatus = (await (await fetch(`${BASE}/.well-known/guardian/pending/${adoptPendingId}`, { headers: { accept: "application/json" } })).json()) as { digest: string };
+  const adoptConfirm = await fetch(`${BASE}/.well-known/guardian/${aliceName}/adopt/confirm`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${aliceCookie}`, "content-type": "application/json" },
+    body: JSON.stringify({ pending_id: adoptPendingId, digest: adoptStatus.digest }),
+  });
+  assert.equal(adoptConfirm.status, 200);
+
+  // alice lost her key -- someone recovering on her behalf generates a
+  // fresh one and proves possession of it, but has no current key of
+  // alice's own to co-sign with. That's exactly the trigger: a
+  // keys-changing update with no proof from any of alice's prior keys.
+  const log = (await (await fetch(`${BASE}/.well-known/guardian/${aliceName}/log`)).json()) as object[];
+  const prev = await operationHash(log[log.length - 1] as never);
+  const recoveryKeypair = await generateKeypair();
+  const updateOp = { type: "update" as const, keys: [recoveryKeypair.publicKey], services: [], alsoKnownAs: [], prev };
+  const newKeyProof = await createProof(updateOp, recoveryKeypair.publicKey, recoveryKeypair.privateKey);
+
+  const proposeResp = await fetch(`${BASE}/.well-known/guardian/${aliceName}/propose`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: updateOp, proof: newKeyProof }),
+  });
+  assert.equal(proposeResp.status, 202, "the new key's own proof of possession alone isn't enough -- still needs a guardian");
+  const { id: pendingId } = (await proposeResp.json()) as { id: string };
+
+  // bob reviews and signs with his own held key, through the same
+  // voting-page sign-as-self flow as F7's own test above.
+  const pendingPage = await fetch(`${BASE}/.well-known/guardian/pending/${pendingId}`, { headers: { accept: "text/html", cookie: `gw_session=${bobCookie}` } });
+  const pendingHtml = await pendingPage.text();
+  const signAction = /action="([^"]*\/sign-as-self)"/.exec(pendingHtml)?.[1];
+  const digest = /name="digest" value="([^"]*)"/.exec(pendingHtml)?.[1];
+  assert.ok(signAction && digest);
+
+  const signResp = await fetch(`${BASE}${signAction}`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${bobCookie}`, "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ digest: digest! }),
+  });
+  assert.equal(signResp.status, 200, "finalizing a recovery that reissues a login secret renders it inline, not a bare redirect");
+  const signHtml = await signResp.text();
+  const newLoginSecret = /<code>([^<]+)<\/code>/.exec(signHtml)?.[1];
+  assert.ok(newLoginSecret, "the response shows the freshly issued login secret");
+
+  // The new secret works, once.
+  const newCookie = await loginAs(aliceName, newLoginSecret!);
+  assert.ok(newCookie);
+
+  // The old login_secret must no longer work -- R2-0.5's own
+  // invalidation still fires first, same as a self-service rotation.
+  const oldSecretAttempt = await fetch(`${BASE}/guardian-login`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ name: aliceName, login_secret: alice.loginSecret, return_to: "/account" }),
+  });
+  assert.equal(cookieFrom(oldSecretAttempt), null, "the pre-recovery login_secret must no longer produce a session");
+
+  // And alice's session from before the recovery is dead too.
+  const oldSessionAttempt = await fetch(`${BASE}/account`, { headers: { cookie: `gw_session=${aliceCookie}` }, redirect: "manual" });
+  assert.notEqual(oldSessionAttempt.status, 200, "the pre-recovery session must not still work after a guardian-approved recovery");
+});
+
 test("F2 (reviewed): confirm-adopt requires the digest of the pending op actually shown -- missing or stale is refused", async () => {
   const aliceName = uniqueName("alice");
   const bobName = uniqueName("bob");

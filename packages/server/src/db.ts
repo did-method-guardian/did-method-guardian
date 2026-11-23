@@ -82,6 +82,8 @@ export interface HeldKeyRow {
   private_key_enc: string;
   login_secret_hash: string | null;
   created_at: string;
+  /** 0/1 (SQLite has no real boolean): set when `login_secret_hash` was just reissued by a guardian's own recovery, not chosen or requested by the ward itself -- the account dashboard prompts to replace it on sight, then clears this back to 0 the moment the ward does (setHeldKeyLoginSecretHash, below). */
+  must_change_password: number;
 }
 
 /** Presence of a row is "this registrar holds a key for this identity" (REQ-10-13/REQ-10-14). */
@@ -90,14 +92,21 @@ export async function getHeldKey(env: Env, did: string): Promise<HeldKeyRow | nu
   return row ?? null;
 }
 
-export async function insertHeldKey(env: Env, row: HeldKeyRow): Promise<void> {
+/** `must_change_password` is never set on insert -- a freshly created identity's own first secret, however it was chosen, was never a leftover from a recovery -- so the schema's own default (0) always applies here. */
+export async function insertHeldKey(env: Env, row: Omit<HeldKeyRow, "must_change_password">): Promise<void> {
   await env.DB.prepare("INSERT INTO held_keys (did, public_key, private_key_enc, login_secret_hash, created_at) VALUES (?, ?, ?, ?, ?)")
     .bind(row.did, row.public_key, row.private_key_enc, row.login_secret_hash, row.created_at)
     .run();
 }
 
+/** Every existing caller of this is the ward itself (or an operator) deliberately choosing or requesting this credential -- clears must_change_password unconditionally, superseding any pending recovery prompt. */
 export async function setHeldKeyLoginSecretHash(env: Env, did: string, hash: string): Promise<void> {
-  await env.DB.prepare("UPDATE held_keys SET login_secret_hash = ? WHERE did = ?").bind(hash, did).run();
+  await env.DB.prepare("UPDATE held_keys SET login_secret_hash = ?, must_change_password = 0 WHERE did = ?").bind(hash, did).run();
+}
+
+/** Post-recovery login secret reissue (user-decided design, 2026-11-23): registrar.ts's own submitOperation calls this, never the ward, so must_change_password is set rather than cleared -- see HeldKeyRow's own comment. */
+export async function setHeldKeyLoginSecretHashForRecovery(env: Env, did: string, hash: string): Promise<void> {
+  await env.DB.prepare("UPDATE held_keys SET login_secret_hash = ?, must_change_password = 1 WHERE did = ?").bind(hash, did).run();
 }
 
 /**
@@ -109,7 +118,11 @@ export async function setHeldKeyLoginSecretHash(env: Env, did: string, hash: str
  * There is currently no self-service way for the identity to get a
  * fresh one back afterward except through a trusted OIDC client or an
  * operator-level reissue (/login-secret's own authenticatedAs check) --
- * a real, disclosed gap, not hidden.
+ * a real, disclosed gap, not hidden. The one case this registrar closes
+ * automatically is the guardian-approved recovery that caused this
+ * invalidation in the first place (registrar.ts's own submitOperation,
+ * right after this call): that path reissues a fresh secret itself,
+ * since there every other credential-granting door genuinely is shut.
  */
 export async function invalidateLoginSecretHash(env: Env, did: string): Promise<void> {
   await env.DB.prepare("UPDATE held_keys SET login_secret_hash = NULL WHERE did = ?").bind(did).run();
