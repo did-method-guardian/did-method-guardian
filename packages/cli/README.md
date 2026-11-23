@@ -95,4 +95,4 @@ For any operation whose required approvals one signature can't satisfy -- removi
 
 - No OAuth device-code login -- `login` uses a login secret or password directly.
 - No `--keychain` support on Windows.
-- No dedicated command for `setPolicy`, `updateGuardian`, or `releaseWard` -- build the operation's own JSON by hand and use `operation propose`/`operation sign`.
+- No dedicated command for `setPolicy`, `updateGuardian`, `removeGuardian`, or `releaseWard` -- build the operation's own JSON by hand and use `operation propose`/`operation sign`.

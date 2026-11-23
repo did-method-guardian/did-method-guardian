@@ -94,7 +94,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 **Set up a group-governed identity for a team or an AI agent.** A company can issue an identity for an agent it runs, name itself (or a specific set of people) as guardian, and set a threshold matching how much oversight the situation needs. The guardians can authorize actions the agent isn't allowed to approve on its own, recover it if its key is lost or compromised, or deactivate it once it's retired.
 
 
-**Recover an identity after losing access to it.** If a ward's key is lost, a group of its guardians (meeting the threshold configured in its policy) can issue it a fresh key. Without a guardian, there's no recovery -- a deliberate difference from `did:plc`'s ordered recovery-key list, not a gap: `did:guardian` uses guardianship for this instead of a second key, and a guardian doesn't have to be a separate person. Naming a cold-storage identity (a key generated once and kept offline) as its guardian covers the same need with nobody else involved.
+**Recover an identity after losing access to it.** A second key held in reserve, if there is one, can sign in a fresh key on its own. Otherwise, a group of the ward's own guardians (meeting the threshold its policy configures) can issue it one instead, without ever needing the lost key back. did:guardian uses guardianship for this case specifically, rather than only `did:plc`'s ordered recovery-key list -- and a guardian doesn't have to be a separate person: naming a cold-storage identity (a key generated once and kept offline) as its own guardian covers the same need with nobody else involved.
 
 
 **Hand off responsibility cleanly.** Adding or removing a guardian is each its own signed operation, recorded permanently in the identity's history. Removing the last one deactivates the identity, unless its policy was set up ahead of time to keep it going guardian-less instead.
@@ -1047,7 +1047,7 @@ did:guardian's contribution is group guardianship as a first-class part of a DID
 
 **Comparable:** the log/replay mechanics are close enough that did:guardian is best understood as did:plc's model plus group guardianship, not a wholly separate design. did:plc also lets a rotation key undo a recent, unauthorized rotation within a recovery window; did:guardian has no equivalent -- an accepted operation is permanent, and recovering from a compromised key means the guardians rotate forward to a new one, never rolling one back.
 
-**Different:** did:plc's rotation-key tier is a single, ordered list of keys -- whichever one, in order, is willing and able to sign, authorizes recovery. did:guardian's guardian tier is a configurable, unordered M-of-N group instead, where a guardian can itself be a person, a committee, or another identity entirely, not just a second key one party happens to hold -- a deliberate difference from did:plc's own mechanism, not an extension of it. did:plc is also directory-resolved (a single, centrally-operated PLC directory), where did:guardian follows `did:web`'s own domain-scoped resolution instead -- any number of independent registrars, never one shared directory.
+**Different:** did:plc's rotation-key tier is a single, ordered list of keys -- whichever one, in order, is willing and able to sign, authorizes recovery. did:guardian's guardian tier is a configurable, unordered M-of-N group of other identities instead -- each one controlled by whoever or whatever its own owner chooses (a person, a committee, another identity entirely), not a second key one party happens to hold. did:plc is also directory-resolved (a single, centrally-operated PLC directory); did:guardian follows `did:web`'s own domain-scoped resolution instead, any number of independent registrars rather than one shared directory.
 
 ## KERI delegated AIDs
 
@@ -1137,7 +1137,7 @@ did-guardian guardian confirm-adopt did:guardian:guardianspec.org:alice <pending
 
 A guardian relationship exists only once both sides have signed for it -- `bob`'s own consent to take on the role, and `alice`'s own approval of `bob` as its guardian.
 
-Every command above has a plain HTTP equivalent too -- see the [registrar API doc](/docs/registrar/) for the exact requests, or pass `--json` to any `did-guardian` command (or point it through a local HTTP proxy) to see exactly what it sent and got back.
+Every command above has a plain HTTP equivalent too -- see the [registrar API doc](/docs/registrar/) for the exact requests, or point the CLI through a local HTTP proxy to see exactly what it sent and got back. `register` and `resolve` also take `--json` directly, for a machine-readable response with no proxy needed.
 
 ### Holding a key yourself instead
 
@@ -1285,13 +1285,15 @@ A registrar's `id_token`/`userinfo` claims stay minimal and privacy-preserving: 
 
 Canonical URL: https://guardianspec.org/docs/how-to/recover-lost-key/
 
-If a ward's key is lost, enough of its guardians (meeting whatever `policy.recovery` sets, `majority` by default) can issue it a fresh one. The old key is never needed, and never recovered -- it's replaced.
+Two separate cases share the name "recovery," and need different things.
 
-This assumes the ward already has at least one guardian, and that its key is actually lost -- held by no one, not even the registrar. If both are true, there's nothing that can help: without a guardian, there is no recovery path, full stop -- a self-held key, with no guardian, that's actually gone, is unrecoverable by anyone, ever. did:guardian deliberately works this way instead of `did:plc`'s ordered recovery-key list: a guardian can be a person, a committee, or another identity entirely, not just a second key you happen to hold.
+**A backup key.** An identity can hold up to 8 keys at once ([REQ-6-1](/docs/did-guardian-spec-v0.2.0/#req-6-1)). If `alice` still holds even one of hers, that one key alone can sign an `update` installing a fresh one -- no guardian needed at all. This is the simplest case, and worth setting up ahead of time: a second key, kept somewhere separate from the first, turns "lost a key" into an ordinary self-service rotation.
 
-A held ward is a different case: the registrar still custodies the key behind it, so what's actually "lost" is usually just your own login credential, not the key itself -- that's an account-recovery problem (see [self-host](/docs/how-to/self-host/)'s own login flow), separate from this page's own guardian-signed `update`.
+**Guardian-approved recovery**, this page's main topic: if `alice` has lost every key she held, enough of her guardians (meeting whatever `policy.recovery` sets, `majority` by default) can issue her a fresh one instead. The old key is never needed, and never recovered -- it's replaced. Without a backup key of her own and without a guardian, there's genuinely nothing that can help: did:guardian uses guardianship for this, deliberately, rather than `did:plc`'s ordered recovery-key list -- set one up (see below) before this happens, not after.
 
-A did:guardian guardian doesn't have to be a separate person at all -- it can be another identity you yourself control instead, which is the usual answer when there's genuinely no one else to name: a cold-storage identity (a key you generate once, keep offline, and never use for anything else) named as `alice`'s own guardian covers exactly this case, with no second party involved at all. Set one up while `alice` still has the chance to get a guardian -- registering a plain identity to hold the cold-storage key, then adding it as a guardian ([`guardian add`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli), if both keys are self-held), covers this.
+A held ward is a different case from either of these: the registrar still custodies the key behind it, so what's actually "lost" is usually just your own login credential, not the key itself -- that's an account-recovery problem (see [self-host](/docs/how-to/self-host/)'s own login flow), separate from this page's own guardian-signed `update`.
+
+A did:guardian guardian doesn't have to be a separate person -- [REQ-6-2](/docs/did-guardian-spec-v0.2.0/#req-6-2) makes a guardian an identity, which `alice` herself can control: a cold-storage identity (a key generated once, kept offline, and never used for anything else) named as `alice`'s own guardian covers the case where there's no one else to name, with no second party involved. Set one up while `alice` still holds a key herself -- `did-guardian create <name> --registrar <domain>` builds the cold-storage identity with its own self-held key (never `register`, which generates a registrar-held one, the opposite of what a cold-storage guardian needs), then add it as a guardian ([`guardian add`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli), if both keys are self-held).
 
 ## The recovery itself
 

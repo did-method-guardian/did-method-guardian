@@ -69,7 +69,7 @@ did-guardian guardian confirm-adopt did:guardian:guardianspec.org:alice <pending
 
 A guardian relationship exists only once both sides have signed for it -- `bob`'s own consent to take on the role, and `alice`'s own approval of `bob` as its guardian.
 
-Every command above has a plain HTTP equivalent too -- see the [registrar API doc](/docs/registrar/) for the exact requests, or pass `--json` to any `did-guardian` command (or point it through a local HTTP proxy) to see exactly what it sent and got back.
+Every command above has a plain HTTP equivalent too -- see the [registrar API doc](/docs/registrar/) for the exact requests, or point the CLI through a local HTTP proxy to see exactly what it sent and got back. `register` and `resolve` also take `--json` directly, for a machine-readable response with no proxy needed.
 
 ### Holding a key yourself instead
 
