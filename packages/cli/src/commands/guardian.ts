@@ -143,21 +143,31 @@ export function registerGuardianCommand(program: Command): void {
     .description("guardian-initiated key rotation (an update, approved via policy.recovery) -- replaces the ward's key, never needs the ward's own key")
     .requiredOption("--guardian-key <label>", "the signing guardian's saved key")
     .option("--keychain", "look up the guardian key in the OS keychain instead of a local file")
-    .option("--new-key <label>", "an existing saved key to install as the ward's new key (default: generate and save a fresh one under \"<ward-did>-recovered\")")
+    .option("--new-key <label>", "an existing saved key to install as the ward's new key (default: generate and save a fresh one under \"<ward-did>-recovered-<timestamp>\")")
     .option("--submit", "actually submit the signed operation to the registrar (default: print it only)")
-    .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; newKey?: string; submit?: boolean }) => {
+    .option("--force", "overwrite an existing saved key under the generated default label, if one is somehow already there")
+    .action(async (wardDid: Did, guardianDid: Did, opts: { guardianKey: string; keychain?: boolean; newKey?: string; submit?: boolean; force?: boolean }) => {
       const { log, state } = await currentState(wardDid);
       const guardianKey = await loadKey(opts.guardianKey, opts);
       await confirmKeyIsCurrent(guardianDid, guardianKey.publicKey);
       let newKey: StoredKey;
       if (opts.newKey) {
         newKey = await loadKey(opts.newKey, opts);
-      } else {
-        const label = `${wardDid}-recovered`;
+      } else if (opts.submit) {
+        // C-1 (audit): generating AND SAVING a new key only happens
+        // when this is actually about to be submitted -- a print-only
+        // preview used to do both unconditionally, so re-running it
+        // (to look at the draft again, say) silently replaced whatever
+        // key an earlier run had already saved under the same label.
+        const label = `${wardDid}-recovered-${Date.now().toString(36)}`;
         newKey = await generateKeypair();
         await saveKey(label, newKey, opts);
         console.log(`Generated and saved a new key as "${label}".`);
         console.log(`Public key (Multikey): ${newKey.publicKey}`);
+        console.log("");
+      } else {
+        newKey = await generateKeypair();
+        console.log("Generated a throwaway key for this preview only -- it was NOT saved. Re-run with --submit to generate and save a real one, or pass --new-key to use one you already have.");
         console.log("");
       }
       // An `update` replaces keys/services/alsoKnownAs wholesale --

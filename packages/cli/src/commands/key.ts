@@ -13,7 +13,8 @@ export function registerKeyCommand(program: Command): void {
     .command("generate <label>")
     .description("generate a P-256 keypair and save it under <label>")
     .option("--keychain", "save to the OS keychain instead of a local file")
-    .action(async (label: string, opts: { keychain?: boolean }) => {
+    .option("--force", "overwrite an existing saved key under this label")
+    .action(async (label: string, opts: { keychain?: boolean; force?: boolean }) => {
       const pair = await generateKeypair();
       await saveKey(label, pair, opts);
       console.log(`Saved key "${label}"${opts.keychain ? " to the OS keychain" : ` to ${label}.json in your did-guardian config directory`}.`);
@@ -44,10 +45,11 @@ export function registerKeyCommand(program: Command): void {
   key
     .command("take-custody <ward-did>")
     .description("end a registrar's custody of a ward's key -- irreversible; requires \"did-guardian login\" first")
-    .option("--new-key <label>", "an existing saved key to install (default: generate and save a fresh one under \"<ward-did>-self-held\")")
+    .option("--new-key <label>", "an existing saved key to install (default: generate and save a fresh one under \"<ward-did>-self-held-<timestamp>\")")
     .option("--keychain", "save the new key to the OS keychain instead of a local file")
     .option("-y, --yes", "skip the confirmation prompt")
-    .action(async (wardDid: Did, opts: { newKey?: string; keychain?: boolean; yes?: boolean }) => {
+    .option("--force", "overwrite an existing saved key under the generated default label, if one is somehow already there")
+    .action(async (wardDid: Did, opts: { newKey?: string; keychain?: boolean; yes?: boolean; force?: boolean }) => {
       const session = loadSession();
       if (session.did !== wardDid) {
         throw new Error(`logged in as ${session.did}, not ${wardDid} -- run "did-guardian login ${wardDid} --login-secret <secret>" first.`);
@@ -67,7 +69,7 @@ export function registerKeyCommand(program: Command): void {
         label = opts.newKey;
         newKey = await loadKey(label, opts);
       } else {
-        label = `${wardDid}-self-held`;
+        label = `${wardDid}-self-held-${Date.now().toString(36)}`;
         newKey = await generateKeypair();
         // Saved BEFORE submitting, not after -- once the server accepts
         // this, this registrar can no longer sign on wardDid's behalf at

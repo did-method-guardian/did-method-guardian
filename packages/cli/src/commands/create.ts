@@ -10,14 +10,23 @@ export function registerCreateCommand(program: Command): void {
     .description("build a self-held create operation -- with --registrar, publishes it for real; with --domain alone, stays fully offline, no network at all")
     .option("--domain <domain>", "build offline only -- the domain this identity would live under once something accepts it, with no network call made here")
     .option("--registrar <domain>", "actually submit the signed create to this domain's .../operations -- this identity is live the moment it's accepted, no further step needed")
-    .option("--key <label>", "an existing saved key to use (default: generate and save a fresh one under <name>)")
+    .option("--key <label>", "an existing saved key to use (default: generate and save a fresh one under <domain>:<name>)")
     .option("--keychain", "save the new key to the OS keychain instead of a local file")
-    .action(async (name: string, opts: { domain?: string; registrar?: string; key?: string; keychain?: boolean }) => {
+    .option("--force", "overwrite an existing saved key under the generated default label, if this name was already used locally")
+    .action(async (name: string, opts: { domain?: string; registrar?: string; key?: string; keychain?: boolean; force?: boolean }) => {
       const domain = opts.registrar ?? opts.domain;
       if (!domain) throw new Error("one of --domain (offline draft) or --registrar <domain> (publish) is required");
       if (opts.registrar && opts.domain && opts.registrar !== opts.domain) throw new Error("--domain and --registrar name different domains -- this identity can only live under one");
 
-      const label = opts.key ?? name;
+      // C-1 (audit): the default label used to be the bare name alone,
+      // so `create alice --domain other.test` could silently replace
+      // an unrelated, already-live `alice` key saved under a different
+      // domain. Qualifying it by domain doesn't fully prevent a
+      // collision (the same name really can be re-created under the
+      // same domain by mistake) -- saveKey's own overwrite check is
+      // what actually prevents that; this just makes an accidental
+      // collision far less likely in the first place.
+      const label = opts.key ?? `${domain}:${name}`;
       const key = opts.key ? await loadKey(label, opts) : await generateKeypair();
       if (!opts.key) await saveKey(label, key, opts);
 

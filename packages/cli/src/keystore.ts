@@ -30,19 +30,56 @@ function keysDir(): string {
   return join(configDir(), "keys");
 }
 
+/**
+ * C-1 (audit): a label reaches here from a command-line argument or a
+ * DID, and becomes a filename (keyFilePath) or a keychain account name
+ * -- it must never be interpreted as a path (`../other-user/keys` or
+ * an absolute path escaping keysDir), and `:` is invalid in a filename
+ * on Windows (a did:guardian DID contains it verbatim, e.g. a
+ * `<ward-did>-self-held` default label). Substituting `_` for all
+ * three neutralizes traversal outright (no `/` or `\` survives) without
+ * refusing the DID- and domain-derived labels this CLI generates
+ * itself; only a label that's empty, or still just "." or ".." after
+ * substitution (neither of which contains any of those characters to
+ * begin with), is actually rejected.
+ */
+function sanitizeLabel(label: string): string {
+  const safe = label.replace(/[:/\\]/g, "_");
+  if (safe === "" || safe === "." || safe === "..") {
+    throw new Error(`"${label}" isn't a valid key label -- use a plain name instead.`);
+  }
+  return safe;
+}
+
 function keyFilePath(label: string): string {
-  return join(keysDir(), `${label}.json`);
+  return join(keysDir(), `${sanitizeLabel(label)}.json`);
 }
 
 export interface KeyStoreOptions {
   keychain?: boolean;
+  force?: boolean;
 }
 
+/**
+ * C-1 (audit, CRITICAL): this used to overwrite an existing key under
+ * the same label with no check at all -- a repeat `create`, `recover`
+ * (even print-only, before this fix), or `take-custody` run silently
+ * replaced a key you might still need, with nothing printed about it.
+ * `wx` fails with EEXIST rather than truncating if the file is already
+ * there; `opts.force` is the explicit, deliberate override.
+ */
 export async function saveKey(label: string, key: StoredKey, opts: KeyStoreOptions = {}): Promise<void> {
-  if (opts.keychain) return saveKeyToKeychain(label, key);
+  if (opts.keychain) return saveKeyToKeychain(label, key, opts);
   mkdirSync(keysDir(), { recursive: true, mode: 0o700 });
   const path = keyFilePath(label);
-  writeFileSync(path, JSON.stringify(key, null, 2), { mode: 0o600 });
+  try {
+    writeFileSync(path, JSON.stringify(key, null, 2), { mode: 0o600, flag: opts.force ? "w" : "wx" });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(`a key is already saved under the label "${label}" (${path}) -- pass --force to overwrite it, or choose a different label. Overwriting loses access to whatever that key currently controls unless you have it saved elsewhere.`);
+    }
+    throw e;
+  }
   chmodSync(path, 0o600); // belt and suspenders -- writeFileSync's mode is masked by umask on some platforms
 }
 
@@ -77,7 +114,29 @@ export function listLocalKeys(): string[] {
 // shell string -- a label or key value containing shell metacharacters
 // must never be interpretable as anything but literal data.
 
-function saveKeyToKeychain(label: string, key: StoredKey): void {
+function keychainEntryExists(label: string): boolean {
+  const os = platform();
+  try {
+    if (os === "darwin") {
+      execFileSync("security", ["find-generic-password", "-s", SERVICE_NAME, "-a", label], { stdio: "ignore" });
+    } else if (os === "linux") {
+      execFileSync("secret-tool", ["lookup", "service", SERVICE_NAME, "account", label], { stdio: "ignore" });
+    } else {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function saveKeyToKeychain(label: string, key: StoredKey, opts: KeyStoreOptions = {}): void {
+  // C-1: this used to unconditionally delete-then-overwrite any
+  // existing keychain entry under the same label with no check at
+  // all.
+  if (!opts.force && keychainEntryExists(label)) {
+    throw new Error(`a key is already saved in the OS keychain under the label "${label}" -- pass --force to overwrite it, or choose a different label. Overwriting loses access to whatever that key currently controls unless you have it saved elsewhere.`);
+  }
   const secret = JSON.stringify(key);
   const os = platform();
   if (os === "darwin") {
