@@ -1,21 +1,11 @@
--- F4 (audit r3): 0013 dropped `wards` but left email_forwarding's own FK
--- to it in place, so every INSERT/UPDATE against email_forwarding failed
--- with "no such table: main.wards" -- email forwarding was dead for every
--- account, deployment-wide, since there was no way to ever set it up.
--- SQLite has no ALTER TABLE ... DROP CONSTRAINT, so this rebuilds the
--- table the standard way (create, copy, drop, rename), re-keyed onto
--- `names(did)` (UNIQUE, and populated for every identity including the
--- root -- see registrar.ts's own insertNameEntry calls) instead of the
--- now-nonexistent `wards`.
-CREATE TABLE email_forwarding_new (
-  did TEXT PRIMARY KEY REFERENCES names(did),
-  forward_to TEXT NOT NULL,
-  verified INTEGER NOT NULL DEFAULT 0,
-  verification_token TEXT,
-  created_at TEXT NOT NULL
-);
-
-INSERT INTO email_forwarding_new SELECT * FROM email_forwarding;
-
-DROP TABLE email_forwarding;
-ALTER TABLE email_forwarding_new RENAME TO email_forwarding;
+-- F4 (audit r3): this originally rebuilt email_forwarding onto
+-- names(did) here, a migration after 0013 dropped `wards` -- but 0013's
+-- own `DROP TABLE IF EXISTS wards` failed outright on D1's remote engine
+-- while email_forwarding still referenced it (foreign keys block
+-- dropping a table something else still points to; local dev's sqlite
+-- emulation doesn't enforce that, which is why this was never caught
+-- before the first real remote apply). The rebuild is folded into 0013
+-- itself now, before `wards` is dropped there -- see that file. This
+-- migration is kept, numbered, and empty rather than deleted, since
+-- deleting a numbered migration file would leave a gap in the sequence
+-- for no reason.
