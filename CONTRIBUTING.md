@@ -32,7 +32,7 @@ npm run build
 npm test
 ```
 
-All applicable suites need to pass before a PR will be considered. If you're changing anything in `packages/lib`, add or update a fixture in `interop_tests/cleanroom/vectors-final` -- its own `targets` field is what actually traces a spec requirement to its test coverage (see that folder's own README for the vector format and `run.py`'s summary of which REQ ids are covered). Citing the relevant `REQ-*` identifier from the spec (see `website/content/docs/did-guardian-spec-v0.2.0/index.md`) directly in a `packages/lib`/`packages/server` test file is good practice too, and feeds `website/static/requirements.json`'s own generator, but isn't itself what most of the existing suite relies on for traceability.
+All applicable suites need to pass before a PR will be considered. If you're changing anything in `packages/lib`, add or update a fixture in `interop_tests/cleanroom/vectors-final` -- its own `targets` field is what actually traces a spec requirement to its test coverage (see that folder's own README for the vector format and `run.py`'s summary of which REQ ids are covered). Citing the relevant `REQ-*` identifier from the spec (see `website/content/docs/did-guardian-spec-v1.0.0/index.md`) directly in a `packages/lib`/`packages/server` test file is good practice too, and feeds `website/static/requirements.json`'s own generator, but isn't itself what most of the existing suite relies on for traceability.
 
 `packages/server` is a Cloudflare Worker; `npx wrangler dev --config wrangler.jsonc` runs it locally against the generic template config. The live reference deployments (`zzmq.dev`, `guardianspec.org`) are not something a PR should need to touch directly.
 

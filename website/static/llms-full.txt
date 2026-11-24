@@ -42,7 +42,7 @@ A few rules hold regardless of how many guardians there are or who they are:
 - **Each guardian action is signed with that specific guardian's key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to whichever guardian performed it, in the identity's history.
 - **Guardianship is temporary by design.** It can be handed off, shared among several guardians, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor). Removing the last guardian deactivates the identity by default; an identity whose policy opts into guardian-less operation ahead of time keeps going without one instead.
 
-See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise definitions of each operation and signature.
+See the [formal specification](/docs/did-guardian-spec-v1.0.0/) for precise definitions of each operation and signature.
 
 
 ## Where it comes from
@@ -81,7 +81,7 @@ A `did:guardian` identifier is the domain that issued it, optionally followed by
 
 
 
-Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §4](/docs/did-guardian-spec-v0.2.0/#4-identifier).
+Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §4](/docs/did-guardian-spec-v1.0.0/#4-identifier).
 
 
 
@@ -102,7 +102,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 ## The parts of this project
 
 
-**The method.** The abstract rules, such as identifier syntax, the operation log, guardianship, signature requirements, which are independent of any specific server. Defined in the [formal specification](/docs/did-guardian-spec-v0.2.0/).
+**The method.** The abstract rules, such as identifier syntax, the operation log, guardianship, signature requirements, which are independent of any specific server. Defined in the [formal specification](/docs/did-guardian-spec-v1.0.0/).
 
 
 
@@ -122,18 +122,18 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 - [**Get Started**](/docs/how-to/): a quickstart (create an identity, resolve it, add a guardian) plus task-oriented how-to guides -- give an AI agent a revocable identity, sign in via custom OIDC, self-host a registrar, recover after a lost key.
 - [**Prior art and comparisons**](/docs/prior-art/): how did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when each fits better.
-- [**The formal specification**](/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
+- [**The formal specification**](/docs/did-guardian-spec-v1.0.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
 - [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method, including the OIDC provider, the account dashboard, the agent-identity API, etc.
 - [**The GitHub repository**](https://github.com/did-method-guardian/did-method-guardian): source for the method's reference library, the reference registrar, and this website.
 
 
 ---
 
-# DID Guardian Method Specification, v0.2.0
+# DID Guardian Method Specification, v1.0.0
 
-Canonical URL: https://guardianspec.org/docs/did-guardian-spec-v0.2.0/
+Canonical URL: https://guardianspec.org/docs/did-guardian-spec-v1.0.0/
 
-Status: Draft, 2026-11-23.
+Status: Stable, 2026-11-24.
 
 ## 1. Overview
 
@@ -738,11 +738,12 @@ A sole guardian is removed with `evidence` and one current key, or by the succes
 
 ## Changelog
 
-This draft replaces all earlier drafts of v0.2.0. Earlier drafts are in the repository history.
+This replaces every earlier draft, v0.2.0 included. Earlier drafts are in the repository history.
 
 - **2026-11-22**: REQ-5-2 constrains the value of a number, not its written form.
 - **2026-11-23**: Revised after audit round 3 and clean-room rounds 7 to 7c.
 - **2026-11-23**: Revised after audit round 4 and clean-room round 7d.
+- **2026-11-24**: v1.0.0, Stable. The body is unchanged from the 7d revision above; this marks the method as ready for independent implementation.
 
 
 ---
@@ -751,13 +752,13 @@ This draft replaces all earlier drafts of v0.2.0. Earlier drafts are in the repo
 
 Canonical URL: https://guardianspec.org/docs/registrar/
 
-**Version 1.** This document is a registrar profile, not the method: exactly one registrar implementation's HTTP surface -- `packages/server` in this repository, deployed as guardianspec.org's registrar. It is versioned and evolves independently of [the formal method specification](/docs/did-guardian-spec-v0.2.0/) -- adding, removing, or reshaping anything here never changes method conformance, and a different registrar implementation is free to expose none of it. Only [§1](#1-method-required-endpoints) restates an actual method requirement (§10 of the formal spec); everything else is this registrar's operational choice.
+**Version 1.** This document is a registrar profile, not the method: exactly one registrar implementation's HTTP surface -- `packages/server` in this repository, deployed as guardianspec.org's registrar. It is versioned and evolves independently of [the formal method specification](/docs/did-guardian-spec-v1.0.0/) -- adding, removing, or reshaping anything here never changes method conformance, and a different registrar implementation is free to expose none of it. Only [§1](#1-method-required-endpoints) restates an actual method requirement (§10 of the formal spec); everything else is this registrar's operational choice.
 
 Most endpoints below are rooted at `/.well-known/guardian/<name>` (or `/.well-known/guardian/_` for the bare-domain identity) -- §1 through §4 and §13. Registration, login, OIDC, the account dashboard, the admin console, and the pending-operation browser page live at their own top-level paths instead (§2, §5, §8, §9, §14, and `/.well-known/guardian/pending/<id>`, not name-scoped). All request/response bodies are JSON unless noted.
 
 ## 1. Method-required endpoints
 
-Required by the formal spec's [REQ-10-1](/docs/did-guardian-spec-v0.2.0/#req-10-1); this registrar's implementation of them.
+Required by the formal spec's [REQ-10-1](/docs/did-guardian-spec-v1.0.0/#req-10-1); this registrar's implementation of them.
 
 | Method | Path | |
 |---|---|---|
@@ -765,15 +766,15 @@ Required by the formal spec's [REQ-10-1](/docs/did-guardian-spec-v0.2.0/#req-10-
 | `GET` | `/.well-known/guardian/<name>/log` | full operation log, in order |
 | `POST` | `/.well-known/guardian/<name>/operations` | submit one fully-proofed operation |
 
-Both `GET` endpoints are plain reads -- neither one ever creates anything, including the bare-domain root identity itself ([REQ-10-2](/docs/did-guardian-spec-v0.2.0/#req-10-2)).
+Both `GET` endpoints are plain reads -- neither one ever creates anything, including the bare-domain root identity itself ([REQ-10-2](/docs/did-guardian-spec-v1.0.0/#req-10-2)).
 
-`POST .../operations` accepts any operation type from the formal spec's §7 with every required proof already attached and appends it if valid, rejecting with a reason string otherwise. This is the only path by which an *externally* pre-proofed operation (e.g. two guardians who coordinated their own signatures out-of-band) reaches the log directly, without going through §3's collection machinery. On success, the response is `{accepted: true, operation}` -- the accepted operation, with its attestation attached if it's a `create`; on rejection, `{error: <reason>}` with HTTP 400 ([REQ-10-4](/docs/did-guardian-spec-v0.2.0/#req-10-4)). A `create` submitted here for a named identity gets exactly `/register`'s gate (§2): no session or bearer token can exist yet for a DID that doesn't exist yet, so it's anonymous self-service -- rate-limited to 5 attempts per 10 minutes per client IP (HTTP 429 past that), and rejected outright with HTTP 403 when this deployment has closed public registration (`REGISTRATION_MODE`, below). Every other operation type is ungated here beyond its approval requirement -- the proofs already attached are the authorization.
+`POST .../operations` accepts any operation type from the formal spec's §7 with every required proof already attached and appends it if valid, rejecting with a reason string otherwise. This is the only path by which an *externally* pre-proofed operation (e.g. two guardians who coordinated their own signatures out-of-band) reaches the log directly, without going through §3's collection machinery. On success, the response is `{accepted: true, operation}` -- the accepted operation, with its attestation attached if it's a `create`; on rejection, `{error: <reason>}` with HTTP 400 ([REQ-10-4](/docs/did-guardian-spec-v1.0.0/#req-10-4)). A `create` submitted here for a named identity gets exactly `/register`'s gate (§2): no session or bearer token can exist yet for a DID that doesn't exist yet, so it's anonymous self-service -- rate-limited to 5 attempts per 10 minutes per client IP (HTTP 429 past that), and rejected outright with HTTP 403 when this deployment has closed public registration (`REGISTRATION_MODE`, below). Every other operation type is ungated here beyond its approval requirement -- the proofs already attached are the authorization.
 
 ## 2. Self-contained convenience endpoints
 
 `/register` and `.../adopt` also live at this level, but this page doesn't yet describe their own mechanics in detail -- a change to how registration names an initial guardian is under discussion. §9 has what's settled.
 
-Each of these corresponds to an operation whose own required approvals a single call from one authenticated party can satisfy, with this registrar producing every proof it needs to from keys it already holds -- no new authority is ever granted to a third party by any of these. `.../remove` is the one row here whose safety isn't just "no new authority granted": it also depends on the acceptance-time check ([REQ-10-7](/docs/did-guardian-spec-v0.2.0/#req-10-7)) actually verifying the caller's claimed evidence names a genuine `releaseWard` of this identity, or any operation in the removed guardian's own log after which that log's state is deactivated (a bare `deactivate`, or a `removeGuardian` that orphans it into one) -- not merely trusting that it does. A caller can name any evidence hash it wants, and a bogus one is rejected there, not here. Auth model for all of them: either an active `gw_session` cookie, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its caller -- always for *whichever identity this operation actually needs a proof from*, never assumed from the identity named in the path. `.../remove-self` in particular authenticates the departing guardian, not the ward in the URL -- a held key signs only on a request already authenticated as that exact identity ([REQ-10-13](/docs/did-guardian-spec-v0.2.0/#req-10-13)).
+Each of these corresponds to an operation whose own required approvals a single call from one authenticated party can satisfy, with this registrar producing every proof it needs to from keys it already holds -- no new authority is ever granted to a third party by any of these. `.../remove` is the one row here whose safety isn't just "no new authority granted": it also depends on the acceptance-time check ([REQ-10-7](/docs/did-guardian-spec-v1.0.0/#req-10-7)) actually verifying the caller's claimed evidence names a genuine `releaseWard` of this identity, or any operation in the removed guardian's own log after which that log's state is deactivated (a bare `deactivate`, or a `removeGuardian` that orphans it into one) -- not merely trusting that it does. A caller can name any evidence hash it wants, and a bogus one is rejected there, not here. Auth model for all of them: either an active `gw_session` cookie, or a trusted OIDC client credential (Basic auth) acting on an already-verified decision made by its caller -- always for *whichever identity this operation actually needs a proof from*, never assumed from the identity named in the path. `.../remove-self` in particular authenticates the departing guardian, not the ward in the URL -- a held key signs only on a request already authenticated as that exact identity ([REQ-10-13](/docs/did-guardian-spec-v1.0.0/#req-10-13)).
 
 **What makes an OIDC client "trusted."** `client_id`/`client_secret` (Basic auth) alone is never enough -- a client row also carries its `trusted` flag, checked explicitly. Every client created through `POST /oauth/register-client` (RFC 7591's open, unauthenticated dynamic registration) starts `trusted = false`, with no field in that request able to change it; there is no endpoint, anywhere on this registrar, that sets it to `true`. The only way a client becomes trusted is a direct operator database write -- an out-of-band, deployment-level decision this registrar's HTTP surface has no way to grant itself. This is why dynamic client registration staying unauthenticated is safe at all: a self-registered client can authenticate its OIDC flows, but gets nothing from this section's endpoints regardless of what credentials it presents.
 
@@ -786,17 +787,17 @@ Each of these corresponds to an operation whose own required approvals a single 
 
 A forced removal by vote of the *other* guardians, with no evidence, or a deactivation needing guardian cooperation too, needs more than this registrar can produce from one call -- see §3.
 
-**`.../take-custody` is irreversible in a way nothing else on this page is.** Every other row above produces an operation and nothing changes about who's custodied going forward. This one ends it: body `{operation, proof}`, where `operation` is an `update` naming the caller's new key (with its current `services`/`alsoKnownAs` carried over) and `proof` is that same key's [Data Integrity proof](/docs/did-guardian-spec-v0.2.0/#req-5-11) of possession, built by the caller before this call. This registrar can never produce that proof itself, since it will never hold the new key's private half. A stale `prev` by the time the request arrives just fails the way any other `prev` mismatch does. Afterward, this registrar has deleted its held key for that identity outright -- not set it aside, not kept it for a future rotation, gone. Every row on this page that needs a held key stops working for that identity from then on, with a clear error pointing at submitting pre-proofed operations through §1 directly instead.
+**`.../take-custody` is irreversible in a way nothing else on this page is.** Every other row above produces an operation and nothing changes about who's custodied going forward. This one ends it: body `{operation, proof}`, where `operation` is an `update` naming the caller's new key (with its current `services`/`alsoKnownAs` carried over) and `proof` is that same key's [Data Integrity proof](/docs/did-guardian-spec-v1.0.0/#req-5-11) of possession, built by the caller before this call. This registrar can never produce that proof itself, since it will never hold the new key's private half. A stale `prev` by the time the request arrives just fails the way any other `prev` mismatch does. Afterward, this registrar has deleted its held key for that identity outright -- not set it aside, not kept it for a future rotation, gone. Every row on this page that needs a held key stops working for that identity from then on, with a clear error pointing at submitting pre-proofed operations through §1 directly instead.
 
-Nothing here stops the bare-domain root identity from calling `.../take-custody` -- it has no special protection -- but doing so deletes this registrar's ability to sign any further create attestation on its domain ([REQ-7-9](/docs/did-guardian-spec-v0.2.0/#req-7-9)); it has to keep a key this registrar can read for that.
+Nothing here stops the bare-domain root identity from calling `.../take-custody` -- it has no special protection -- but doing so deletes this registrar's ability to sign any further create attestation on its domain ([REQ-7-9](/docs/did-guardian-spec-v1.0.0/#req-7-9)); it has to keep a key this registrar can read for that.
 
-**Rotating or taking custody of a key breaks that identity's entries in anything it guards, not just its log.** `.../rotate` and `.../take-custody` both replace the identity's `keys` -- but every ward whose `guardians` already names this identity recorded its keys as they were at that moment ([REQ-6-2](/docs/did-guardian-spec-v0.2.0/#req-6-2)), and REQ-10-6/10-7's standing check compares against that snapshot. Neither endpoint touches any other identity's log, so the guardian loses standing to approve anything for every ward it guards the moment either one succeeds. `updateGuardian` ([REQ-7-15](/docs/did-guardian-spec-v0.2.0/#req-7-15)) is how a ward re-seats a stale entry with the guardian's current keys -- approvable with the guardian's old and new keys together, no other guardian needed -- but only while the OLD key can still sign, which means re-seating every guarded ward has to happen *before* rotating or taking custody, not after. `.../rotate`'s new key is generated server-side and only revealed once rotation has already completed, so there's no way to pre-sign anything with it in advance; `.../take-custody`'s new key is the caller's own, known ahead of time, so re-seating first (signing each ward's `updateGuardian` with the old key via `.../pending/<id>/sign-as-self` and the new key locally) is the only order that actually works.
+**Rotating or taking custody of a key breaks that identity's entries in anything it guards, not just its log.** `.../rotate` and `.../take-custody` both replace the identity's `keys` -- but every ward whose `guardians` already names this identity recorded its keys as they were at that moment ([REQ-6-2](/docs/did-guardian-spec-v1.0.0/#req-6-2)), and REQ-10-6/10-7's standing check compares against that snapshot. Neither endpoint touches any other identity's log, so the guardian loses standing to approve anything for every ward it guards the moment either one succeeds. `updateGuardian` ([REQ-7-15](/docs/did-guardian-spec-v1.0.0/#req-7-15)) is how a ward re-seats a stale entry with the guardian's current keys -- approvable with the guardian's old and new keys together, no other guardian needed -- but only while the OLD key can still sign, which means re-seating every guarded ward has to happen *before* rotating or taking custody, not after. `.../rotate`'s new key is generated server-side and only revealed once rotation has already completed, so there's no way to pre-sign anything with it in advance; `.../take-custody`'s new key is the caller's own, known ahead of time, so re-seating first (signing each ward's `updateGuardian` with the old key via `.../pending/<id>/sign-as-self` and the new key locally) is the only order that actually works.
 
 ## 3. Asynchronous signature collection (`pending_proofs`)
 
 For anything needing more than one proof collected over more than one request -- `addGuardian` (it always needs both the ward's own key and the incoming guardian's, two different parties, even for the very first guardian), `removeGuardian` against a guardian set that already has more than one member, `setPolicy`, `updateGuardian`, or a recovery/deactivation whose required guardians aren't all held by (or available in the same call to) this registrar.
 
-There's no state machine. A proposal is a candidate operation (its `prev` already fixed against the current log) plus a growing array of proofs. Each proof secures the operation independently ([REQ-5-10](/docs/did-guardian-spec-v0.2.0/#req-5-10)), so signers never need to see each other's proofs or coordinate at all -- they just add their own, in any order, whenever they get to it. After every addition, this registrar checks whether the proofs collected so far are now enough (exactly [REQ-10-5](/docs/did-guardian-spec-v0.2.0/#req-10-5), the same check `.../operations` runs); if so, it submits the operation itself and the proposal is gone. If not, it keeps collecting.
+There's no state machine. A proposal is a candidate operation (its `prev` already fixed against the current log) plus a growing array of proofs. Each proof secures the operation independently ([REQ-5-10](/docs/did-guardian-spec-v1.0.0/#req-5-10)), so signers never need to see each other's proofs or coordinate at all -- they just add their own, in any order, whenever they get to it. After every addition, this registrar checks whether the proofs collected so far are now enough (exactly [REQ-10-5](/docs/did-guardian-spec-v1.0.0/#req-10-5), the same check `.../operations` runs); if so, it submits the operation itself and the proposal is gone. If not, it keeps collecting.
 
 | Method | Path | |
 |---|---|---|
@@ -813,15 +814,15 @@ A proposal not satisfied within 7 days is removed by a daily sweep -- always a f
 
 ## 4. Orphan handling
 
-Entirely the method's rule now, not this registrar's policy choice. When a `removeGuardian` empties a ward's `guardians` ([REQ-6-10](/docs/did-guardian-spec-v0.2.0/#req-6-10)), its `policy.orphan` says what happens next, applied automatically by every verifier the same way, as part of replaying the operation itself -- never a separate action this registrar takes afterward:
+Entirely the method's rule now, not this registrar's policy choice. When a `removeGuardian` empties a ward's `guardians` ([REQ-6-10](/docs/did-guardian-spec-v1.0.0/#req-6-10)), its `policy.orphan` says what happens next, applied automatically by every verifier the same way, as part of replaying the operation itself -- never a separate action this registrar takes afterward:
 
 - **`"deactivate"`** (the default) -- the ward deactivates itself, right there, with no further operation needed.
 - **`"independent"`** -- nothing happens; the ward simply has no guardians from then on.
-- **`"successor"`** -- its `successor` entry is promoted to its sole guardian, and `successor` is cleared. [REQ-10-7](/docs/did-guardian-spec-v0.2.0/#req-10-7) requires this registrar to check that the successor's entry still has standing before accepting the `removeGuardian` that triggers this -- the one piece of this that's actually a registrar-side check, not purely a replay rule.
+- **`"successor"`** -- its `successor` entry is promoted to its sole guardian, and `successor` is cleared. [REQ-10-7](/docs/did-guardian-spec-v1.0.0/#req-10-7) requires this registrar to check that the successor's entry still has standing before accepting the `removeGuardian` that triggers this -- the one piece of this that's actually a registrar-side check, not purely a replay rule.
 
-A ward whose policy names `"successor"` but has no `successor` entry set, or the reverse, is invalid at the operation that would create that mismatch ([REQ-6-14](/docs/did-guardian-spec-v0.2.0/#req-6-14)) -- this registrar never needs to reconcile the two separately.
+A ward whose policy names `"successor"` but has no `successor` entry set, or the reverse, is invalid at the operation that would create that mismatch ([REQ-6-14](/docs/did-guardian-spec-v1.0.0/#req-6-14)) -- this registrar never needs to reconcile the two separately.
 
-An absent policy member takes the default in [REQ-6-11](/docs/did-guardian-spec-v0.2.0/#req-6-11) -- this registrar has no separate configured default to fall back to instead, so two verifiers resolving the same unset field never disagree depending on which registrar they asked.
+An absent policy member takes the default in [REQ-6-11](/docs/did-guardian-spec-v1.0.0/#req-6-11) -- this registrar has no separate configured default to fall back to instead, so two verifiers resolving the same unset field never disagree depending on which registrar they asked.
 
 ## 5. Login / OIDC
 
@@ -936,7 +937,7 @@ Every action here, including email forwarding, works for the domain's bare-domai
 
 The guardian is derived from a validated access token's `sub`, never a client-supplied field -- `POST /register` with `Authorization: Bearer <access_token>` and a token whose own granted `scope` includes `create:managed-identity` identifies who's consenting to become a guardian. A request with no bearer token at all gets the ordinary case: self-service, no guardian. A bearer token present but missing the scope is rejected outright (`403`).
 
-**When this registrar also holds a key for that guardian**, the new identity's own `create` names it directly, in this same request -- the guardian's `acceptWard` is submitted first (its own anchor, unlike its signatures, is computable before the create is ever finalized, since REQ-5-7's anchor excludes `guardians`), then the create itself, co-signed by the new identity's own fresh key and the guardian's held one. This is spec [REQ-10-13/REQ-10-14](/docs/did-guardian-spec-v0.2.0/#req-10-13)'s own exception for exactly this case: a request authenticated as an identity may also produce proofs on the create of an identity that request creates, so both the guardian's own proofs and the new identity's stay inside one request without violating the one-identity-per-request rule otherwise in force. The response carries `{"did": "...", "login_secret": "...", "guardian": "<guardian-did>"}`.
+**When this registrar also holds a key for that guardian**, the new identity's own `create` names it directly, in this same request -- the guardian's `acceptWard` is submitted first (its own anchor, unlike its signatures, is computable before the create is ever finalized, since REQ-5-7's anchor excludes `guardians`), then the create itself, co-signed by the new identity's own fresh key and the guardian's held one. This is spec [REQ-10-13/REQ-10-14](/docs/did-guardian-spec-v1.0.0/#req-10-13)'s own exception for exactly this case: a request authenticated as an identity may also produce proofs on the create of an identity that request creates, so both the guardian's own proofs and the new identity's stay inside one request without violating the one-identity-per-request rule otherwise in force. The response carries `{"did": "...", "login_secret": "...", "guardian": "<guardian-did>"}`.
 
 **When the guardian is federated** (hosted on a different registrar entirely -- see below), this registrar has no key to sign as it with, so the single-request path doesn't apply: the identity is created alone, and the response carries `guardian_pending` instead of `guardian`, naming the consenting guardian as a DID to complete the ordinary two-step adopt flow (§8's own account dashboard, or `guardian adopt`/`guardian confirm-adopt` in the CLI) with separately.
 
@@ -958,7 +959,7 @@ POST /token
 }
 ```
 
-**Authorization checks `resource`'s current state directly.** The caller (the `subject_token`'s `sub`) must be `resource` itself, or named in `resource`'s current `guardians` or `successor`, resolved fresh from `resource`'s log every time -- never a cross-log liveness check, since verifying a log depends only on that log ([REQ-8-2](/docs/did-guardian-spec-v0.2.0/#req-8-2)). Not a guardian, or not the identity itself: `403`. `resource` naming an identity this registrar doesn't hold a key for fails too -- there's no key material to issue a token for it.
+**Authorization checks `resource`'s current state directly.** The caller (the `subject_token`'s `sub`) must be `resource` itself, or named in `resource`'s current `guardians` or `successor`, resolved fresh from `resource`'s log every time -- never a cross-log liveness check, since verifying a log depends only on that log ([REQ-8-2](/docs/did-guardian-spec-v1.0.0/#req-8-2)). Not a guardian, or not the identity itself: `403`. `resource` naming an identity this registrar doesn't hold a key for fails too -- there's no key material to issue a token for it.
 
 **The issued token carries `sub` = the target, and `act: { sub: <the caller's DID> }`** -- the emerging OpenID on-behalf-of shape (`sub`/`act`), not a one-off: anything already built against that draft recognizes a token from this registrar unmodified. No `id_token` -- this isn't a fresh authentication event, just a scoped delegation of an already-authenticated caller's own, separately-proven authority. No refresh token either; the original `subject_token`'s session is what covers re-exchange later.
 
@@ -966,7 +967,7 @@ POST /token
 
 A2A's Agent Card -- a JSON manifest advertising an identity's capabilities and how to authenticate with it -- is conventionally served at one fixed path per origin (`/.well-known/agent-card.json`), which doesn't fit this registrar's multi-tenant shape: many identities under one domain. The fixed path stays correct for a single-agent origin; a still-individual-draft WebFinger discovery profile (`draft-zhao-a2a-webfinger-00`) covers exactly the multi-tenant case -- WebFinger is the discovery layer that resolves a *named* identity to wherever its card actually lives, which doesn't have to be that fixed path.
 
-- `GET /.well-known/agent-card.json` -- this domain's bare-domain root identity (its path segment is `_`, per the formal spec's [§4](/docs/did-guardian-spec-v0.2.0/#4-identifier)), satisfying A2A's fixed-path convention for the one identity it actually fits here.
+- `GET /.well-known/agent-card.json` -- this domain's bare-domain root identity (its path segment is `_`, per the formal spec's [§4](/docs/did-guardian-spec-v1.0.0/#4-identifier)), satisfying A2A's fixed-path convention for the one identity it actually fits here.
 - `GET /.well-known/guardian/<name>/agent-card.json` -- a named identity's card, at a path consistent with every other resolution this registrar already does.
 - `GET /.well-known/webfinger?resource=acct:<name>@<domain>` -- resolves a named identity to its card's URL (the JRD shape `draft-zhao-a2a-webfinger-00` itself specifies: `rel: "self"`, `type: "application/a2a+json"`).
 
@@ -1061,7 +1062,7 @@ did:guardian's contribution is group guardianship as a first-class part of a DID
 
 **Comparable:** witnesses are a multi-party mechanism, closer in shape than most of the others here to did:guardian's group concept.
 
-**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that. did:webvh's identifier is also self-certifying and portable in a way did:guardian's isn't: a did:webvh identifier can move to a new location (its own `#updateDomain` mechanism) without losing its identity, since the identifier's own hash is what anchors trust, not where it currently resolves. A did:guardian identifier names its domain directly (formal spec [§4](/docs/did-guardian-spec-v0.2.0/#4-identifier)) and stays bound to it for the identifier's own life, with "link, don't move" (a new identifier plus mutual `alsoKnownAs`) as the documented alternative to migration.
+**Different:** a witness attests that an update happened; it has no authority to make one. did:webvh has no concept of a group that can recover, revoke, or act on behalf of the identity -- control stays with whoever holds the (pre-rotated) key, full stop. If you need a tamper-evident document history and nothing more -- no recovery path if the key is lost, no standing oversight -- did:webvh is a lighter-weight fit than did:guardian for exactly that. did:webvh's identifier is also self-certifying and portable in a way did:guardian's isn't: a did:webvh identifier can move to a new location (its own `#updateDomain` mechanism) without losing its identity, since the identifier's own hash is what anchors trust, not where it currently resolves. A did:guardian identifier names its domain directly (formal spec [§4](/docs/did-guardian-spec-v1.0.0/#4-identifier)) and stays bound to it for the identifier's own life, with "link, don't move" (a new identifier plus mutual `alsoKnownAs`) as the documented alternative to migration.
 
 ## did:plc
 
@@ -1257,7 +1258,7 @@ Either way this deactivates the agent's identity permanently -- its log stays pu
 
 A long-lived guardian managing a fleet of agents that come and go doesn't need a human name for each one -- a generated name like `"agent-$(openssl rand -hex 3)"` (or any generator producing a valid one) works fine. Each agent still needs its own `guardian add`/`guardian adopt`-`confirm-adopt` to establish the fleet's own guardian -- there's no way to name a guardian directly at creation.
 
-Retiring one is the same `deactivate` described above, approved by the guardian. There's no bulk-retirement operation, each agent is deactivated individually. Names are never reused ([REQ-10-12](/docs/did-guardian-spec-v0.2.0/#req-10-12)) and logs are never deleted ([REQ-10-11](/docs/did-guardian-spec-v0.2.0/#req-10-11)), so a retired agent's full history stays resolvable forever, even deactivated -- a guardian's historical keys have to stay verifiable for as long as anything it ever signed might need checking, which means nothing it guarded can be deleted out from under that either. Running many short-lived agents through one registrar does mean that registrar's storage grows without bound; that's the cost of this design, not a bug to work around.
+Retiring one is the same `deactivate` described above, approved by the guardian. There's no bulk-retirement operation, each agent is deactivated individually. Names are never reused ([REQ-10-12](/docs/did-guardian-spec-v1.0.0/#req-10-12)) and logs are never deleted ([REQ-10-11](/docs/did-guardian-spec-v1.0.0/#req-10-11)), so a retired agent's full history stays resolvable forever, even deactivated -- a guardian's historical keys have to stay verifiable for as long as anything it ever signed might need checking, which means nothing it guarded can be deleted out from under that either. Running many short-lived agents through one registrar does mean that registrar's storage grows without bound; that's the cost of this design, not a bug to work around.
 
 
 ---
@@ -1313,13 +1314,13 @@ Canonical URL: https://guardianspec.org/docs/how-to/recover-lost-key/
 
 Two separate cases share the name "recovery," and need different things.
 
-**A backup key.** An identity can hold up to 8 keys at once ([REQ-6-1](/docs/did-guardian-spec-v0.2.0/#req-6-1)). If `alice` still holds even one of hers, that one key alone can sign an `update` installing a fresh one -- no guardian needed at all. This is the simplest case, and worth setting up ahead of time: a second key, kept somewhere separate from the first, turns "lost a key" into an ordinary self-service rotation.
+**A backup key.** An identity can hold up to 8 keys at once ([REQ-6-1](/docs/did-guardian-spec-v1.0.0/#req-6-1)). If `alice` still holds even one of hers, that one key alone can sign an `update` installing a fresh one -- no guardian needed at all. This is the simplest case, and worth setting up ahead of time: a second key, kept somewhere separate from the first, turns "lost a key" into an ordinary self-service rotation.
 
 **Guardian-approved recovery**, this page's main topic: if `alice` has lost every key she held, enough of her guardians (meeting whatever `policy.recovery` sets, `majority` by default) can issue her a fresh one instead. The old key is never needed, and never recovered -- it's replaced. Without a backup key of her own and without a guardian, there's genuinely nothing that can help: did:guardian uses guardianship for this, deliberately, rather than `did:plc`'s ordered recovery-key list -- set one up (see below) before this happens, not after.
 
 A held ward is a related but different case: the registrar still custodies the key behind it, so what's usually actually "lost" is just your own login credential, not the key itself -- ordinarily an account-recovery problem (see [self-host](/docs/how-to/self-host/)'s own login flow), separate from this page's own guardian-signed `update`. But the two meet when a held ward's login credential is lost badly enough that the guardians have to recover it the same way as any other identity: the registrar then reissues a fresh login secret automatically as part of accepting that `update`, since the old one is invalidated in the same step (see "After recovering," below) and there'd otherwise be no way back in at all.
 
-A did:guardian guardian doesn't have to be a separate person -- [REQ-6-2](/docs/did-guardian-spec-v0.2.0/#req-6-2) makes a guardian an identity, which `alice` herself can control: a cold-storage identity (a key generated once, kept offline, and never used for anything else) named as `alice`'s own guardian covers the case where there's no one else to name, with no second party involved. Set one up while `alice` still holds a key herself -- `did-guardian create <name> --registrar <domain>` builds the cold-storage identity with its own self-held key (never `register`, which generates a registrar-held one, the opposite of what a cold-storage guardian needs), then add it as a guardian ([`guardian add`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli), if both keys are self-held).
+A did:guardian guardian doesn't have to be a separate person -- [REQ-6-2](/docs/did-guardian-spec-v1.0.0/#req-6-2) makes a guardian an identity, which `alice` herself can control: a cold-storage identity (a key generated once, kept offline, and never used for anything else) named as `alice`'s own guardian covers the case where there's no one else to name, with no second party involved. Set one up while `alice` still holds a key herself -- `did-guardian create <name> --registrar <domain>` builds the cold-storage identity with its own self-held key (never `register`, which generates a registrar-held one, the opposite of what a cold-storage guardian needs), then add it as a guardian ([`guardian add`](https://github.com/did-method-guardian/did-method-guardian/tree/main/packages/cli), if both keys are self-held).
 
 ## The recovery itself
 

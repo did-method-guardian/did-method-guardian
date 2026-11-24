@@ -2,7 +2,7 @@
 
 Reference implementation of the [`did:guardian`](https://guardianspec.org/docs/) method: operation log verification, registrar acceptance checks, resolution, and DID document rendering. Platform-agnostic (Web Crypto, no Node-specific APIs) -- runs in Node, a browser, or a Cloudflare Worker.
 
-`did:guardian` is a distributed identity built around guardianship: a configurable group of other identities that can recover a lost key, approve membership changes, or deactivate an identity on its behalf, under rules its own policy sets in advance. See the [guide](https://guardianspec.org/docs/) for an introduction and the [formal specification](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/) for the normative method definition.
+`did:guardian` is a distributed identity built around guardianship: a configurable group of other identities that can recover a lost key, approve membership changes, or deactivate an identity on its behalf, under rules its own policy sets in advance. See the [guide](https://guardianspec.org/docs/) for an introduction and the [formal specification](https://guardianspec.org/docs/did-guardian-spec-v1.0.0/) for the normative method definition.
 
 ## Install
 

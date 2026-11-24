@@ -72,7 +72,7 @@ function banner(message: string | null, kind: "ok" | "error" = "ok"): string {
 // necessarily on whichever domain happens to be serving this particular
 // registrar (zzmq.dev doesn't host the docs site at all) -- always link to
 // the one real copy.
-const FORMAL_SPEC_URL = "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/";
+const FORMAL_SPEC_URL = "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/";
 
 function formatSetting(value: Setting): string {
   if (typeof value === "number") return `exactly ${value}`;

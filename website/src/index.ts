@@ -16,7 +16,7 @@ export interface Env {
 const MARKDOWN_TWIN_PATHS = new Set([
   // MARKDOWN_TWIN_PATHS:BEGIN
   "/docs/",
-  "/docs/did-guardian-spec-v0.2.0/",
+  "/docs/did-guardian-spec-v1.0.0/",
   "/docs/how-to/",
   "/docs/how-to/ai-agent-identity/",
   "/docs/how-to/custom-oidc-login/",

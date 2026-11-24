@@ -1,0 +1,29 @@
+{
+  "name": "@did-guardian/uni-resolver-driver",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Universal Resolver driver for did:guardian -- GET /1.0/identifiers/<did>, resolved and independently re-verified against @did-guardian/lib.",
+  "type": "module",
+  "main": "dist/src/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test dist/tests",
+    "start": "npm run build && node dist/src/server.js"
+  },
+  "dependencies": {
+    "@did-guardian/lib": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/did-method-guardian/did-method-guardian.git",
+    "directory": "packages/uni-resolver-driver"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

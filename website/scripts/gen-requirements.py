@@ -10,9 +10,9 @@ import json
 import os
 import re
 
-SPEC_PATH = 'content/docs/did-guardian-spec-v0.2.0/index.md'
+SPEC_PATH = 'content/docs/did-guardian-spec-v1.0.0/index.md'
 OUT_PATH = 'static/requirements.json'
-BASE_URL = 'https://guardianspec.org/docs/did-guardian-spec-v0.2.0/'
+BASE_URL = 'https://guardianspec.org/docs/did-guardian-spec-v1.0.0/'
 TEST_GLOBS = ['../packages/*/tests/*.test.ts']
 
 HEADING_RE = re.compile(r'^(#{2,3})\s+(.*)$')

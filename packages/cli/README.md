@@ -26,7 +26,7 @@ A `did:guardian` identity's key is either:
 - **Held** -- the registrar generated it and still holds it, encrypted. This is what `register` produces. Day-to-day operations (`login`, `guardian adopt`/`confirm-adopt`) go through a session; the registrar signs on the identity's behalf.
 - **Self-held** -- you hold the key, the registrar holds nothing usable. Either `create` (with `--registrar`, publishes for real; with `--domain` alone, stays an offline draft) or `key take-custody` (ends a registrar's custody of an existing identity) gets you here. Once self-held, `guardian add`/`recover`/`deactivate` sign and submit directly with your key -- no session needed.
 
-Spec reference: [§7, Operations](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#7-operations) and [§10, Registrar](https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#10-registrar).
+Spec reference: [§7, Operations](https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#7-operations) and [§10, Registrar](https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#10-registrar).
 
 ## Commands
 

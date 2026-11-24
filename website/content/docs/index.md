@@ -57,7 +57,7 @@ A few rules hold regardless of how many guardians there are or who they are:
 - **Each guardian action is signed with that specific guardian's key.** Whether a guardian is recovering a ward, authorizing something on its behalf, or removing another guardian, the action stays traceable to whichever guardian performed it, in the identity's history.
 - **Guardianship is temporary by design.** It can be handed off, shared among several guardians, or re-established later, similar to how a legal guardianship relationship starts for a reason, and is expected to end at some point (e.g. when a minor child is no longer a minor). Removing the last guardian deactivates the identity by default; an identity whose policy opts into guardian-less operation ahead of time keeps going without one instead.
 
-See the [formal specification](/docs/did-guardian-spec-v0.2.0/) for precise definitions of each operation and signature.
+See the [formal specification](/docs/did-guardian-spec-v1.0.0/) for precise definitions of each operation and signature.
 
 
 ## Where it comes from
@@ -96,7 +96,7 @@ A `did:guardian` identifier is the domain that issued it, optionally followed by
 
 
 
-Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §4](/docs/did-guardian-spec-v0.2.0/#4-identifier).
+Names are scoped to the registrar that issued them. The same name can exist, as two entirely unrelated identities, under two different domains, e.g. `did:guardian:acme.com:alice` and `did:guardian:fandom.com:alice` share nothing but a string. The full grammar, including the exact characters a name may contain, is in the [formal spec's §4](/docs/did-guardian-spec-v1.0.0/#4-identifier).
 
 
 
@@ -117,7 +117,7 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 ## The parts of this project
 
 
-**The method.** The abstract rules, such as identifier syntax, the operation log, guardianship, signature requirements, which are independent of any specific server. Defined in the [formal specification](/docs/did-guardian-spec-v0.2.0/).
+**The method.** The abstract rules, such as identifier syntax, the operation log, guardianship, signature requirements, which are independent of any specific server. Defined in the [formal specification](/docs/did-guardian-spec-v1.0.0/).
 
 
 
@@ -137,6 +137,6 @@ Names are scoped to the registrar that issued them. The same name can exist, as 
 
 - [**Get Started**](/docs/how-to/): a quickstart (create an identity, resolve it, add a guardian) plus task-oriented how-to guides -- give an AI agent a revocable identity, sign in via custom OIDC, self-host a registrar, recover after a lost key.
 - [**Prior art and comparisons**](/docs/prior-art/): how did:guardian relates to did:webvh, KERI's delegated AIDs, the Sovrin Guardianship Task Force's work, and ERC-4337 social recovery -- and when each fits better.
-- [**The formal specification**](/docs/did-guardian-spec-v0.2.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
+- [**The formal specification**](/docs/did-guardian-spec-v1.0.0/): the normative, complete definition of the method. It contains each operation and signature rule, and the edge cases around them.
 - [**The registrar API spec**](/docs/registrar/): everything the reference registrar adds beyond the method, including the OIDC provider, the account dashboard, the agent-identity API, etc.
 - [**The GitHub repository**](https://github.com/did-method-guardian/did-method-guardian): source for the method's reference library, the reference registrar, and this website.

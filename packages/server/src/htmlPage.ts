@@ -104,7 +104,7 @@ function pageNav(): string {
       <svg width="28" height="28" viewBox="0 0 48 48" aria-hidden="true"><circle cx="17.5" cy="24" r="12.5" fill="#1f62c4" fill-opacity="0.6"/><circle cx="30.5" cy="24" r="12.5" fill="#f0a91a" fill-opacity="0.6"/><path d="M24 13.32A12.5 12.5 0 0 1 24 34.68A12.5 12.5 0 0 1 24 13.32Z" fill="#c9502c"/></svg><span class="wordmark"><span class="dim">did:</span>guardian</span>
     </a>
     <div class="links">
-      <a href="https://guardianspec.org/docs/did-guardian-spec-v0.2.0/">Spec</a>
+      <a href="https://guardianspec.org/docs/did-guardian-spec-v1.0.0/">Spec</a>
       <a href="https://guardianspec.org/docs/">Docs</a>
       <a href="https://github.com/did-method-guardian/did-method-guardian">GitHub</a>
     </div>

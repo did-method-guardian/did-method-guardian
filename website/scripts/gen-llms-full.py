@@ -21,7 +21,7 @@ BASE_URL = 'https://guardianspec.org'
 # path relative to SRC_ROOT.
 ORDER = {
     'index.md': 0,
-    'did-guardian-spec-v0.2.0/index.md': 1,
+    'did-guardian-spec-v1.0.0/index.md': 1,
     'registrar/index.md': 2,
     'prior-art/index.md': 3,
     'how-to/index.md': 4,

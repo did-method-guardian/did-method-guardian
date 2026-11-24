@@ -6,7 +6,7 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://guardianspec.org/docs/did-guardian-spec-v0.2.0/</loc>
+    <loc>https://guardianspec.org/docs/did-guardian-spec-v1.0.0/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

@@ -1,0 +1,46 @@
+name: Publish Universal Resolver driver
+
+# Builds the did:guardian Universal Resolver driver (packages/uni-resolver-driver)
+# and pushes it to ghcr.io/did-method-guardian/driver-did-guardian. Runs on a
+# v1.0.0 tag, or manually -- never on every push, since this publishes a
+# public image. Needs no secrets beyond the built-in GITHUB_TOKEN
+# (packages:write); the resulting package still has to be made public once
+# by hand the first time it's pushed (GHCR defaults new packages to private).
+on:
+  push:
+    tags:
+      - "v1.0.0"
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test the driver against the live registrar first
+        run: |
+          npm ci --workspace=packages/lib --workspace=packages/uni-resolver-driver
+          npm run build --workspace=packages/lib
+          npm test --workspace=packages/uni-resolver-driver
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/uni-resolver-driver/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/did-method-guardian/driver-did-guardian:1.0.0
+            ghcr.io/did-method-guardian/driver-did-guardian:latest

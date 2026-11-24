@@ -1,5 +1,5 @@
 // Core types for the did:guardian method.
-// See website/content/docs/did-guardian-spec-v0.2.0/index.md for the normative definitions these mirror.
+// See website/content/docs/did-guardian-spec-v1.0.0/index.md for the normative definitions these mirror.
 
 /** REQ-4-1: "did:guardian:<domain>" (root) or "did:guardian:<domain>:<name>" (named). */
 export type Did = string;

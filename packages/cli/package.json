@@ -1,6 +1,6 @@
 {
   "name": "@did-guardian/cli",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Command-line tool for did:guardian: generate keys, register and resolve identities, and manage guardianship (add, recover, deactivate).",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
     "test": "npm run build && node --test dist/tests"
   },
   "dependencies": {
-    "@did-guardian/lib": "^0.2.0",
+    "@did-guardian/lib": "^1.0.0",
     "commander": "^12.0.0"
   },
   "devDependencies": {

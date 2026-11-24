@@ -2,7 +2,7 @@
 
 The did:guardian conformance suite lives in [`cleanroom/`](cleanroom/README.md)
 -- 334 JSON vectors, written independently from the spec text alone
-(`did-guardian-spec.md`, v0.2.0), covering verification (§8), registrar
+(`did-guardian-spec.md`, v1.0.0), covering verification (§8), registrar
 acceptance (§10.2) and resolution (§11). `cleanroom/README.md` documents
 the vector format and `cleanroom/verifier.py` is a second, independent
 reference implementation.

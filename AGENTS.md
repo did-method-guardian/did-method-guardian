@@ -12,7 +12,7 @@ Instructions for an AI coding agent working in this repository. See [README.md](
 
 ## The rule that matters most: the spec and `packages/lib` change together
 
-`website/content/docs/did-guardian-spec-v0.2.0/index.md` is the normative definition of the method. `packages/lib/src/*.ts` is its reference implementation. Never change one without checking the other:
+`website/content/docs/did-guardian-spec-v1.0.0/index.md` is the normative definition of the method. `packages/lib/src/*.ts` is its reference implementation. Never change one without checking the other:
 
 - A new or changed requirement (`REQ-<section>-<n>`) needs the corresponding logic in `packages/lib/src/rules.ts`/`operations.ts`/`document.ts`, and usually a new fixture in `interop_tests/cleanroom/`, generated via `gen.py`, not hand-written.
 - A behavior change in `packages/lib` that isn't already covered by a `REQ-` id in the spec needs one added there first -- an implementation detail the spec doesn't require isn't safe to rely on.
