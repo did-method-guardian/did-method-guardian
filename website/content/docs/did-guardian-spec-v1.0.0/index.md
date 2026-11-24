@@ -2,7 +2,6 @@
 layout: docs-sidebar
 title: "DID Guardian Method Specification, v1.0.0"
 description: "The did:guardian DID method: identifier syntax, DID document shape, the operation log, and every operation's exact signature requirements."
-versionTag: true
 canonical_url: 'https://guardianspec.org/docs/did-guardian-spec-v1.0.0/'
 status: Stable
 date: '2026-10-24'
