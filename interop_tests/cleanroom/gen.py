@@ -212,7 +212,7 @@ def _(w):
     return a
 
 
-@scenario("update-key", "update by one current key")
+@scenario("update-key", "update by one current key", kinds=("verify", "registrar"))
 def _(w):
     a, _ = fixture(w)
     w.update(a, [K(a)], tag="final")
@@ -877,6 +877,161 @@ def _(w):
     return a
 
 
+# ============================================================ round r7 scenarios
+NEGZ = -0.0      # written to the vector file as the JSON number -0 (see main)
+
+
+@scenario("num-negzero", "an ignored extension value is the JSON number -0: its value is the integer 0 (REQ-5-2), and JCS writes it as 0",
+          kinds=("verify", "registrar"))
+def _(w):
+    a, _ = fixture(w)
+    ext_op(w, a, ext={UNK: {"n": NEGZ}})
+    return a
+
+
+@scenario("D2-drop-successor-key-only", "REQ-7-6 setPolicy waiver (r7): the only changes are successor to null and orphan to "
+          "\"deactivate\", so one current key suffices at verification; the registrar rejects because the successor has neither "
+          "released alice nor deactivated (REQ-10-7 row 5)", kinds=("verify", "registrar"), reg=False, rtargets="REQ-10-7")
+def _(w):
+    a, gs = fixture(w, 1, successor=True)
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "deactivate"}, "successor": None}, [K(a)], tag="final")
+    return a
+
+
+def _d2_stuck(w):
+    a, gs = fixture(w, 1, successor=True)
+    g, sc = gs[0], w.ids[D + ":succ"]
+    w.push(g, {"type": "releaseWard", "ward": a.did}, [K(g)])          # the sole guardian withdraws
+    w.push(sc, {"type": "releaseWard", "ward": a.did}, [K(sc)], tag="succ-release")   # and so does the successor
+    return a, g, sc
+
+
+@scenario("D2-stuck-ward-clear-successor", "D2 stuck-ward recovery, step 1: the sole guardian and the successor have both released alice; "
+          "alice's key alone clears the successor (REQ-7-6 waiver; REQ-10-7 row 5: the successor lacks standing)",
+          kinds=("verify", "registrar"), rtargets="REQ-10-7")
+def _(w):
+    a, g, sc = _d2_stuck(w)
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "deactivate"}, "successor": None}, [K(a)], tag="final")
+    return a
+
+
+@scenario("D2-stuck-ward-evidence-removal", "D2 stuck-ward recovery, step 2: after clearing the successor, alice removes the released "
+          "guardian with evidence; orphan \"deactivate\" applies (the only exit the spec offers)", kinds=("verify", "registrar"), deact=True,
+          rtargets="REQ-10-7")
+def _(w):
+    a, g, sc = _d2_stuck(w)
+    rel = g.head
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "deactivate"}, "successor": None}, [K(a)])
+    w.push(a, {"type": "removeGuardian", "guardian": g.did, "evidence": rel}, [K(a)], tag="final")
+    return a
+
+
+@scenario("STUCK-D2-promotion-blocked", "STUCK (why D2 exists): without clearing the successor first, the evidence removal of the "
+          "released sole guardian would promote a successor that lacks standing; verifies, the registrar rejects (REQ-10-7 row 4)",
+          kinds=("verify", "registrar"), reg=False, promoted=True, rtargets="REQ-10-7")
+def _(w):
+    a, g, sc = _d2_stuck(w)
+    w.push(a, {"type": "removeGuardian", "guardian": g.did, "evidence": g.head}, [K(a)], tag="final")
+    return a
+
+
+@scenario("ATTACK-D2-thief-drops-rotated-successor", "FIXED at the registrar (r7b, FINDINGS-r7 Z-1): the successor rotated its keys and "
+          "has not yet refreshed its entry; a thief with alice's key tries to clear it without the guardian. Verifies (the exception is "
+          "syntactic); row 5 now needs a provable withdrawal or deactivation, so the registrar rejects", kinds=("verify", "registrar"),
+          reg=False, rtargets="REQ-10-7")
+def _(w):
+    a, gs = fixture(w, 1, successor=True)
+    sc = w.ids[D + ":succ"]
+    w.update(sc, [K(sc)])
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "deactivate"}, "successor": None}, [K(a)], tag="final")
+    return a
+
+
+@scenario("evidence-orphan-deactivated-guardian", "REQ-10-7 evidence row (r7): guard0's last operation is a removeGuardian that "
+          "orphan-deactivated guard0; alice removes guard0 citing that operation (an operation after which the state is deactivated)",
+          kinds=("verify", "registrar"), rtargets="REQ-10-7")
+def _(w):
+    a, gs = fixture(w, 2)
+    g = gs[0]
+    h = w.create(D + ":helper")
+    w.add_guardian(g, h)                                             # guard0's own guardian (after its consent for alice)
+    w.push(h, {"type": "releaseWard", "ward": g.did}, [K(h)])
+    w.push(g, {"type": "removeGuardian", "guardian": h.did, "evidence": h.head}, [K(g)])   # guard0 is now deactivated
+    w.push(a, {"type": "removeGuardian", "guardian": g.did, "evidence": g.head}, [K(a)], tag="final")
+    return a
+
+
+@scenario("row2-redundant-nonstanding", "REQ-10-7 row 2 (r7): three guardians approve a recovery, one of them has released alice; the "
+          "two with standing meet recovery (2), so the registrar accepts (the r7-base text rejected any approval without standing)",
+          kinds=("verify", "registrar"), rtargets="REQ-10-7")
+def _(w):
+    a, gs = fixture(w, 3)
+    w.push(gs[2], {"type": "releaseWard", "ward": a.did}, [K(gs[2])])
+    w.update(a, [GK(a, g.did) for g in gs], tag="final")
+    return a
+
+
+@scenario("setpolicy-successor-reordered", "Terminology (r7) entry equality: setPolicy re-lists the same successor with its two keys in "
+          "the other order; the entry does not differ, so the successor need not sign and REQ-10-7 row 1 does not apply",
+          kinds=("verify", "registrar"))
+def _(w):
+    w.root(); a = w.create(D + ":alice"); g = w.create(G0); w.add_guardian(a, g)
+    sc = w.create(D + ":succ", nkeys=2); w.guard(sc, a)
+    e = w.entry(sc, a)
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "successor"}, "successor": e}, [K(a), GK(a, G0)] + e["keys"])
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "successor", "maxWards": 5}, "successor": dict(e, keys=list(reversed(e["keys"])))},
+           [K(a), GK(a, G0)], tag="final")
+    return a
+
+
+@scenario("inv-10-10-root-create", "REQ-10-10 (r7): a registrar does not accept a create of its root identity through REQ-10-1",
+          kinds=("registrar",), reg=False, rtargets="REQ-10-10")
+def _(w):
+    return w.root(tag="final")
+
+
+@scenario("recovery-N3-three", "recovery by all three guardians (two suffice)", kinds=("verify", "registrar"))
+def _(w):
+    a, gs = fixture(w, 3)
+    w.update(a, [GK(a, g.did) for g in gs], tag="final")
+    return a
+
+
+@scenario("remove-by-others-N3", "N=3: guard1 and guard2 remove guard0 (removal majority of E=2)", kinds=("verify", "registrar"))
+def _(w):
+    a, gs = fixture(w, 3)
+    w.push(a, {"type": "removeGuardian", "guardian": gs[0].did}, [GK(a, gs[1].did), GK(a, gs[2].did)], tag="final")
+    return a
+
+
+@scenario("D2-drop-with-critical", "r7b waiver with a critical extension in the state: the drop keeps policy.extensions and carries no "
+          "critical; key only; the successor has released alice", kinds=("verify", "registrar"), rtargets="REQ-10-7")
+def _(w):
+    a, gs = fixture(w, 1, successor=True)
+    sc = w.ids[D + ":succ"]
+    ext = {MINKEYS: {"k": 1}}
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "successor", "extensions": ext}, "successor": a.state["successor"],
+               "critical": [MINKEYS]}, [K(a), GK(a, G0)])
+    w.push(sc, {"type": "releaseWard", "ward": a.did}, [K(sc)])
+    w.push(a, {"type": "setPolicy", "policy": {"orphan": "deactivate", "extensions": ext}, "successor": None}, [K(a)], tag="final")
+    return a
+
+
+@scenario("version-history", "REQ-11-1 step 2 / REQ-9-5: resolving with versionId of the create yields the document of the first state",
+          kinds=("resolve",), versionIndex=0, stargets="REQ-9-5")
+def _(w):
+    a, _ = fixture(w)
+    w.update(a, [K(a)], tag="final")
+    return a
+
+
+@scenario("pins-base", "resolve a two-operation log (base for the REQ-11-4 / REQ-11-9 pin vectors)", kinds=("resolve",), stargets="REQ-11-1")
+def _(w):
+    a, _ = fixture(w)
+    w.update(a, [K(a)], tag="final")
+    return a
+
+
 # ============================================================ mutations
 def m_post(f): return {"post": f}
 def m_body(f, tag="final"): return {"body": f, "tag": tag}
@@ -1092,7 +1247,7 @@ def build():
       m_specs(lambda s, w, i: s[:1]))
     M("ext-inv-minkeys-later", "ext-minkeys-persist", "REQ-7-33", "critical min-keys persists: a later update to 1 key is invalid",
       m_body(lambda b, w, i: b.__setitem__("keys", b["keys"][:1])))
-    M("ext-inv-minkeys-introduce-violates", "ext-minkeys-introduce", "REQ-7-33", "min-keys k=3 introduced while only 2 keys",
+    M("ext-inv-minkeys-introduce-violates", "ext-minkeys-introduce", "REQ-7-31", "min-keys k=3 introduced while only 2 keys",
       m_body(lambda b, w, i: b["policy"]["extensions"].__setitem__(MINKEYS, {"k": 3})))
     M("ext-inv-minkeys-config", "ext-minkeys-introduce", "REQ-7-33", "bad min-keys configuration", m_body(lambda b, w, i: b["policy"]["extensions"].__setitem__(MINKEYS, {"k": "two"})))
     M("ext-inv-critical-absent", "ext-minkeys-introduce", "REQ-7-30", "critical names min-keys but no extensions member carries it",
@@ -1175,6 +1330,156 @@ def build():
     S("res-11-6-rows", "wards-report", "REQ-11-6", "erin's log unavailable, frank replaced",
       m_vec(lambda v, w: (v["resolver"].pop(D + ":erin"), _swap_identity(v, w, D + ":frank"))))
 
+    # ================= round r7
+    SUCC, ALICE, CAROL = D + ":succ", D + ":alice", D + ":carol"
+    # REQ-6-2 / 6-4 / 7-18 are syntactic: any well-formed hash verifies; meaning is checked only by REQ-10-7
+    M("val-6-2-anchor-any-hash", "add-N0", "REQ-6-2", "entry anchor is a hash but not gina's anchor: valid at verification (syntactic, r7)",
+      m_body(lambda b, w, i: b["entry"].__setitem__("anchor", op_hash(w.ids[D + ":gina"].log[0]))), result="valid")
+    M("val-6-2-consent-any-hash", "add-N0", "REQ-6-2", "entry consent is a hash of gina's create, not an acceptWard: valid at verification",
+      m_body(lambda b, w, i: b["entry"].__setitem__("consent", op_hash(w.ids[D + ":gina"].log[0]))), result="valid")
+    M("val-6-4-anchor-any-hash", "guard-key", "REQ-6-4", "ward record anchor is a hash but not carol's anchor: valid at verification (r7)",
+      m_body(lambda b, w, i: b["ward"].__setitem__("anchor", op_hash(w.ids[CAROL].log[0]))), result="valid")
+    M("val-7-18-evidence-any-hash", "remove-evidence-key", "REQ-7-18", "evidence is the hash of guard0's create: valid at verification (r7)",
+      m_body(lambda b, w, i: b.__setitem__("evidence", op_hash(w.ids[G0].log[0]))), result="valid")
+    M("inv-7-18-sha512", "remove-evidence-key", "REQ-7-18", "evidence is a sha2-512 multihash, not a hash per REQ-5-6",
+      m_body(lambda b, w, i: b.__setitem__("evidence", "z" + b58enc(b"\x13\x40" + hashlib.sha512(b"x").digest()))))
+    M("inv-6-4-anchor-not-hash", "guard-key", "REQ-6-4", "ward record anchor is not a hash", m_body(lambda b, w, i: b["ward"].__setitem__("anchor", "carol")))
+    # REQ-6-6 (r7): no "#key-<decimal integer>" service ids
+    for nm, sid in (("key-id", "#key-0"), ("key-id-7", "#key-7"), ("key-leading-zero", "#key-01"), ("key-word", "#key-one"), ("key-dash", "#key-")):
+        M(f"inv-6-6-{nm}", "create-full", "REQ-6-6", f"service id {sid} begins with #key- (r7b)",
+          m_body(lambda b, w, i, sid=sid: b["services"][0].__setitem__("id", sid)))
+    for nm, sid in (("keys-1", "#keys-1"), ("key-no-dash", "#key1"), ("upper-key", "#KEY-0")):
+        M(f"val-6-6-{nm}", "create-full", "REQ-6-6", f"service id {sid} does not begin with #key-: valid",
+          m_body(lambda b, w, i, sid=sid: b["services"][0].__setitem__("id", sid)), result="valid")
+    M("ATTACK-6-6-pct-encoded-key-id", "create-full", "REQ-6-6", "FIXED (r7b, FINDINGS-r7 Z-6): service id #key-%30 begins with #key-: invalid",
+      m_body(lambda b, w, i: b["services"][0].__setitem__("id", "#key-%30")))
+    M("ATTACK-6-6-pct-encoded-k", "create-full", "REQ-6-6", "FIXED (r7c, FINDINGS-r7b W-1): service id #%6Bey-0 begins with #key- after percent-decoding: invalid",
+      m_body(lambda b, w, i: b["services"][0].__setitem__("id", "#%6Bey-0")))
+    # REQ-7-6 setPolicy waiver (D2)
+    M("inv-7-6-D2-extra-change", "D2-drop-successor-key-only", "REQ-7-6", "the waiver setPolicy also changes recovery: guardians needed",
+      m_body(setp(("policy",), {"orphan": "deactivate", "recovery": "all"})))
+    M("inv-7-6-D2-orphan-independent", "D2-drop-successor-key-only", "REQ-7-6", "successor to null but orphan to \"independent\": no waiver",
+      m_body(setp(("policy",), {"orphan": "independent"})))
+    M("inv-7-6-D2-keeps-successor", "D2-drop-successor-key-only", "REQ-7-6", "same key-only setPolicy but the successor is kept: no waiver",
+      m_body(lambda b, w, i: b.update(policy={"orphan": "successor", "maxWards": 9}, successor=copy.deepcopy(i.state["successor"]))))
+    M("inv-7-6-D2-no-current-key", "D2-drop-successor-key-only", "REQ-7-6", "the waiver still needs one current key: signed by the successor instead",
+      m_specs(lambda s, w, i: [i.state["successor"]["keys"][0]]))
+    M("inv-7-6-D2-adds-critical", "D2-drop-successor-key-only", "REQ-7-6", "the waiver setPolicy also makes min-keys critical: a change, guardians needed",
+      m_body(lambda b, w, i: b.update(policy={"orphan": "deactivate", "extensions": {MINKEYS: {"k": 1}}}, critical=[MINKEYS])))
+    R = lambda name, base, targets, desc, mut, result="rejected": M(name, base, targets, desc, mut, "registrar", result)
+    R("reg-D2-with-guardian", "D2-drop-successor-key-only", "REQ-10-7", "the guardian also approves the successor drop: membership is met, "
+      "so row 5 does not apply and the successor's standing does not matter", m_specs(lambda s, w, i: s + [GK(i, G0)]), "accepted")
+    R("reg-inv-D2-successor-reaccepted", "D2-stuck-ward-clear-successor", "REQ-10-7", "row 5: the successor re-accepted alice before the "
+      "key-only drop, so it has standing again", m_before(lambda w, i: w.guard(w.ids[SUCC], i)))
+    R("reg-ATTACK-D2-successor-unreachable", "D2-drop-successor-key-only", "REQ-10-7", "FIXED (r7b, FINDINGS-r7 Z-1): the successor's log "
+      "cannot be fetched, which counts as not verifying, so row 5's provable withdrawal fails and one ward key cannot clear it",
+      m_vec(lambda v, w: v["resolver"].pop(SUCC)))
+    R("reg-inv-D2-successor-pinned-fork", "D2-stuck-ward-clear-successor", "REQ-10-15", "REQ-10-15 (r7b): the registrar's pin for the "
+      "released successor names a version the served log lacks, so the log counts as cannot-be-fetched and row 5 fails. STUCK: the ward "
+      "can neither clear nor promote this successor (FINDINGS-r7b W-2)",
+      m_vec(lambda v, w: v.__setitem__("pins", {SUCC: [w.ids[SUCC].anchor, op_hash(w.ids[SUCC].log[0])[:-3] + "abc"]})))
+    # REQ-10-7 evidence row (r7)
+    R("reg-inv-evidence-not-deactivating", "evidence-orphan-deactivated-guardian", "REQ-10-7", "evidence names guard0's addGuardian of its "
+      "helper: after the consent, but neither a releaseWard of alice nor an operation after which guard0 is deactivated",
+      m_body(lambda b, w, i: b.__setitem__("evidence", op_hash(w.ids[G0].log[2]))))
+    R("reg-inv-evidence-guardian-log-invalid", "remove-evidence-key", "REQ-10-7", "evidence row (r7): guard0's served log has an operation "
+      "after its deactivate, so it does not verify",
+      m_vec(lambda v, w: v["resolver"][G0].append(_signed(w, w.ids[G0], {"type": "update", "keys": w.ids[G0].states[-2]["keys"], "services": [],
+            "alsoKnownAs": [], "prev": op_hash(v["resolver"][G0][-1])}, w.ids[G0].states[-2]["keys"]))))
+    # REQ-10-7 row 2 (r7)
+    R("reg-inv-row2-standing-short", "row2-redundant-nonstanding", "REQ-10-7", "row 2: guard1's approval is dropped; one approval with "
+      "standing remains (the released guard2's is not counted), recovery needs 2", m_specs(lambda s, w, i: [k for k in s if k != GK(i, G1)]))
+    R("reg-inv-row2-released-self-removal", "remove-self-N2", "REQ-10-7", "row 2: guard0 released alice before removing itself; its own "
+      "approval lacks standing and is not counted", m_before(lambda w, i: w.push(w.ids[G0], {"type": "releaseWard", "ward": i.did}, [K(w.ids[G0])])))
+    # REQ-10-7 acceptWard row (r7)
+    R("reg-inv-row6-ward-log-invalid", "guard-key", "REQ-10-7", "acceptWard row (r7): carol's log exists but does not verify",
+      m_vec(lambda v, w: v["resolver"][CAROL][0].__setitem__("alsoKnownAs", ["https://tampered.example"])))
+    # REQ-10-5 item 1, 10-9, 10-10, 10-12
+    R("reg-inv-10-5-segment", "create", "REQ-10-5", "item 1 (r7): the create for alice is posted to the path segment bob",
+      m_vec(lambda v, w: v.__setitem__("segment", "bob")))
+    R("reg-inv-10-9-domain", "create", "REQ-10-9", "the registrar's domain is other.com", m_vec(lambda v, w: v.__setitem__("registrarDomain", "other.com")))
+    R("reg-inv-10-12-name-accepted", "create", "REQ-10-12", "a create for alice was already accepted",
+      m_vec(lambda v, w: v.__setitem__("acceptedCreates", ["alice"])))
+    R("reg-10-12-name-only-rejected", "create", "REQ-10-12", "REQ-10-12 (r7): an earlier create for alice was rejected; the name is still unused",
+      m_vec(lambda v, w: v.__setitem__("rejectedCreates", ["alice"])), "accepted")
+    # REQ-10-13 / 10-14
+    R("reg-10-14-created-identity", "appendix-create", "REQ-10-14", "a request authenticated as bob creates alice; the registrar signs "
+      "with held keys for bob and for alice, the identity the request creates (r7 exception)",
+      m_vec(lambda v, w: v.__setitem__("request", {"authenticatedAs": BOB, "registrarProofs": [ALICE, BOB]})), "accepted")
+    R("reg-inv-10-14-unauthenticated-guardian", "appendix-create", "REQ-10-14", "the request is authenticated as mallory: bob's held key "
+      "may not be used", m_vec(lambda v, w: v.__setitem__("request", {"authenticatedAs": D + ":mallory", "registrarProofs": [ALICE, BOB]})))
+    R("reg-inv-10-14-two-identities", "recovery-N1", "REQ-10-14", "a request authenticated as alice causes held-key proofs for alice and "
+      "for guard0 (not a created identity)", m_vec(lambda v, w: v.__setitem__("request", {"authenticatedAs": ALICE, "registrarProofs": [ALICE, G0]})))
+    R("reg-10-13-own-identity", "recovery-N1", "REQ-10-13", "a request authenticated as guard0 causes a held-key proof for guard0 only",
+      m_vec(lambda v, w: v.__setitem__("request", {"authenticatedAs": G0, "registrarProofs": [G0]})), "accepted")
+    # REQ-10-15 pins on fetched logs
+    R("reg-10-15-pin-older", "recovery-N1", "REQ-10-15", "the registrar's pin for guard0 names guard0's create, which the served log contains",
+      m_vec(lambda v, w: v.__setitem__("pins", {G0: [w.ids[G0].anchor, op_hash(w.ids[G0].log[0])]})), "accepted")
+    R("reg-inv-10-15-rollback", "recovery-N1", "REQ-10-15", "guard0 later recorded another operation, which the registrar pinned; guard0's "
+      "registrar now serves the log without it (rolled back), so it counts as cannot-be-fetched (r7b): guard0's approval has no standing",
+      m_vec(_pin_later_op))
+    R("reg-inv-10-15-fork", "recovery-N1", "REQ-10-15", "the registrar pinned a sibling of guard0's consent (same prev, signed by guard0); "
+      "the served log took the other branch (forked): cannot-be-fetched, so guard0's approval is not counted", m_vec(_pin_fork))
+    R("reg-inv-10-15-different-identity", "recovery-N1", "REQ-10-15", "the registrar's pin for guard0 has another anchor: cannot-be-fetched, "
+      "so guard0's approval is not counted",
+      m_vec(lambda v, w: v.__setitem__("pins", {G0: [w.ids[ALICE].anchor, op_hash(v["resolver"][G0][-1])]})))
+    R("reg-STUCK-10-15-rollback-blocks-evidence", "evidence-unguard-removal", "REQ-10-15", "STUCK, documented in §12 'Unavailable guardians' "
+      "(r7b): guard0's registrar rolled back one operation after guard0's releaseWard; the log counts as cannot-be-fetched, so the evidence "
+      "row's 'the log of guardian verifies' fails",
+      m_vec(_pin_later_op))
+    # resolve: REQ-11-1 step 2 / REQ-9-5 versionId, REQ-11-4 / REQ-11-9 pins
+    S = lambda name, base, targets, desc, mut, result="invalid": M(name, base, targets, desc, mut, "resolve", result)
+    S("res-11-1-version-later-op-bad", "version-history", "REQ-11-1", "the last operation's signature is corrupted; versionId names the "
+      "create, and only the log up to it is verified (REQ-11-1 step 2)", m_post(flip), "valid")
+    S("res-inv-9-5-version-absent", "version-history", "REQ-9-5", "versionId names no operation of the log",
+      m_vec(lambda v, w: v.__setitem__("versionId", op_hash(w.ids[D].log[0]))))
+    S("res-11-4-pin-earlier", "pins-base", "REQ-11-4", "the resolver's pin names the create, which the log contains",
+      m_vec(lambda v, w: v.__setitem__("pins", {ALICE: [w.ids[ALICE].anchor, op_hash(v["log"][0])]})), "valid")
+    S("res-inv-11-9-rolled-back", "pins-base", "REQ-11-9", "alice later recorded a third operation the resolver pinned; the registrar now "
+      "serves the log without it: no DID document", m_vec(_pin_later_self))
+    # ---- r7b
+    R("reg-10-15-pinned-redundant-approval", "recovery-N3-three", "REQ-10-15", "r7b: guard2's log contradicts the pin, so it counts as "
+      "cannot-be-fetched and its approval is not counted; guard0 and guard1 still meet recovery (r7a rejected the operation)",
+      m_vec(lambda v, w: v.__setitem__("pins", {D + ":guard2": [w.ids[D + ":guard2"].anchor, op_hash(w.ids[ALICE].log[0])]})), "accepted")
+    R("reg-inv-10-15-pinned-two-approvals", "recovery-N3-three", "REQ-10-15", "guard1's and guard2's logs contradict their pins: one counted "
+      "approval remains, recovery needs 2",
+      m_vec(lambda v, w: v.__setitem__("pins", {d: [w.ids[d].anchor, op_hash(w.ids[ALICE].log[0])] for d in (G1, D + ":guard2")})))
+    R("reg-10-15-removed-guardian-forked", "remove-by-others-N3", "REQ-10-7", "r7b 'involves': guard0's log contradicts its pin, but guard0 is "
+      "removed by the other two guardians and is not involved, so its log is not consulted",
+      m_vec(lambda v, w: v.__setitem__("pins", {G0: [w.ids[G0].anchor, op_hash(w.ids[ALICE].log[0])]})), "accepted")
+    R("reg-accept-ward-no-log", "guard-key", "REQ-10-7", "r7b: carol's registrar reports that carol has no log (resolver value null): the "
+      "acceptWard row does not apply", m_vec(lambda v, w: v["resolver"].__setitem__(CAROL, None)), "accepted")
+    R("reg-inv-accept-ward-unreachable", "guard-key", "REQ-10-7", "r7b: carol's log cannot be fetched (absent from resolver); that is not "
+      "'no log', and it counts as not verifying", m_vec(lambda v, w: v["resolver"].pop(CAROL)))
+    R("reg-10-13-unauthenticated-create", "create", "REQ-10-13", "r7b: an unauthenticated request creates alice; the registrar signs "
+      "alice's create with alice's held key", m_vec(lambda v, w: v.__setitem__("request", {"authenticatedAs": None, "registrarProofs": [ALICE]})),
+      "accepted")
+    R("reg-inv-10-13-unauthenticated-update", "update-key", "REQ-10-13", "an unauthenticated request makes the registrar sign alice's update "
+      "with alice's held key", m_vec(lambda v, w: v.__setitem__("request", {"authenticatedAs": None, "registrarProofs": [ALICE]})))
+    M("inv-7-6-D2-relists-critical", "D2-drop-with-critical", "REQ-7-6", "r7b: the waiver setPolicy re-lists an already critical name; "
+      "'the operation has no critical' fails", m_body(lambda b, w, i: b.__setitem__("critical", [MINKEYS])))
+    S("res-inv-11-9-different-identity", "pins-base", "REQ-11-9", "the resolver's pin for alice has the root's anchor: no DID document",
+      m_vec(lambda v, w: v.__setitem__("pins", {ALICE: [w.ids[D].anchor, op_hash(v["log"][-1])]})))
+
+
+def _pin_later_op(v, w):
+    g = w.ids[G0]
+    w.push(g, {"type": "acceptWard", "ward": {"did": D + ":zoe", "anchor": hash_value("zoe")}}, [K(g)])
+    v["pins"] = {G0: [g.anchor, g.head]}
+
+
+def _pin_fork(v, w):
+    g = w.ids[G0]
+    served = v["resolver"][G0]
+    sib = _signed(w, g, {"type": "acceptWard", "ward": {"did": D + ":zoe", "anchor": hash_value("zoe")}, "prev": op_hash(served[-2])}, [g.states[-2]["keys"][0]])
+    v["pins"] = {G0: [g.anchor, op_hash(sib)]}
+
+
+def _pin_later_self(v, w):
+    a = w.ids[v["did"]]
+    w.update(a, [K(a)])
+    v["pins"] = {a.did: [a.anchor, a.head]}
+
 
 def _signed(w, idn, body, keys):
     return dict(body, proof=w.proofs(secured(body), keys))
@@ -1229,12 +1534,33 @@ def run_scenario(name, mut=None):
     return v, w, t, extra
 
 
-def as_kind(v, w, kind, valid):
+def as_kind(v, w, kind, valid, extra=None):
     if kind == "registrar":
-        return dict(v, kind="registrar", log=v["log"][:-1], op=v["log"][-1], resolver=w.snap, expect={"accepted": valid})
+        did = v["did"]
+        seg = did.split(":")[3] if did.count(":") == 3 else "_"
+        return dict(v, kind="registrar", log=v["log"][:-1], op=v["log"][-1], resolver=w.snap, segment=seg, expect={"accepted": valid})
     if kind == "resolve":
-        return dict(v, kind="resolve", expect={"valid": valid})
+        rv = dict(v, kind="resolve", expect={"valid": valid})
+        if extra and "versionIndex" in extra:                      # REQ-11-1 step 2, REQ-9-5
+            vi = extra["versionIndex"]
+            rv["versionId"] = op_hash(v["log"][vi])
+            rv["expectDocument"] = _doc(v["did"], w.ids[v["did"]].states[vi])
+        return rv
     return v
+
+
+def _doc(did, st):
+    ctx = ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"]
+    if st["deactivated"]:
+        return {"@context": ctx, "id": did}
+    ids = [f"{did}#key-{n}" for n in range(len(st["keys"]))]
+    d = {"@context": ctx, "id": did,
+         "verificationMethod": [{"id": i, "type": "Multikey", "controller": did, "publicKeyMultibase": k} for i, k in zip(ids, st["keys"])],
+         "authentication": ids, "assertionMethod": ids, "capabilityInvocation": ids,
+         "service": [dict(x, id=did + x["id"]) for x in st["services"]]}
+    if st["alsoKnownAs"]:
+        d["alsoKnownAs"] = list(st["alsoKnownAs"])
+    return d
 
 
 EXPECT_REG = {"ATTACK-fake-evidence": False}
@@ -1248,7 +1574,11 @@ def main():
           "upd-guardian-sole": "REQ-7-6", "remove-self-N2": "REQ-7-19", "orphan-deactivate": "REQ-6-10", "orphan-independent": "REQ-6-10",
           "orphan-successor": "REQ-6-10", "setpolicy-N0": "REQ-7-21", "guard-key": "REQ-7-24", "unguard-key": "REQ-7-26",
           "deactivate-N0": "REQ-9-3", "maxwards": "REQ-6-15", "mutual-guardians": "REQ-6-5",
-          "ext-reassert": "REQ-7-32", "ext-noncritical-ignored": "REQ-7-34", "ext-retro": "REQ-7-31", "ext-config-removal": "REQ-7-35",
+          "ext-reassert": "REQ-7-32", "ext-noncritical-ignored": "REQ-7-34", "ext-retro": "REQ-7-31", "ext-config-removal": "REQ-7-30",
+          "ext-minkeys-introduce": "REQ-7-35", "num-negzero": "REQ-5-2", "D2-drop-successor-key-only": "REQ-7-6",
+          "D2-stuck-ward-clear-successor": "REQ-7-6", "D2-stuck-ward-evidence-removal": "REQ-6-10", "STUCK-D2-promotion-blocked": "REQ-6-10",
+          "ATTACK-D2-thief-drops-rotated-successor": "REQ-7-6", "evidence-orphan-deactivated-guardian": "REQ-7-18",
+          "row2-redundant-nonstanding": "REQ-6-8", "setpolicy-successor-reordered": "REQ-7-6", "D2-drop-with-critical": "REQ-7-6", "recovery-N3-three": "REQ-6-8", "remove-by-others-N3": "REQ-7-6",
           "deact-self-k": "REQ-7-28", "entry-keys-reordered": "REQ-5-5", "create-two-keys": "REQ-9-4"}
     build()
     vecs = []
@@ -1276,10 +1606,13 @@ def main():
                 if extra.get("poison"): vv["unsupportedWithout"] = [MINKEYS]
                 vecs.append((name, vv))
             elif kind == "registrar":
-                vecs.append(("reg-" + name, as_kind(v, w, kind, extra.get("reg", EXPECT_REG.get(name, True))) | {"base": None}))
+                rvv = as_kind(v, w, kind, extra.get("reg", EXPECT_REG.get(name, True))) | {"base": None}
+                if extra.get("rtargets"): rvv["targets"] = extra["rtargets"]
+                vecs.append(("reg-" + name, rvv))
             else:
                 rres = extra.get("res", True)
-                rv = as_kind(v, w, kind, rres is True)
+                rv = as_kind(v, w, kind, rres is True, extra)
+                if extra.get("stargets"): rv["targets"] = extra["stargets"]
                 if isinstance(rres, str): rv["expectResult"] = rres
                 if name == "wards-report":
                     rv["expectWardReports"] = [["alice", "guardian"], ["carol", "successor"], ["dave", "not related"], ["erin", "not related"], ["frank", "not related"]]
@@ -1287,9 +1620,10 @@ def main():
                 vecs.append(("res-" + name, rv))
     for name, base, targets, desc, mut, kind in MUTS:
         hooks = {k: x for k, x in mut.items() if k not in ("vec", "result", "unsup") and x is not None}
-        v, w, t, _ = run_scenario(base, hooks)
+        v, w, t, bextra = run_scenario(base, hooks)
         if kind != "verify":
-            v = as_kind(v, w, kind, False)
+            v = as_kind(v, w, kind, mut["result"] in ("accepted", "valid"), bextra)
+            if kind == "resolve" and mut["result"] == "unsupported": v["expectResult"] = "unsupported"
         if mut.get("vec"): mut["vec"](v, w)
         v.update(description=desc, targets=targets, base=("reg-" if kind == "registrar" else "res-" if kind == "resolve" else "") + base)
         if kind == "verify": v["expect"] = {"result": mut["result"]}
@@ -1313,8 +1647,10 @@ def main():
         if v.get("base") is None: v.pop("base", None)
     shutil.rmtree(OUT, ignore_errors=True); os.makedirs(OUT)
     for name, v in vecs:
+        txt = json.dumps(v, indent=1)
+        txt = txt.replace(": -0.0", ": -0")          # the -0 vectors: JSON number -0 (value 0; JCS serializes it as 0)
         with open(os.path.join(OUT, name + ".json"), "w") as f:
-            json.dump(v, f, indent=1)
+            f.write(txt)
     print(f"wrote {len(vecs)} vectors to {OUT}")
 
 

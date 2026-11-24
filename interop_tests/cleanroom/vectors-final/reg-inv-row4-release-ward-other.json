@@ -229,6 +229,7 @@
    }
   ]
  },
+ "segment": "alice",
  "targets": "REQ-10-7",
  "base": "reg-evidence-release-ward-removal"
 }

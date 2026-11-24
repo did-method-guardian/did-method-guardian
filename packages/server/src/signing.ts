@@ -44,6 +44,19 @@ export async function authenticateRequest(request: Request, env: Env, did: Did):
 }
 
 /**
+ * REQ-10-13: the same brand as authenticateRequest's, for a caller
+ * that already verified identity through a DIFFERENT channel this
+ * module has no business re-checking -- an OIDC access token's own
+ * `sub`, already verified by verifyAccessToken before this is ever
+ * called. Exists so that path can call signAs too, instead of
+ * bypassing the brand with an inline cast the type system can't tell
+ * apart from a genuine mistake.
+ */
+export function authenticatedViaAccessToken(identity: Did): AuthenticatedRequest {
+  return { identity } as AuthenticatedRequest;
+}
+
+/**
  * REQ-10-13: creates a proof with a held key only for the identity
  * `auth` was actually checked against -- `auth.identity` can only have
  * come from authenticateRequest, never a caller's own say-so.

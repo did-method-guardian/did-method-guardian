@@ -33,8 +33,18 @@ export function wellKnownPath(name: string | null): string {
   return `/.well-known/guardian/${name ?? "_"}`;
 }
 
-/** Fetches the current log of `did` -- live resolution for REQ-5-14's cross-log checks (REQ-10-7), and for the resolution functions below. Returns `undefined` if the log cannot be retrieved. */
-export type LogResolver = (did: Did) => Log | undefined | Promise<Log | undefined>;
+/**
+ * Fetches the current log of `did` -- live resolution for REQ-5-14's
+ * cross-log checks (REQ-10-7), and for the resolution functions below.
+ * `undefined` means the log could not be fetched. `null` means the
+ * registrar affirmatively reports that `did` has no log at all --
+ * distinct from `undefined`, and relevant only to REQ-10-7's
+ * `acceptWard` row ("a DID has no log only if its registrar reports
+ * that it has none"); every other caller here treats both the same
+ * way (falsy), since neither "no log" nor "couldn't fetch it" lets a
+ * resolver establish anything about that identity.
+ */
+export type LogResolver = (did: Did) => Log | null | undefined | Promise<Log | null | undefined>;
 
 export type Outcome = "valid" | "invalid" | "unsupported";
 
@@ -96,6 +106,31 @@ export interface ResolveResult {
   metadata?: ResolutionMetadata;
 }
 
+/** REQ-11-3's own recorded {anchor, version} for the DID being resolved -- see pin.ts's PinRecord, which this mirrors; resolve() only ever needs the one for `did` itself (README: "only the pin for did is used"), never a whole store. */
+export interface ResolvePin {
+  anchor: string;
+  version: string;
+}
+
+/**
+ * REQ-11-4 against a previously recorded pin, for REQ-11-9's benefit.
+ * `log` has not been through `verifyLog` yet at this point, so a
+ * malformed entry could throw out of its own hashing -- caught the
+ * same way as this file's other two pre-verification scans
+ * (verifyAttestation's rootLog, resolve's own versionId lookup below).
+ */
+async function pinReport(log: Log, pin: ResolvePin | undefined): Promise<"different identity" | "rolled back or forked" | undefined> {
+  if (!pin || log.length === 0) return undefined;
+  try {
+    const anchor = await anchorOf(log[0] as CreateOp);
+    if (anchor !== pin.anchor) return "different identity";
+    if ((await findByHash(log, pin.version)) === -1) return "rolled back or forked";
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * REQ-11-1: resolves a DID to its document. `implementedExtensions`
  * defaults to empty, same as `verifyLog`. REQ-9-5: `versionId`, if
@@ -103,7 +138,10 @@ export interface ResolveResult {
  * document is derived from the state right after that operation
  * instead of the log's own current end, and only the log up to and
  * including it needs to verify (a later operation, if any, is never
- * looked at at all, not even for shape).
+ * looked at at all, not even for shape). `pin`, if given, is this
+ * same DID's own previously recorded anchor/version (REQ-11-3) -- a
+ * mismatch is REQ-11-9's own "no DID document," checked against the
+ * log exactly as given, before `versionId` ever narrows it.
  */
 export async function resolve(
   did: Did,
@@ -111,7 +149,11 @@ export async function resolve(
   resolveLog: LogResolver,
   implementedExtensions: ReadonlySet<string> = new Set(),
   versionId?: string,
+  pin?: ResolvePin,
 ): Promise<ResolveResult> {
+  const report = await pinReport(log, pin);
+  if (report) return { result: "invalid", reason: `REQ-11-9: REQ-11-4 reports ${report} for this DID -- no DID document` };
+
   let effectiveLog = log;
   if (versionId !== undefined) {
     // F-8 (same class): `log` hasn't been through verifyLog yet at

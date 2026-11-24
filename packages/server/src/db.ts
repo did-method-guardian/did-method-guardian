@@ -448,3 +448,21 @@ export async function getVerifiedForwardingByDid(env: Env, did: string): Promise
   return row ?? null;
 }
 
+export interface PinRow {
+  did: string;
+  anchor: string;
+  version: string;
+}
+
+/** REQ-10-15/REQ-11-3: the anchor and version this registrar last recorded for `did`, from any earlier fetch. */
+export async function getPin(env: Env, did: string): Promise<PinRow | null> {
+  const row = await env.DB.prepare("SELECT * FROM pins WHERE did = ?").bind(did).first<PinRow>();
+  return row ?? null;
+}
+
+export async function setPin(env: Env, did: string, anchor: string, version: string): Promise<void> {
+  await env.DB.prepare("INSERT INTO pins (did, anchor, version) VALUES (?, ?, ?) ON CONFLICT(did) DO UPDATE SET anchor = excluded.anchor, version = excluded.version")
+    .bind(did, anchor, version)
+    .run();
+}
+

@@ -10,7 +10,7 @@
 // pending spec amendment requiring this there lands) without either
 // caller reimplementing the comparison.
 import { anchorOf, operationHash } from "./operations.js";
-import { findByHash } from "./resolve.js";
+import { findByHash, type LogResolver } from "./resolve.js";
 import type { CreateOp, Did, Log } from "./types.js";
 
 export interface PinRecord {
@@ -74,4 +74,40 @@ export async function checkPin(did: Did, log: Log, store: PinStore): Promise<Pin
   const stillPresent = (await findByHash(log, recorded.version)) !== -1;
   if (!stillPresent) return { status: "rolled-back-or-forked", current, recorded, advance };
   return { status: "same-identity", current, recorded, advance };
+}
+
+/**
+ * REQ-10-15: wraps a `LogResolver` so every fetch made through it is
+ * checked against `store` and recorded there, exactly once per DID per
+ * call (cached) regardless of how many separate REQ-10-7 rows end up
+ * asking for the same log. A log whose anchor or recorded version no
+ * longer matches is handed back as `undefined` -- indistinguishable
+ * from a log that could not be fetched at all, which is exactly what
+ * REQ-10-7 already says to do with it ("a log that cannot be fetched
+ * counts as a log that does not verify") -- and the stored pin is left
+ * exactly as it was, since `advance` is simply never called for that
+ * fetch. Every other fetch (new, or still matching) advances the
+ * stored pin immediately, before this function (or its caller) has any
+ * idea whether the operation that triggered it will end up accepted or
+ * rejected -- REQ-10-15's own text ("including for operations it
+ * rejects") is unconditional, and this wrapper has no way to defer the
+ * write until an outcome is known even if it wanted to.
+ */
+export function makePinningResolver(resolveLog: LogResolver, store: PinStore): LogResolver {
+  const cache = new Map<Did, Promise<Log | null | undefined>>();
+  return (did: Did): Promise<Log | null | undefined> => {
+    let pending = cache.get(did);
+    if (!pending) {
+      pending = (async () => {
+        const log = await resolveLog(did);
+        if (log === undefined || log === null) return log;
+        const check = await checkPin(did, log, store);
+        if (check.status === "different-identity" || check.status === "rolled-back-or-forked") return undefined;
+        await check.advance();
+        return log;
+      })();
+      cache.set(did, pending);
+    }
+    return pending;
+  };
 }

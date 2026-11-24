@@ -1,6 +1,7 @@
+import { canonicalize } from "./crypto.js";
 import { guardiansCanApprove, requiredApprovals } from "./quorum.js";
 import { invalid, sameEntry, VALID, type ShapeResult } from "./operations.js";
-import type { Entry, Key, Operation, State } from "./types.js";
+import type { Entry, Key, Operation, Policy, State } from "./types.js";
 import { DEFAULT_POLICY } from "./types.js";
 
 /** REQ-5-16: a key approves if it produced a valid proof. */
@@ -19,6 +20,14 @@ function oneCurrentKey(validKeys: Set<Key>, state: State): boolean {
 
 function countApprovingGuardians(validKeys: Set<Key>, entries: Entry[]): number {
   return entries.filter((e) => entryApproves(validKeys, e)).length;
+}
+
+/** The REQ-6-8/REQ-6-9 "guardians per membership" clause alone, exported for accept.ts's own REQ-10-7 row 5: it needs to know whether membership would already be met counting only guardians the registrar can confirm still have standing, independent of the successor-to-null waiver. */
+export function membershipApproved(stateBefore: State, validKeys: Set<Key>): boolean {
+  const n = stateBefore.guardians.length;
+  if (n === 0) return true;
+  const required = requiredApprovals("membership", stateBefore.policy.membership ?? DEFAULT_POLICY.membership, n, n);
+  return guardiansCanApprove(required, n) && countApprovingGuardians(validKeys, stateBefore.guardians) >= required;
 }
 
 /** REQ-7-6/REQ-7-7: create. */
@@ -91,11 +100,47 @@ export function checkRemoveGuardianApprovals(op: Extract<Operation, { type: "rem
   );
 }
 
+/** D2 (clean-room r7/r7b, Z-1 and Z-3 fixes): the effective value of every `Policy` member that has a default, plus `maxWards`/`extensions` only when present -- `orphan` is deliberately excluded, since the waiver below compares everything else and requires `orphan` specifically to become "deactivate". */
+function effectivePolicyExceptOrphan(policy: Policy): object {
+  return {
+    recovery: policy.recovery ?? DEFAULT_POLICY.recovery,
+    membership: policy.membership ?? DEFAULT_POLICY.membership,
+    removal: policy.removal ?? DEFAULT_POLICY.removal,
+    deactivation: policy.deactivation ?? DEFAULT_POLICY.deactivation,
+    ...(policy.maxWards !== undefined ? { maxWards: policy.maxWards } : {}),
+    ...(policy.extensions !== undefined ? { extensions: policy.extensions } : {}),
+  };
+}
+
+/**
+ * D2/Z-3 (clean-room r7/r7b): a `setPolicy` that only drops a successor
+ * that has lost standing (REQ-10-7's own row 5 is the real, registrar-
+ * side gate on whether that's actually true) doesn't need full
+ * `membership` approval -- but only for the single, narrow, mechanical
+ * change this describes, not for "the successor changed" in general.
+ * Z-3's own fix is this exact explicit condition: every policy member
+ * other than `orphan` stays exactly as it was (defaults filled in on
+ * both sides so an explicit default and an absent member compare
+ * equal), no `critical` is added, and `orphan` becomes "deactivate" --
+ * the only value it CAN become once `successor` is null (REQ-6-14).
+ * Canonicalized (JCS) rather than compared field-by-field so that two
+ * semantically identical `extensions` objects with different key order
+ * still compare equal, same reasoning as every other hash/compare in
+ * this library.
+ */
+export function isSuccessorToNullWaiver(op: Extract<Operation, { type: "setPolicy" }>, stateBefore: State): boolean {
+  if (!stateBefore.successor) return false;
+  if (op.successor !== null) return false;
+  if (op.critical !== undefined) return false;
+  if ((op.policy.orphan ?? DEFAULT_POLICY.orphan) !== "deactivate") return false;
+  return canonicalize(effectivePolicyExceptOrphan(op.policy)) === canonicalize(effectivePolicyExceptOrphan(stateBefore.policy));
+}
+
 /** REQ-7-6/REQ-7-20: setPolicy. */
 export function checkSetPolicyApprovals(op: Extract<Operation, { type: "setPolicy" }>, stateBefore: State, validKeys: Set<Key>): ShapeResult {
   if (!oneCurrentKey(validKeys, stateBefore)) return invalid("REQ-7-6: setPolicy requires one current key");
   const n = stateBefore.guardians.length;
-  if (n > 0) {
+  if (n > 0 && !isSuccessorToNullWaiver(op, stateBefore)) {
     const e = n;
     const required = requiredApprovals("membership", stateBefore.policy.membership ?? DEFAULT_POLICY.membership, n, e);
     if (!guardiansCanApprove(required, e)) return invalid("REQ-6-9: guardians cannot approve this setPolicy");

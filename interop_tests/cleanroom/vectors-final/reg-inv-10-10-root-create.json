@@ -1,0 +1,35 @@
+{
+ "description": "REQ-10-10 (r7): a registrar does not accept a create of its root identity through REQ-10-1",
+ "did": "did:guardian:acme.com",
+ "log": [],
+ "resolver": {},
+ "expect": {
+  "result": "rejected"
+ },
+ "targets": "REQ-10-10",
+ "anchor": "zQmVzV583itn1NeEVj3vURsRhZjH6ktNDVjHqVLzv8fFPed",
+ "kind": "registrar",
+ "op": {
+  "type": "create",
+  "did": "did:guardian:acme.com",
+  "keys": [
+   "zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha"
+  ],
+  "guardians": [],
+  "successor": null,
+  "policy": {},
+  "services": [],
+  "alsoKnownAs": [],
+  "prev": null,
+  "proof": [
+   {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:key:zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha#zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha",
+    "proofValue": "z6bDMU9GLA6fvUpkKuuXcWkgiVFfDdzcPT6FfHAZSqwAP79MFeViGWAYH7tihxTnSpypKDd4mH91PByN1xyU8m96"
+   }
+  ]
+ },
+ "segment": "_"
+}

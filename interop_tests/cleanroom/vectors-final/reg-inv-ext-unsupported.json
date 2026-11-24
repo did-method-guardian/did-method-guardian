@@ -86,6 +86,7 @@
    }
   ]
  },
+ "segment": "alice",
  "targets": "REQ-10-5",
  "base": "reg-ACK-ext-critical-N0",
  "implemented": []

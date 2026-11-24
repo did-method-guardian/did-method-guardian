@@ -86,6 +86,7 @@
    "proofValue": "z3tCPUTMxXiKSzuHz7Yk6R58krmnJBNBkEVQwgvKRDRYyTmyJP9c7tb4ifrdWQhoyttxBzQsisHr75CBsd5MPQGXB"
   }
  },
+ "segment": "alice",
  "targets": "REQ-10-8",
  "base": "reg-create"
 }

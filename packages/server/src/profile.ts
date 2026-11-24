@@ -93,6 +93,104 @@ export async function registerIdentity(env: Env, name: string, options: { public
   throw new RegistrarError("a self-supplied key must submit its own signed create operation directly", 400);
 }
 
+/**
+ * Whether this registrar holds a key for `guardianDid` at all --
+ * `registerManagedIdentity`'s single-request flow needs to sign AS the
+ * guardian itself (not just verify who it is), so it only works when
+ * the consenting guardian's own identity is also held here. A
+ * federated guardian (registrar/index.md §9: "the guardian's identity
+ * doesn't have to live on this same registrar") has no held key here
+ * at all -- the caller falls back to the ordinary two-step adopt flow
+ * for that case instead.
+ */
+export async function isGuardianHeldHere(env: Env, guardianDid: Did): Promise<boolean> {
+  return (await getHeldKey(env, guardianDid)) !== null;
+}
+
+/**
+ * D3 (user-decided design, 2026-11-23; spec r7/r7b's REQ-10-13/10-14
+ * exception unblocks it): a single request both creates a new
+ * identity AND names its own consenting guardian -- something
+ * registerIdentity's own comment above explains couldn't be done
+ * before this revision. The guardian's `acceptWard` goes first, in
+ * this SAME request: REQ-5-7's anchor excludes `proof`, `attestation`,
+ * `guardians` and `successor`, so it's already computable from the
+ * create's other fields before the create itself is ever finalized,
+ * which is exactly what lets `acceptWard` name it ahead of time.
+ * `guardianAuth` must already be authenticated as the consenting
+ * guardian (an OIDC access token's own verified `sub` --see signing.ts's
+ * authenticatedViaAccessToken -- or any other already-checked session);
+ * this function produces that guardian's own proofs on BOTH documents
+ * below, plus the brand-new ward's own create proof, which is exactly
+ * what REQ-10-14's new exception allows beyond the usual one identity
+ * per request.
+ */
+export async function registerManagedIdentity(
+  env: Env,
+  name: string,
+  guardianAuth: AuthenticatedRequest,
+  options: { password?: string },
+): Promise<{ did: Did; loginSecret?: string }> {
+  if (!isValidName(name)) throw new RegistrarError(`invalid name "${name}" -- must be 3-32 lowercase alphanumeric/hyphen characters, no leading/trailing/double hyphens`, 400);
+  const guardianDid = guardianAuth.identity;
+  const guardianLog = await getLog(env, guardianDid);
+  if (guardianLog.length === 0) throw new RegistrarError("no such guardian identity", 404);
+  const guardianVerified = await verifyLog(guardianDid, guardianLog);
+  if (guardianVerified.result !== "valid") throw new RegistrarError("this guardian's own log does not verify", 500);
+  const guardianAnchor = await anchorOf(guardianLog[0] as CreateOp);
+
+  const did = didForSegment(env, name);
+  const keypair = await generateKeypair();
+  const publicKey = keypair.publicKey as Key;
+
+  const createBase: Omit<CreateOp, "proof" | "attestation" | "guardians"> = {
+    type: "create",
+    did,
+    keys: [publicKey],
+    successor: null,
+    policy: {},
+    services: [],
+    alsoKnownAs: [],
+    prev: null,
+  };
+  // REQ-5-7: computable now -- guardians isn't part of the anchor.
+  const wardAnchor = await anchorOf(createBase as unknown as CreateOp);
+
+  const acceptBase: Omit<AcceptWardOp, "proof"> = { type: "acceptWard", ward: { did, anchor: wardAnchor }, prev: await currentPrev(env, guardianDid) };
+  const acceptProof = await signAs(env, guardianAuth, guardianDid, acceptBase);
+  const acceptOp = (await submitOperation(env, guardianDid, { ...acceptBase, proof: [acceptProof] })).operation as AcceptWardOp;
+  const consentHash = await operationHash(acceptOp);
+
+  const entry: Entry = { did: guardianDid, anchor: guardianAnchor, keys: guardianVerified.state!.keys, consent: consentHash };
+  const createOp: Omit<CreateOp, "proof" | "attestation"> = { ...createBase, guardians: [entry] };
+
+  const newKeyProof = await createProof(createOp, publicKey, keypair.privateKey);
+  const guardianProofOnCreate = await signAs(env, guardianAuth, guardianDid, createOp);
+  const proof = sortProofs([newKeyProof, guardianProofOnCreate]);
+
+  const accepted = (await submitOperation(env, did, { ...createOp, proof } as CreateOp)).operation as CreateOp;
+  void accepted;
+
+  const now = new Date().toISOString();
+  let loginSecret: string | undefined;
+  let loginSecretHash: string;
+  if (options.password) {
+    loginSecretHash = await hashPassword(options.password);
+  } else {
+    loginSecret = randomSecret();
+    loginSecretHash = await hashPassword(loginSecret);
+  }
+  await insertHeldKey(env, {
+    did,
+    public_key: publicKey,
+    private_key_enc: await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY),
+    login_secret_hash: loginSecretHash,
+    created_at: now,
+  });
+
+  return { did, loginSecret };
+}
+
 /** REQ-10-13: generates a fresh login secret for a held identity, or sets an operator-chosen password -- never a new operation, since the login secret is this registrar's own bookkeeping, not part of the DID's own state. */
 export async function reissueLoginSecret(env: Env, did: Did, password?: string): Promise<string | undefined> {
   const held = await getHeldKey(env, did);

@@ -68,7 +68,14 @@ export function registerResolveCommand(program: Command): void {
       if (await reportPin(did, log, store)) sawFailure.value = true;
       const resolveLog = pinningResolver(makeLiveResolver(), store, sawFailure);
 
-      const result = await resolve(did, log, resolveLog, undefined, opts.versionId);
+      // REQ-11-9: passing this DID's own recorded pin into resolve()
+      // itself (rather than only reportPin's separate, parallel check
+      // above) means a rollback/fork/different-identity on the TARGET
+      // DID makes resolve() itself report invalid, with no document --
+      // not merely a logged warning alongside a document this command
+      // still printed anyway.
+      const recordedPin = await store.get(did);
+      const result = await resolve(did, log, resolveLog, undefined, opts.versionId, recordedPin);
       if (result.result !== "valid") {
         console.log(`${result.result.toUpperCase()}${result.reason ? ` -- ${result.reason}` : ""}`);
         process.exitCode = 1;

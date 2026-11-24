@@ -3,9 +3,9 @@ import type { DataIntegrityProof, Did, Operation, RemoveGuardianOp, UpdateOp } f
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
 import { getResourceDocument, getResourceLog, submitOperation } from "./registrar.js";
-import { registerIdentity, reissueLoginSecret, rotateHeldKey, takeCustody, deactivateSelf, removeGuardianSelf, removeGuardianWithEvidence, proposeAdopt, confirmAdopt } from "./profile.js";
+import { registerIdentity, registerManagedIdentity, isGuardianHeldHere, reissueLoginSecret, rotateHeldKey, takeCustody, deactivateSelf, removeGuardianSelf, removeGuardianWithEvidence, proposeAdopt, confirmAdopt } from "./profile.js";
 import { proposeOperation, contributeProof, cancelPendingOperation, getPendingOperationStatus, listPendingForDid, expirePendingOperations } from "./pendingProofs.js";
-import { authenticateRequest } from "./signing.js";
+import { authenticateRequest, authenticatedViaAccessToken } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { handleOidcRequest, verifyAccessToken } from "./oidc.js";
 import { handleEmail, requestEmailForwarding, confirmEmailForwarding } from "./email.js";
@@ -458,19 +458,30 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
         return error("this registrar doesn't accept public registration -- a Managed Identity API access token is required", 403);
       }
 
-      const result = await registerIdentity(env, body.name, { password: body.password });
+      // D3 (spec r7/r7b's REQ-10-13/10-14 exception unblocks this): a
+      // single create names its own consenting guardian when one is
+      // given AND this registrar holds a key for that guardian (it
+      // has to sign as the guardian itself, not just verify who it
+      // is) -- see registerManagedIdentity's own comment for why this
+      // is now allowed. A federated guardian (§9: "doesn't have to
+      // live on this same registrar") has no held key here, so that
+      // case still falls back to the ordinary two-step adopt flow,
+      // echoed back as a DID to complete it with.
+      const guardianHeldHere = guardianDid ? await isGuardianHeldHere(env, guardianDid) : false;
+      const result =
+        guardianDid && guardianHeldHere
+          ? await registerManagedIdentity(env, body.name, authenticatedViaAccessToken(guardianDid), { password: body.password })
+          : await registerIdentity(env, body.name, { password: body.password });
 
-      // REQ-10-14: apart from the attestation, one request must not
-      // cause this registrar to create proofs for more than one
-      // identity. Completing the adopt flow here too (the guardian's
-      // own proof, then the new identity's own proof, both within this
-      // same POST /register) would do exactly that -- even when this
-      // registrar holds both keys. The consenting guardian (named by
-      // the Managed Identity API's access token, if any) is added
-      // afterward instead, through the ordinary two-step adopt flow, as
-      // its own separate requests -- echoed back here only as a DID to
-      // act on, never as a proof produced for it.
-      return json({ did: result.did, login_secret: result.loginSecret, guardian_pending: guardianDid }, 201);
+      return json(
+        {
+          did: result.did,
+          login_secret: result.loginSecret,
+          ...(guardianDid && guardianHeldHere ? { guardian: guardianDid } : {}),
+          ...(guardianDid && !guardianHeldHere ? { guardian_pending: guardianDid } : {}),
+        },
+        201,
+      );
     } catch (e) {
       return errorFrom(e, "register error");
     }

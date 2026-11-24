@@ -1,0 +1,138 @@
+{
+ "description": "a request authenticated as bob creates alice; the registrar signs with held keys for bob and for alice, the identity the request creates (r7 exception)",
+ "did": "did:guardian:acme.com:alice",
+ "log": [],
+ "resolver": {
+  "did:guardian:acme.com": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com",
+    "keys": [
+     "zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha#zDnaeTHiJyzumHnEbZ7Yj85qyU6RLPzD32FBXLw9BvoSUNCha",
+      "proofValue": "z6bDMU9GLA6fvUpkKuuXcWkgiVFfDdzcPT6FfHAZSqwAP79MFeViGWAYH7tihxTnSpypKDd4mH91PByN1xyU8m96"
+     }
+    ]
+   }
+  ],
+  "did:guardian:acme.com:bob": [
+   {
+    "type": "create",
+    "did": "did:guardian:acme.com:bob",
+    "keys": [
+     "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz"
+    ],
+    "guardians": [],
+    "successor": null,
+    "policy": {},
+    "services": [],
+    "alsoKnownAs": [],
+    "prev": null,
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+      "proofValue": "z4kj7FfZyT4grw1EvuutNrdbmT5YLJhiRJmtSrfybf2i3meRhqjUmKh7PK9PJXh7em5pCxcd6miLr565pbHKVUwPs"
+     }
+    ],
+    "attestation": {
+     "type": "DataIntegrityProof",
+     "cryptosuite": "ecdsa-jcs-2019",
+     "proofPurpose": "capabilityInvocation",
+     "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+     "proofValue": "zybhJXQKCYHAGv5ZN66dpBJtH8BW9zTT86Fk1oyjuZjedkHKHrdqQnnFHXR8SoV4xtBg1XNxKfQ4W33CVzPwpxhH"
+    }
+   },
+   {
+    "type": "acceptWard",
+    "ward": {
+     "did": "did:guardian:acme.com:alice",
+     "anchor": "zQmUnsxMJTwbuffPkEWtsydcZJuAJmW1HV8DHYt5Rx5wMh1"
+    },
+    "prev": "zQmZbDcG59CYPWMgveS4i3kQk7mjSnGDrrMzZELGTorVN2t",
+    "proof": [
+     {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "ecdsa-jcs-2019",
+      "proofPurpose": "capabilityInvocation",
+      "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+      "proofValue": "z2BgHFvJuPmYyGYiSkn6WfBqM7TkihC1M7pLTtnnRn1xhn2mfRCev5EKujAXjj871AiwFhrs7BdvMJ8rtrA8eBbmp"
+     }
+    ]
+   }
+  ]
+ },
+ "expect": {
+  "result": "accepted"
+ },
+ "kind": "registrar",
+ "op": {
+  "type": "create",
+  "did": "did:guardian:acme.com:alice",
+  "keys": [
+   "zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi"
+  ],
+  "guardians": [
+   {
+    "did": "did:guardian:acme.com:bob",
+    "anchor": "zQmaeXgnsTJYCmW3PvvAw8kCvH2nsW7xEqNdFy185PG7f1d",
+    "keys": [
+     "zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz"
+    ],
+    "consent": "zQmPhPg8spAQhtBYcskb5NPHsNxjBhciABFmgfVibAgLxxs"
+   }
+  ],
+  "successor": null,
+  "policy": {},
+  "services": [],
+  "alsoKnownAs": [],
+  "prev": null,
+  "proof": [
+   {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
+    "proofValue": "z4nmueDF9uNLuRD7J9tJooFNuixVyEVSA4deyQCgBEyjgWpWXAMSUrpaTMMsWm47LmEuaezr42HwRykkJdx1MQFf7"
+   },
+   {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "ecdsa-jcs-2019",
+    "proofPurpose": "capabilityInvocation",
+    "verificationMethod": "did:key:zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi#zDnaeqhY9tuxzKR9jrqkPP3V5Ji2MU3qS1urBnLQK3fRASBPi",
+    "proofValue": "z3fa33nwzPnYphijXguYALcYorgxAYRPcCLqWuiLDLzLowNuLb86UCMhBSf94zLmG1u7NgjKUeArhCCnJTBDzo5FL"
+   }
+  ],
+  "attestation": {
+   "type": "DataIntegrityProof",
+   "cryptosuite": "ecdsa-jcs-2019",
+   "proofPurpose": "capabilityInvocation",
+   "verificationMethod": "did:guardian:acme.com?versionId=zQmVoFY8f71aZhDxJEzWthiPb6rDM3mvwMdu8veASTNNwXg#key-0",
+   "proofValue": "z4jhPj6262tGW455ydfKhjZAQoR9w2GT55fnBhoEEJdBW5JzcRFGmuEKTFooxr2RT1LLsRBLA41gSEyHajqp3yPng"
+  }
+ },
+ "segment": "alice",
+ "request": {
+  "authenticatedAs": "did:guardian:acme.com:bob",
+  "registrarProofs": [
+   "did:guardian:acme.com:alice",
+   "did:guardian:acme.com:bob"
+  ]
+ },
+ "targets": "REQ-10-14",
+ "base": "reg-appendix-create"
+}

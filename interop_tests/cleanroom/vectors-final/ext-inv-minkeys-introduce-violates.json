@@ -93,6 +93,6 @@
  "expect": {
   "result": "invalid"
  },
- "targets": "REQ-7-33",
+ "targets": "REQ-7-31",
  "base": "ext-minkeys-introduce"
 }

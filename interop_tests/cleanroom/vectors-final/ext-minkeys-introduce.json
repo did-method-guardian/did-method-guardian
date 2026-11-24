@@ -93,6 +93,6 @@
  "expect": {
   "result": "valid"
  },
- "targets": null,
+ "targets": "REQ-7-35",
  "anchor": "zQmfR5tnTdX1PX93W9wthBrUH4jmx61fMFo6SVUQp6A7Mez"
 }

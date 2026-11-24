@@ -126,6 +126,22 @@ function checkStateShape(did: Did, state: State): ShapeResult {
   if (!alsoKnownAsShape.valid) return alsoKnownAsShape;
   const keyOverlap = checkKeyOverlap(state.keys, state.guardians, state.successor);
   if (!keyOverlap.valid) return keyOverlap;
+  // REQ-7-30 (Z-9, clean-room r7): a name, once critical, stays
+  // critical forever (REQ-7-32) -- but `critical` and `policy.extensions`
+  // are independent, and only `setPolicy` can touch `policy`. A
+  // `setPolicy` that replaces `policy.extensions` wholesale, without
+  // re-naming an already-critical extension in its own `critical`,
+  // could otherwise drop that extension's configuration out from under
+  // a rule that's still supposed to be in force. checkCriticalShape
+  // (operations.ts) only checks THIS operation's own newly-added
+  // names against THIS operation's own policy.extensions; this is the
+  // state-level check for every name ever made critical, by any
+  // earlier operation too.
+  for (const name of state.critical) {
+    if (!state.policy.extensions || !(name in state.policy.extensions)) {
+      return invalid(`REQ-7-30: policy.extensions must contain "${name}" while it is in the state's critical`);
+    }
+  }
   const minKeysShape = checkMinKeysExtension(state);
   if (!minKeysShape.valid) return minKeysShape;
   return VALID;

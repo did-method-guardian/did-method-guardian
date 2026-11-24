@@ -221,6 +221,7 @@
    }
   ]
  },
+ "segment": "alice",
  "targets": "REQ-10-5",
  "base": "reg-add-N1"
 }

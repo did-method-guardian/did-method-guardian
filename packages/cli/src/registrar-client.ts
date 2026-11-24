@@ -8,7 +8,9 @@ import type { DataIntegrityProof, Did, Log, LogResolver, Operation } from "@did-
 export interface RegisterResult {
   did: Did;
   login_secret?: string;
-  /** REQ-10-14: a consenting guardian named via a Managed Identity API access token is never auto-added in the same request that creates this identity -- echoed back here as a DID to complete the ordinary two-step adopt flow with, never as a proof already produced for it. */
+  /** D3 (spec r7/r7b): set when a Managed Identity API access token named a consenting guardian this registrar also holds a key for -- that guardian is already part of this identity's own create (REQ-10-13/10-14's new exception), not merely pending a separate adopt flow. */
+  guardian?: Did;
+  /** Set instead of `guardian` when the consenting guardian is federated (hosted on a different registrar) -- this registrar has no held key to sign as it with, so the relationship still needs the ordinary two-step adopt flow, completed separately against this DID. */
   guardian_pending?: Did;
 }
 

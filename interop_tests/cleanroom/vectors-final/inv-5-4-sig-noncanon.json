@@ -45,7 +45,7 @@
      "cryptosuite": "ecdsa-jcs-2019",
      "proofPurpose": "capabilityInvocation",
      "verificationMethod": "did:key:zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz#zDnaebUL8bVktQyP34fWGaMMsVXFt7zmSDBbvS7FSQxvjtVaz",
-     "proofValue": "z34MAqS9MRTjWqfN13bqbq49FE79ZA1kAurzAWFvuotBNkvWso5CE1bXBvuoo2hssvtgZmqwB8NsisAs44HuC2Y3x"
+     "proofValue": "z4R4Y9vkcRnB5Z7bt8bsMPWjEGdR58RQjyxjwS9vYbbxtDik6xeGPdv4pvMZoVk7vY2cKRgp7cdbJHx8ZF8pQQh2q"
     },
     {
      "type": "DataIntegrityProof",

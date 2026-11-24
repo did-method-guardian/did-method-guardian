@@ -150,6 +150,7 @@
    "proofValue": "z4jhPj6262tGW455ydfKhjZAQoR9w2GT55fnBhoEEJdBW5JzcRFGmuEKTFooxr2RT1LLsRBLA41gSEyHajqp3yPng"
   }
  },
+ "segment": "alice",
  "targets": "REQ-10-7",
  "base": "reg-appendix-create"
 }

@@ -17,6 +17,7 @@ import {
   type Key,
   type Log,
   type Operation,
+  type PinStore,
 } from "@did-guardian/lib";
 import {
   appendOperation,
@@ -24,11 +25,13 @@ import {
   getHeldKey,
   getLog,
   getNameEntry,
+  getPin,
   insertHeldKey,
   insertNameEntry,
   invalidateLoginSecretHash,
   setHeldKeyLoginSecretHash,
   setHeldKeyLoginSecretHashForRecovery,
+  setPin,
 } from "./db.js";
 import { makeResolveLog } from "./logResolver.js";
 import { signAttestation } from "./signing.js";
@@ -47,6 +50,19 @@ export function segmentFor(did: Did, env: Env): string | undefined {
 
 export function didForSegment(env: Env, segment: string): Did {
   return didFor(segment === "_" ? null : segment, env.REGISTRAR_DOMAIN) as Did;
+}
+
+/** REQ-10-15: this registrar's own D1-backed PinStore, for every log checkAcceptance fetches under REQ-10-7. Not scoped to this registrar's own domain -- a guardian or successor can be hosted anywhere. */
+function d1PinStore(env: Env): PinStore {
+  return {
+    get: async (did) => {
+      const row = await getPin(env, did);
+      return row ? { anchor: row.anchor, version: row.version } : undefined;
+    },
+    set: async (did, record) => {
+      await setPin(env, did, record.anchor, record.version);
+    },
+  };
 }
 
 /**
@@ -170,19 +186,26 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
     // from a GET: REQ-10-2).
     await ensureRootIdentity(env);
 
-    // REQ-10-9: the name must be unused -- a pre-check here for a clear
-    // rejection reason; insertNameEntry's own unique constraint (after
-    // acceptance, below) is what actually makes this race-free.
-    const existingName = await getNameEntry(env, parsed.domain, parsed.name);
-    if (existingName) throw new RegistrarError("REQ-10-12: this name is already used");
-
     // REQ-10-9: add the attestation before REQ-10-5 applies.
     toAccept = { ...candidate, attestation: await signAttestation(env, candidate) };
   } else if (existingLog.length === 0) {
     throw new RegistrarError("REQ-10-5: this identity has no log yet");
   }
 
-  const result = await checkAcceptance(did, existingLog, toAccept, resolveLog);
+  // REQ-10-12 (r7: only an ACCEPTED create uses up a name -- getNameEntry
+  // only ever returns a row once insertNameEntry has run, below, which
+  // itself only ever runs after acceptance). A pre-check here just gives
+  // a clearer rejection reason than falling through to checkAcceptance's
+  // own generic one; insertNameEntry's own unique constraint (after
+  // acceptance, below) is what actually makes this race-free.
+  const acceptedNames =
+    candidate.type === "create" && existingLog.length === 0 && parsed.name !== null && (await getNameEntry(env, parsed.domain, parsed.name)) ? new Set([parsed.name]) : undefined;
+
+  const result = await checkAcceptance(did, existingLog, toAccept, resolveLog, undefined, {
+    segment: segmentFor(did, env),
+    acceptedNames,
+    pinStore: d1PinStore(env),
+  });
   if (!result.accepted) throw new RegistrarError(result.reason ?? "REQ-10-5: rejected");
 
   if (toAccept.type === "create") {

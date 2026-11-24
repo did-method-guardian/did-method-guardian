@@ -224,6 +224,28 @@ export function isValidFragment(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("#") && FRAGMENT_CHARS_RE.test(value.slice(1));
 }
 
+/**
+ * Z-6 (clean-room r7 finding): REQ-6-6 bans a service id that begins
+ * with "#key-" so a service id can never collide with a verification
+ * method id (document.ts's own `${did}#key-${n}`) -- but a literal
+ * `startsWith("#key-")` check alone is bypassed by `#key-%30` (percent-
+ * encoded "0"), which is a DIFFERENT fragment string that decodes to
+ * the SAME banned one. Decode first, then check -- a fragment that
+ * isValidFragment already accepted is well-formed pct-encoded ASCII,
+ * so decodeURIComponent never throws here; the try/catch only guards
+ * against ever being called with something that wasn't already
+ * validated that way.
+ */
+export function startsWithKeyFragmentAfterDecoding(id: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(id);
+  } catch {
+    return false;
+  }
+  return decoded.startsWith("#key-");
+}
+
 /** REQ-6-1: keys, 1 to 8 distinct entries. */
 export function checkKeysShape(keys: unknown): ShapeResult {
   if (!Array.isArray(keys)) return invalid("keys must be an array");
@@ -316,6 +338,7 @@ export function checkServiceShape(services: unknown): ShapeResult {
     if (!isPlainObject(s)) return invalid("REQ-6-6: a service must be an object");
     if (!hasExactMembers(s, ["id", "type", "serviceEndpoint"])) return invalid("REQ-6-6: a service must contain exactly id, type and serviceEndpoint");
     if (!isValidFragment(s.id)) return invalid('REQ-6-6: service.id must be "#" followed by a DID URL fragment');
+    if (startsWithKeyFragmentAfterDecoding(s.id)) return invalid('REQ-6-6: service.id must not begin with "#key-" after percent-decoding');
     if (typeof s.type !== "string") return invalid("REQ-6-6: service.type must be a string");
     if (!isValidUri(s.serviceEndpoint)) return invalid("REQ-6-6: service.serviceEndpoint must be a URI");
     if (ids.has(s.id)) return invalid("REQ-6-1: two services must not have the same id");

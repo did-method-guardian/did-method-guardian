@@ -8,7 +8,7 @@ status: Draft
 date: '2026-10-24'
 editors:
   - Troy Howard
-updated_at: '2026-11-22'
+updated_at: '2026-11-23'
 ---
 <script type="application/ld+json">
 {
@@ -23,7 +23,7 @@ updated_at: '2026-11-22'
 
 # The did:guardian Method, v0.2.0
 
-Status: Draft, 2026-11-22.
+Status: Draft, 2026-11-23.
 
 ## 1. Overview
 
@@ -64,16 +64,22 @@ This specification defines requirements for identities, registrars and resolvers
 : An identity named in another identity's `guardians`.
 
 **ward**
-: An identity that names a guardian.
+: An identity that names a guardian or a successor.
 
 **successor**
 : An identity named in another identity's `successor`. It becomes the guardian when the last guardian is removed (Section 6.2).
 
 **entry**
-: The record of a guardian or a successor in a ward's state (REQ-6-2).
+: The record of a guardian or a successor in a ward's state (REQ-6-2). Two entries are equal if their `did`, `anchor` and `consent` are equal and their `keys` are equal (REQ-5-5).
 
 **registrar**
 : The service that hosts the logs for a domain.
+
+**verifier**
+: A party that verifies a log (Section 8).
+
+**proof**
+: An element of an operation's `proof` member. The `attestation` is not a proof.
 
 **root identity**
 : The identity `did:guardian:<domain>`, which belongs to the registrar of that domain.
@@ -185,15 +191,15 @@ The operation hash of an operation is the hash of the complete operation.
 | `deactivated` | `true` or `false` |
 | `critical` | a list of distinct extension names (Section 7.11) |
 
-<a id="req-6-2"></a>**REQ-6-2.** An entry MUST contain exactly the members `did`, `anchor`, `keys` and `consent`. `did` is a did:guardian DID. `anchor` is the anchor of that DID's log. `keys` is a list of 1 to 8 distinct keys. `consent` is the operation hash of an `acceptWard` in that DID's log.
+<a id="req-6-2"></a>**REQ-6-2.** An entry MUST contain exactly the members `did`, `anchor`, `keys` and `consent`. `did` is a did:guardian DID. `anchor` and `consent` are hashes (REQ-5-6). `keys` is a list of 1 to 8 distinct keys. REQ-10-6 defines what `anchor` and `consent` name.
 
 <a id="req-6-3"></a>**REQ-6-3.** A key MUST NOT appear more than once across `keys`, the `keys` of every entry in `guardians`, and the `keys` of `successor`.
 
-<a id="req-6-4"></a>**REQ-6-4.** A ward record MUST contain exactly the members `did` and `anchor`. `did` is a did:guardian DID. `anchor` is the anchor of that DID's log.
+<a id="req-6-4"></a>**REQ-6-4.** A ward record MUST contain exactly the members `did` and `anchor`. `did` is a did:guardian DID. `anchor` is a hash (REQ-5-6).
 
 <a id="req-6-5"></a>**REQ-6-5.** The DID of an identity MUST NOT appear in its `guardians`, its `successor` or its `wards`. The DID of `successor` MUST NOT appear in `guardians`.
 
-<a id="req-6-6"></a>**REQ-6-6.** A service MUST contain exactly the members `id`, `type` and `serviceEndpoint`. `id` MUST be `#` followed by a DID URL fragment. `type` MUST be a string. `serviceEndpoint` MUST be a URI (RFC 3986).
+<a id="req-6-6"></a>**REQ-6-6.** A service MUST contain exactly the members `id`, `type` and `serviceEndpoint`. `id` MUST be `#` followed by a DID URL fragment, and MUST NOT begin with `#key-` after percent-decoding. `type` MUST be a string. `serviceEndpoint` MUST be a URI (RFC 3986).
 
 <a id="req-6-7"></a>**REQ-6-7.** After each operation, the state MUST conform to REQ-6-1 through REQ-6-6 and Section 6.3.
 
@@ -257,7 +263,7 @@ In the following rules:
 - "guardians per s" means approvals from the number of current guardians that REQ-6-8 requires for setting s;
 - "every key in X" means approval by every key in the list X in the operation.
 
-For a `create`, the state before the operation is empty and N is 0.
+For a `create`, there is no current key, guardian or successor, and N is 0.
 
 <a id="req-7-5"></a>**REQ-7-5.** Every proof on an operation MUST come from one of these keys: a key in `keys`, in an entry in `guardians`, or in `successor`, in the state before the operation; or a key in a list of keys in the operation.
 
@@ -270,7 +276,7 @@ For a `create`, the state before the operation is empty and N is 0.
 | `addGuardian` | every key in `entry`; one current key; and guardians per `membership`, if N > 0 |
 | `updateGuardian` | every key in `keys`; and either a key in the named entry, or one current key together with one guardian other than the named one |
 | `removeGuardian` | one of: the removed guardian, if N ≥ 2; guardians per `removal`, from the guardians other than the removed one; one current key, if `evidence` is present; or one current key together with the successor, if N = 1 and `successor` is an entry |
-| `setPolicy` | one current key; guardians per `membership`, if N > 0; and every key in `successor`, if it is an entry that differs from the current `successor` |
+| `setPolicy` | one current key; guardians per `membership`, if N > 0, unless the state before has a `successor` entry, the operation's `successor` is `null`, the operation has no `critical`, and its `policy`, with absent members taken at their defaults, equals the current one except that `orphan` is `"deactivate"`; and every key in `successor`, if it is an entry that differs from the current `successor` |
 | `acceptWard` | one current key, or guardians per `recovery` |
 | `releaseWard` | one current key, or guardians per `recovery` |
 | `deactivate` | if N = 0, one current key; otherwise, as `policy.deactivation.by` specifies: `self`, one current key; `guardians`, guardians per `deactivation.threshold`; `either`, one of the two; `both`, both |
@@ -281,7 +287,7 @@ For a `create`, the state before the operation is empty and N is 0.
 
 <a id="req-7-8"></a>**REQ-7-8.** `did` is the DID of the identity. `keys`, `guardians`, `successor`, `policy`, `services` and `alsoKnownAs` set the initial state. `wards` is empty and `deactivated` is `false`.
 
-<a id="req-7-9"></a>**REQ-7-9.** `attestation` MUST be a Data Integrity proof as in REQ-5-11, except that its `cryptosuite` may be any string and its `verificationMethod` is `did:guardian:<domain>?versionId=<version>#key-<n>`, where `<domain>` is the domain of `did`, `<version>` is a version of the root identity's log, and `<n>` is a decimal integer without leading zeros. It secures the same document as the other proofs (REQ-5-12). Section 11 defines how it is verified.
+<a id="req-7-9"></a>**REQ-7-9.** `attestation` MUST be an object with the members and values of REQ-5-11, except that its `cryptosuite` can be any string and its `verificationMethod` is `did:guardian:<domain>?versionId=<version>#key-<n>`, where `<domain>` is the domain of `did`, `<version>` is a version of the root identity's log, and `<n>` is a decimal integer without leading zeros. It secures the same document as the proofs (REQ-5-12).
 
 ### 7.4 update
 
@@ -307,7 +313,7 @@ For a `create`, the state before the operation is empty and N is 0.
 
 <a id="req-7-17"></a>**REQ-7-17.** A `removeGuardian` MUST contain the members `type`, `guardian`, `prev` and `proof`. It MAY contain the member `evidence`. `guardian` is the DID of a current guardian.
 
-<a id="req-7-18"></a>**REQ-7-18.** If present, `evidence` is the operation hash of a `deactivate`, or of a `releaseWard` whose `ward` is this identity, in the log of `guardian`.
+<a id="req-7-18"></a>**REQ-7-18.** If present, `evidence` is a hash (REQ-5-6). REQ-10-7 defines what it names.
 
 <a id="req-7-19"></a>**REQ-7-19.** `removeGuardian` removes the entry for `guardian`, and then applies REQ-6-10.
 
@@ -319,13 +325,13 @@ For a `create`, the state before the operation is empty and N is 0.
 
 ### 7.9 acceptWard and releaseWard
 
-<a id="req-7-22"></a>**REQ-7-22.** A `acceptWard` MUST contain the members `type`, `ward`, `prev` and `proof`. `ward` is a ward record (REQ-6-4).
+<a id="req-7-22"></a>**REQ-7-22.** An `acceptWard` MUST contain the members `type`, `ward`, `prev` and `proof`. `ward` is a ward record (REQ-6-4).
 
 <a id="req-7-23"></a>**REQ-7-23.** The DID of `ward` MUST NOT already be in `wards`.
 
 <a id="req-7-24"></a>**REQ-7-24.** `acceptWard` appends `ward` to `wards`. It records that the identity consents to be a guardian or successor of that ward.
 
-<a id="req-7-25"></a>**REQ-7-25.** An `releaseWard` MUST contain the members `type`, `ward`, `prev` and `proof`. `ward` is the DID of a record in `wards`.
+<a id="req-7-25"></a>**REQ-7-25.** A `releaseWard` MUST contain the members `type`, `ward`, `prev` and `proof`. `ward` is the DID of a record in `wards`.
 
 <a id="req-7-26"></a>**REQ-7-26.** `releaseWard` removes the record for `ward` from `wards`. It records that the identity withdraws its consent.
 
@@ -339,15 +345,15 @@ For a `create`, the state before the operation is empty and N is 0.
 
 <a id="req-7-29"></a>**REQ-7-29.** `extensions` is an object. Each member name is an extension name, and each value is defined by that extension. An extension name MUST be an absolute URI.
 
-<a id="req-7-30"></a>**REQ-7-30.** `critical` is a non-empty list of distinct extension names. Only a `create` or a `setPolicy` MAY contain `critical`. Each name in `critical` MUST be a member of the `extensions` of the operation's `policy`. The configuration of a critical extension is held only in `policy.extensions`.
+<a id="req-7-30"></a>**REQ-7-30.** `critical` is a non-empty list of distinct extension names. Only a `create` or a `setPolicy` MAY contain `critical`. Each name in `critical` MUST be a member of the `extensions` of the operation's `policy`. While a name is in the state's `critical`, `policy.extensions` MUST contain a member with that name. The configuration of a critical extension is held only in `policy.extensions`.
 
-<a id="req-7-31"></a>**REQ-7-31.** An extension affects whether an operation is valid only while its name is in the state's `critical`.
+<a id="req-7-31"></a>**REQ-7-31.** An extension affects whether an operation is valid only if its name is in the state's `critical` before the operation or in the operation's `critical`.
 
 <a id="req-7-32"></a>**REQ-7-32.** An operation adds each name in its `critical` to the state's `critical`, if it is not already there. A name in the state's `critical` remains there for every later operation of the log.
 
 <a id="req-7-33"></a>**REQ-7-33.** An extension MAY add requirements to operations. An extension MUST NOT remove or weaken a requirement of this specification.
 
-<a id="req-7-34"></a>**REQ-7-34.** A verifier MUST ignore every extension whose name is not in the state's `critical`, whether or not it implements that extension. Ignored extensions remain part of the operation hash and the secured document. The contents of an extension value are defined by the extension, not by REQ-5-3.
+<a id="req-7-34"></a>**REQ-7-34.** A verifier MUST ignore every extension that REQ-7-31 does not apply to, whether or not it implements that extension. Ignored extensions remain part of the operation hash and the secured document. The contents of an extension value are defined by the extension, not by REQ-5-3.
 
 <a id="req-7-35"></a>**REQ-7-35.** An extension defines how its configuration changes. A change to an extension's configuration requires the approvals that this specification requires for the operation that makes it.
 
@@ -365,7 +371,7 @@ For a `create`, the state before the operation is empty and N is 0.
    3. The approvals meet the rule in REQ-7-6, evaluated against the state before the operation.
    4. Apply the operation to the state, and check that the result conforms to Section 6.
 
-<a id="req-8-2"></a>**REQ-8-2.** Verification of a log depends only on that log. It does not depend on other logs or on the time of verification.
+<a id="req-8-2"></a>**REQ-8-2.** Verification of a log depends only on that log, and not on other logs or on the time of verification.
 
 ## 9. DID document
 
@@ -386,7 +392,7 @@ For a `create`, the state before the operation is empty and N is 0.
 
 <a id="req-9-4"></a>**REQ-9-4.** DID document metadata MUST include `versionId`, the version of the log, and `anchor`, the anchor of the log. If the state is deactivated, DID document metadata MUST include `"deactivated": true`.
 
-<a id="req-9-5"></a>**REQ-9-5.** Resolving a DID URL with the parameter `versionId=<version>` yields the DID document derived from the state after the operation whose operation hash is `<version>`. Only the log up to and including that operation needs to verify.
+<a id="req-9-5"></a>**REQ-9-5.** Resolving a DID URL with the parameter `versionId=<version>` yields the DID document derived from the state after the operation whose operation hash is `<version>`.
 
 ## 10. Registrar
 
@@ -402,7 +408,7 @@ For a `create`, the state before the operation is empty and N is 0.
 
 <a id="req-10-2"></a>**REQ-10-2.** A `GET` request MUST NOT change any state.
 
-<a id="req-10-3"></a>**REQ-10-3.** A registrar MUST NOT serve two logs for one DID where neither is a prefix of the other.
+<a id="req-10-3"></a>**REQ-10-3.** A registrar MUST serve the complete log of a DID, including every operation it has accepted for that DID.
 
 <a id="req-10-4"></a>**REQ-10-4.** A registrar MUST respond to a rejected operation with HTTP status 400 and a JSON object with an `error` member that describes the reason.
 
@@ -410,7 +416,7 @@ For a `create`, the state before the operation is empty and N is 0.
 
 <a id="req-10-5"></a>**REQ-10-5.** A registrar MUST accept an operation only if all of these hold:
 
-1. Its `prev` equals the version of the log, or it is a `create` for a path segment that has no log.
+1. Its `prev` equals the version of the log, or it is a `create` whose `did` has the path segment of the request and that path segment has no log.
 2. The log, with the operation appended, is valid (Section 8). An unsupported result is a rejection.
 3. Every check in REQ-10-7 that applies to the operation holds.
 
@@ -422,39 +428,41 @@ For a `create`, the state before the operation is empty and N is 0.
 4. `consent` is an `acceptWard` whose `ward` names the identity's DID and anchor;
 5. the state's `wards` contains that record.
 
-<a id="req-10-7"></a>**REQ-10-7.** Before accepting an operation, a registrar MUST fetch the current log of each other identity that the operation involves, and check:
+<a id="req-10-7"></a>**REQ-10-7.** Before accepting an operation, a registrar MUST fetch the current log of each other identity that the operation involves, and check the rows below. The identities an operation involves are: the DIDs of its new entries; the guardians and successors whose keys approve it; the `guardian` of a `removeGuardian` with `evidence`; the successor in a promotion (REQ-6-10) or in the `successor`-to-`null` exception of REQ-7-6; and the `ward` of an `acceptWard`. A log that cannot be fetched counts as a log that does not verify. A DID has no log only if its registrar reports that it has none.
 
 | Case | Check |
 |---|---|
-| an operation adds or replaces an entry | the new entry has standing |
-| a guardian or successor approves an operation | its entry has standing, except for item 3 when the operation is an `updateGuardian` for that guardian or successor |
-| an `updateGuardian` | the new `keys` equal the `keys` in the current state of `guardian` |
-| a `removeGuardian` with `evidence` | in the log of `guardian`, the anchor equals the entry's `anchor`; `evidence` is a `deactivate`, or a `releaseWard` whose `ward` is this identity, and it follows the entry's `consent`; and the entry does not have standing because of item 2 or item 5 of REQ-10-6 |
+| a `create` that names entries, an `addGuardian`, an `updateGuardian`, or a `setPolicy` whose `successor` is an entry that differs from the current one | each new entry has standing |
+| any operation | it meets REQ-7-6 when only approvals from guardians and successors whose entries have standing are counted; for an `updateGuardian`, item 3 is not required of the named guardian or successor |
+| a `removeGuardian` with `evidence` | the log of `guardian` verifies and its anchor equals the entry's `anchor`; `evidence` names an operation in that log that follows the entry's `consent` and is either a `releaseWard` whose `ward` is this identity or an operation after which the state of that log is deactivated; and item 2 or item 5 of REQ-10-6 does not hold |
 | a `removeGuardian` that promotes the successor (REQ-6-10) | the successor's entry has standing |
-| an `acceptWard` | if the ward's DID has a log, the `ward` record names its anchor |
+| a `setPolicy` that does not meet `membership` when only approvals with standing are counted, and relies on the `successor`-to-`null` exception of REQ-7-6 | the log of the current successor verifies and its anchor equals the entry's `anchor`, and item 2 or item 5 of REQ-10-6 does not hold |
+| an `acceptWard` | if the ward's DID has a log, that log verifies and the `ward` record names its anchor |
 
-<a id="req-10-8"></a>**REQ-10-8.** A registrar MUST accept at most one operation for each value of `prev`.
+<a id="req-10-8"></a>**REQ-10-8.** A registrar MUST accept at most one operation for each value of `prev` in a log.
 
-<a id="req-10-9"></a>**REQ-10-9.** For a `create`, the registrar MUST also require that the DID's domain is its domain and that the name is unused (REQ-10-12). It MUST add the `attestation`, using a key of its root identity and the current version of the root identity's log, before it applies REQ-10-5.
+<a id="req-10-9"></a>**REQ-10-9.** For a `create` of an identity other than its root identity, the registrar MUST also require that the DID's domain is its domain and that the name is unused (REQ-10-12). It MUST add the `attestation`, using a key of its root identity and the current version of the root identity's log, before it applies REQ-10-5.
 
-<a id="req-10-10"></a>**REQ-10-10.** A registrar MUST create its root identity before it accepts any other `create`.
+<a id="req-10-10"></a>**REQ-10-10.** A registrar MUST create its root identity before it accepts any other `create`. It MUST NOT accept a `create` of its root identity through REQ-10-1.
 
 <a id="req-10-11"></a>**REQ-10-11.** A registrar MUST NOT remove or alter an accepted operation. A registrar MUST continue to serve the log of a deactivated identity.
 
-<a id="req-10-12"></a>**REQ-10-12.** A name, once used, MUST NOT be used for another identity.
+<a id="req-10-12"></a>**REQ-10-12.** A registrar MUST NOT accept a `create` for a name for which it has already accepted a `create`.
+
+<a id="req-10-15"></a>**REQ-10-15.** A registrar MUST record the anchor and the version of every log it fetches under REQ-10-7, including for operations it rejects. If a later fetch yields a different anchor, or a log that does not contain the recorded version, the registrar MUST treat that log as a log that cannot be fetched.
 
 ### 10.3 Held keys
 
-<a id="req-10-13"></a>**REQ-10-13.** A registrar that holds a private key for an identity MUST create a proof with that key only in response to a request authenticated as that identity.
+<a id="req-10-13"></a>**REQ-10-13.** A registrar that holds a private key for an identity MUST create a proof with that key only for a secured document (REQ-5-12) that a request authenticated as that identity contains or names by its hash, or for the `create` of that identity in the request that creates it.
 
-<a id="req-10-14"></a>**REQ-10-14.** Apart from the `attestation`, one request MUST NOT cause a registrar to create proofs for more than one identity.
+<a id="req-10-14"></a>**REQ-10-14.** Apart from the `attestation`, one request MUST NOT cause a registrar to create proofs for more than one identity, except that a request authenticated as an identity MAY also cause the proofs on the `create` of an identity that the request creates.
 
 ## 11. Resolution
 
 <a id="req-11-1"></a>**REQ-11-1.** To resolve a DID, a resolver MUST:
 
 1. fetch the log from the registrar of the DID's domain;
-2. verify the log (Section 8);
+2. verify the log (Section 8), or, for a DID URL with `versionId`, the log up to and including that operation;
 3. verify the `attestation` of its `create`, unless the DID is a root identity (REQ-11-2);
 4. derive the DID document (Section 9).
 
@@ -475,11 +483,13 @@ For a `create`, the state before the operation is empty and N is 0.
 | keys out of date | the state's `keys` differ from the entry's `keys` |
 | mutual | none of the above |
 
-<a id="req-11-6"></a>**REQ-11-6.** For each record in `wards`, a resolver MAY fetch the log of the record's `did` and report the first result whose condition holds: unavailable, if the log cannot be fetched or does not verify; different identity, if its anchor differs from the record's `anchor`; guardian, if its `guardians` has an entry for this identity; successor, if its `successor` is an entry for this identity; otherwise, not related.
+<a id="req-11-6"></a>**REQ-11-6.** For each record in `wards`, a resolver MAY fetch the log of the record's `did` and report the first result whose condition holds: unavailable, if the log cannot be fetched or does not verify; different identity, if its anchor differs from the record's `anchor`; guardian, if its `guardians` has an entry whose `did` and `anchor` are this identity's; successor, if its `successor` is such an entry; otherwise, not related.
 
 <a id="req-11-7"></a>**REQ-11-7.** A resolver MUST NOT present a guardianship as mutual unless REQ-11-5 reports mutual or keys out of date.
 
 <a id="req-11-8"></a>**REQ-11-8.** A resolver MAY verify a log that another party presents. A presented log is current only as of its version.
+
+<a id="req-11-9"></a>**REQ-11-9.** A resolver MUST NOT return a DID document if the log verified in step 2 of REQ-11-1 is invalid or unsupported, if the `attestation` is not valid, or if REQ-11-4 reports a different identity or a rolled-back or forked log.
 
 ## 12. Security considerations
 
@@ -489,7 +499,7 @@ This section is non-normative.
 
 **Checks at acceptance.** The checks in REQ-10-7 compare an operation with other logs at the time of acceptance. A verifier does not repeat them. A resolver can compare current logs (REQ-11-5), but cannot tell what another log contained at the time of acceptance. Removal with `evidence` depends on these checks; it also requires one current key, so a registrar alone cannot use it.
 
-**Joining and leaving.** A guardian records `acceptWard` before the ward adds it, because REQ-10-7 requires the consent to exist. A guardian that leaves SHOULD remove itself from the ward before it records `releaseWard`. A guardian that records `releaseWard` first, or that deactivates, loses standing, so a registrar rejects its approvals for that ward (REQ-10-7), and the ward can remove it with `evidence`. Evidence counts only if it follows the guardian's current consent, so a `releaseWard` from an earlier period of guardianship cannot be reused.
+**Joining and leaving.** A guardian records `acceptWard` before the ward adds it, because REQ-10-7 requires the consent to exist. A guardian that leaves SHOULD remove itself from the ward before it records `releaseWard`. A guardian that records `releaseWard` first, or that is deactivated, loses standing, so a registrar rejects its approvals for that ward (REQ-10-7), and the ward can remove it with `evidence`. Evidence counts only if it follows the guardian's current consent, so a `releaseWard` from an earlier period of guardianship cannot be reused.
 
 **Guardian keys.** A ward's entry holds a copy of the guardian's keys. When a guardian replaces its keys, it updates each of its entries with `updateGuardian`; its `wards` lists them. Until then, a registrar rejects approvals made with the old keys (REQ-10-7). A successor's entry is updated with `updateGuardian` or `setPolicy`. A resolver reports entries whose keys are out of date (REQ-11-5).
 
@@ -503,19 +513,19 @@ This section is non-normative.
 
 **Stolen key.** A party that holds a stolen key can act as the identity until the guardians replace the key. Those operations remain in the log.
 
-**Unilateral settings.** `recovery: "any"` lets one guardian replace the keys. `removal: "any"` lets one guardian remove another; with two guardians, either can remove the other. `deactivation.by: "self"` or `"either"` lets anyone who holds a key end the identity. Choose these settings deliberately.
+**Unilateral settings.** `recovery: "any"` lets one guardian replace the keys. `removal: "any"` lets one guardian remove another; with two guardians, either can remove the other. Guardians that can meet `removal` can remove the other guardians and then meet every other setting, so no setting is stricter in effect than `removal`. `deactivation.by: "self"` or `"either"` lets anyone who holds a key end the identity. Choose these settings deliberately.
 
-**Two guardians.** With two guardians and `removal` other than `"any"`, neither guardian can remove the other. Use three or more guardians, or set `removal: "any"`.
+**Two guardians.** With two guardians and `removal` other than `"any"`, neither guardian can remove the other. Use three or more guardians, or set `removal: "any"`, which lets either guardian remove the other and then act alone.
 
 **Orphaning.** Every way to remove the last guardian requires one current key. Under the default `orphan: "deactivate"`, the identity is then deactivated, and deactivation is permanent. To lower the risk, use guardians on more than one domain, or name a successor.
 
-**Unavailable guardians.** A registrar cannot check the standing of a guardian whose log cannot be fetched, so it cannot accept that guardian's approvals or changes to its entry, or a removal with `evidence`. If no guardian can approve, operations that need guardians cannot be accepted. A successor can act only when there is one guardian.
+**Unavailable guardians.** A registrar cannot check the standing of a guardian whose log cannot be fetched, so it cannot accept that guardian's approvals or changes to its entry, or a removal with `evidence`. If no guardian can approve, operations that need guardians cannot be accepted. A guardian whose domain lapses, or whose registrar rolls back or forks its log, cannot be removed with `evidence`, and such a successor cannot be promoted or removed; with one guardian, or two under the default policy, the ward then permanently loses recovery by guardians. A registrar keeps the version it recorded (REQ-10-15), so a guardian's registrar that serves a forked log once makes that guardian unavailable to the ward's registrar until its operator intervenes. Use guardians on more than one domain. A successor can replace a guardian only when there is one guardian.
 
 **Successor.** A successor and one current key can replace a sole guardian, and the successor then becomes the guardian. Name only a successor you trust with that power.
 
 **One-sided records.** Any identity can record `acceptWard` for any ward. A guardianship is mutual only when REQ-11-5 reports it.
 
-**Unsupported operations.** A registrar, or a party that presents a log, can append an operation with an unknown `type` or `cryptosuite`. A verifier then reports the log as unsupported. This has the same effect as withholding the log, and resolvers detect it by the recorded version (REQ-11-4).
+**Unsupported operations.** A registrar, or a party that presents a log, can append an operation with an unknown `type` or `cryptosuite`. A verifier then reports the log as unsupported. This has the same effect as withholding the log.
 
 **Forks.** Any party that holds the keys can sign two different operations with the same `prev`. Any party can also remove an unneeded proof from an operation, which produces a different operation hash. A registrar accepts only one operation for each `prev` (REQ-10-8). Resolvers detect a fork by the recorded version (REQ-11-4).
 
@@ -523,7 +533,7 @@ This section is non-normative.
 
 **Extensions.** A verifier that does not implement a critical extension reports the log as unsupported, never valid. An extension that is not listed in `critical` has no effect on validity for any verifier, so an extension that changes who may approve an operation must be made critical. Only `create` and `setPolicy` can make an extension critical, so adding one requires the same approvals as a policy change. A critical extension cannot be removed from a log, so every later verifier must implement it.
 
-**Hostile registrar.** A registrar cannot forge proofs. It can refuse operations, serve an outdated or forged log to a resolver that has not seen the identity before, or skip the checks in REQ-10-7. Resolvers detect a replaced, rolled-back or forked log by its anchor and recorded version (REQ-11-4). A registrar that serves a forged log for a guardian on its domain can mislead a ward that adds that guardian; the ward detects this if it knows the guardian's anchor. A registrar that skips the checks in REQ-10-7 lets a party with one current key remove guardians with false `evidence`, and lets retired or withdrawn guardian keys approve operations.
+**Hostile registrar.** A registrar cannot forge proofs. It can refuse operations, serve an outdated or forged log to a resolver that has not seen the identity before, or skip the checks in REQ-10-7. Resolvers detect a replaced, rolled-back or forked log by its anchor and recorded version (REQ-11-4). A registrar that serves a forged log for a guardian on its domain can mislead a ward that adds that guardian; the ward detects this if it knows the guardian's anchor. A registrar that skips the checks in REQ-10-7 lets a party with one current key remove guardians with false `evidence`, lets one current key and one guardian replace the keys of other guardians, lets one current key remove the successor, and lets retired or withdrawn guardian keys approve operations. A ward also trusts the registrar of each of its guardians to serve that guardian's complete log (REQ-10-3).
 
 **Root identity.** The root identity's key attests every `create` on its domain. A party with that key, or with an old root key, can attest a forged `create` for an unused name. Recorded anchors protect identities that a resolver has seen before.
 
@@ -537,7 +547,7 @@ This section is non-normative.
 |---|---|---|
 | Provable from logs | anyone, by fetching and verifying logs | REQ-10-5 (items 1 and 2), REQ-10-11, REQ-10-12 |
 | Testable | an operator, against a test deployment | REQ-10-1, REQ-10-2, REQ-10-4, REQ-10-8, REQ-10-9, REQ-10-10 |
-| Trusted | no other party | REQ-10-3, REQ-10-7, REQ-10-13, REQ-10-14 |
+| Trusted | no other party | REQ-10-3, REQ-10-7, REQ-10-13, REQ-10-14, REQ-10-15 |
 
 ## 13. Privacy considerations
 
@@ -619,3 +629,4 @@ A sole guardian is removed with `evidence` and one current key, or by the succes
 This draft replaces all earlier drafts of v0.2.0. Earlier drafts are in the repository history.
 
 - **2026-11-22**: REQ-5-2 constrains the value of a number, not its written form.
+- **2026-11-23**: Revised after audit round 3 and clean-room rounds 7 to 7c.

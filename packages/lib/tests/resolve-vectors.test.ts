@@ -15,11 +15,13 @@ interface ResolveVector {
   description: string;
   did: Did;
   log: Log;
-  resolver?: Record<string, Log>;
+  resolver?: Record<string, Log | null>;
   expect: { result: "valid" | "invalid" | "unsupported" };
   targets: string;
   expectMutuality?: string[];
   expectWardReports?: [string, string][];
+  versionId?: string;
+  pins?: Record<string, [string, string]>;
 }
 
 // See verify-vectors.test.ts: the README's documented default is the toy
@@ -33,9 +35,11 @@ for (const file of fs.readdirSync(VECTORS_DIR).filter((f) => f.endsWith(".json")
 
   test(`resolve vector ${file}: ${vector.description}`, async () => {
     const resolver = vector.resolver ?? {};
-    const resolveLog: LogResolver = (did) => resolver[did];
+    const resolveLog: LogResolver = (did) => (Object.prototype.hasOwnProperty.call(resolver, did) ? resolver[did] : undefined);
+    const ownPin = vector.pins?.[vector.did];
+    const pin = ownPin ? { anchor: ownPin[0], version: ownPin[1] } : undefined;
 
-    const r = await resolve(vector.did, vector.log, resolveLog, IMPLEMENTED);
+    const r = await resolve(vector.did, vector.log, resolveLog, IMPLEMENTED, vector.versionId, pin);
     assert.equal(r.result, vector.expect.result, `${file} [${vector.targets}]: ${r.reason ?? ""}`);
     if (r.result !== "valid") return;
 

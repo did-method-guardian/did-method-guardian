@@ -1,5 +1,5 @@
-"""Clean-room did:guardian verifier, final spec revision (sections 5-11)."""
-import copy, hashlib, re
+"""Clean-room did:guardian verifier, spec revision r7 (sections 5-11)."""
+import copy, hashlib, re, urllib.parse
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 from cryptography.hazmat.primitives import hashes
 from cryptography.exceptions import InvalidSignature
@@ -235,16 +235,16 @@ def check_extensions(x, where):
 
 
 def check_minkeys(st, implemented, enforce_noncritical):
-    """Toy extension min-keys. Its own rules (REQ-7-35): while critical, policy.extensions MUST carry
-    {"k": n}, and the state MUST have at least n keys. Removing the configuration is invalid."""
+    """Toy extension min-keys. Applies (REQ-7-31) when its name is in the state's critical before the operation
+    or in the operation's critical, i.e. exactly when it is in the critical of the state after (REQ-7-32 union).
+    Its rules: policy.extensions[MINKEYS] = {"k": n}, and the state MUST have at least n keys.
+    Removing the configuration while critical is invalid by REQ-7-30 (r7)."""
     if MINKEYS not in implemented:
         return
     cfg = (st["policy"].get("extensions") or {}).get(MINKEYS)
     if MINKEYS not in st["critical"] and not enforce_noncritical:
         return                                     # REQ-7-34: MUST ignore (enforce_noncritical = non-conforming demo)
-    if cfg is None:
-        if MINKEYS in st["critical"]:
-            raise Invalid("EXT-min-keys", "min-keys is critical but its configuration was removed")
+    if cfg is None:                                # while critical, REQ-7-30 already requires it (checked in check_state)
         return
     if not (isinstance(cfg, dict) and set(cfg) == {"k"} and _is_k(cfg["k"]) and 1 <= cfg["k"] <= 8):
         raise Invalid("EXT-min-keys", "bad min-keys configuration")
@@ -313,8 +313,8 @@ def check_entry(e):
     if not is_gdid(e["did"]):
         raise Invalid("REQ-6-2", f"entry did {e['did']!r}")
     check_keylist(e["keys"], "REQ-6-2")
-    if not is_hash(e["anchor"]) or not is_hash(e["consent"]):          # ASSUMPTION: only the format is checkable (REQ-8-2)
-        raise Invalid("REQ-6-2", "consent is not an operation hash")
+    if not is_hash(e["anchor"]) or not is_hash(e["consent"]):          # r7: syntactic; REQ-10-6 gives the meaning
+        raise Invalid("REQ-6-2", "entry anchor or consent is not a hash (REQ-5-6)")
 
 
 def check_ward(r):
@@ -395,6 +395,8 @@ def check_state(did, st):
             raise Invalid("REQ-6-6", f"service members {str(x)[:60]}")
         if not (isinstance(x["id"], str) and FRAGMENT.fullmatch(x["id"])):
             raise Invalid("REQ-6-6", f"service id {x['id']!r}")
+        if urllib.parse.unquote(x["id"]).startswith("#key-"):            # REQ-6-6 (r7c): after percent-decoding
+            raise Invalid("REQ-6-6", f"service id {x['id']!r} begins with #key-")
         if not isinstance(x["type"], str):
             raise Invalid("REQ-6-6", "service type must be a string")
         if not (isinstance(x["serviceEndpoint"], str) and URI.fullmatch(x["serviceEndpoint"])):
@@ -406,6 +408,9 @@ def check_state(did, st):
         raise Invalid("REQ-6-1", "alsoKnownAs must be 0 to 32 distinct URIs")
     if len(set(st["critical"])) != len(st["critical"]):
         raise Invalid("REQ-6-1", "state critical names are not distinct (REQ-7-32 appends; see FINDINGS-r5 X-4)")
+    for n in st["critical"]:                                                  # REQ-7-30 (r7)
+        if n not in (p.get("extensions") or {}):
+            raise Invalid("REQ-7-30", f"{n} is in the state's critical but policy.extensions has no member for it")
 
 
 # ------------------------------------------------------------- approvals
@@ -424,14 +429,38 @@ def pol(st, m):
     return st["policy"].get(m, DEFAULT_DEACT if m == "deactivation" else "majority")
 
 
-def eval_rule(op, before, S, force=False):
-    """REQ-7-6 with REQ-6-9. S = set of keys with valid proofs. Returns (ok, impossible_clause_had_signers)."""
+POLICY_DEFAULTS = {"recovery": "majority", "membership": "majority", "removal": "majority", "deactivation": DEFAULT_DEACT,
+                   "orphan": "deactivate", "maxWards": None, "extensions": {}}
+
+
+def drops_successor_only(op, before):
+    """REQ-7-6 setPolicy exception (r7b): the state before has a successor entry, the operation's successor is null,
+    the operation has no critical, and its policy, with absent members at their defaults, equals the current one
+    except that orphan is "deactivate". ASSUMPTION: absent extensions equals {} (REQ-6-11 gives it no default)."""
+    if not before or before["successor"] is None or op.get("successor") is not None or not isinstance(op.get("policy"), dict):
+        return False
+    if "critical" in op:
+        return False
+    a = {m: before["policy"].get(m, d) for m, d in POLICY_DEFAULTS.items()}
+    b = {m: op["policy"].get(m, d) for m, d in POLICY_DEFAULTS.items()}
+    if b.pop("orphan") != "deactivate":
+        return False
+    a.pop("orphan")
+    try:
+        return jcs(a) == jcs(b)
+    except (ValueError, TypeError):
+        return False
+
+
+def eval_rule(op, before, S, force=False, counts=None, waiver=True):
+    """REQ-7-6 with REQ-6-9. S = set of keys with valid proofs. Returns (ok, impossible_clause_had_signers).
+    counts(entry) -> bool: whether that guardian's/successor's approval is counted (REQ-10-7 row 2); default all."""
     t = op["type"]
     kb = set(before["keys"]) if before else set()
     G = before["guardians"] if before else []
     N = len(G)
     one_key = bool(S & kb)
-    appr = lambda e: bool(S & set(e["keys"]))               # REQ-5-16
+    appr = lambda e: bool(S & set(e["keys"])) and (counts is None or counts(e))     # REQ-5-16
     every = lambda ks: set(ks) <= S
     flag = [False]
 
@@ -463,7 +492,8 @@ def eval_rule(op, before, S, force=False):
               or (N == 1 and suc is not None and one_key and appr(suc)))
     elif t == "setPolicy":
         ns = op["successor"]
-        ok = one_key and (N == 0 or gper("membership", pol(before, "membership"), G)) and (ns is None or ns == before["successor"] or every(ns["keys"]))
+        ok = one_key and (N == 0 or (waiver and drops_successor_only(op, before)) or gper("membership", pol(before, "membership"), G)) \
+            and (ns is None or _entry_eq(ns, before["successor"]) or every(ns["keys"]))      # entry equality: Terminology (r7)
     elif t in ("acceptWard", "releaseWard"):
         ok = one_key or gper("recovery", pol(before, "recovery"), G)
     else:
@@ -590,7 +620,7 @@ def check_op(did, op, idx, before, implemented=IMPLEMENTED, enforce_noncritical=
     if t == "removeGuardian" and op["guardian"] not in G:
         raise Invalid("REQ-7-17", "guardian is not a current guardian")
     if t == "removeGuardian" and "evidence" in op and not is_hash(op["evidence"]):
-        raise Invalid("REQ-7-18", "evidence is not an operation hash")       # all a verifier can check
+        raise Invalid("REQ-7-18", "evidence is not a hash (REQ-5-6)")       # r7: syntactic; REQ-10-7 gives the meaning
     if t == "setPolicy":
         if op["successor"] is not None: check_entry(op["successor"])
     if t == "acceptWard":
@@ -719,7 +749,7 @@ def verify(did, log, implemented=IMPLEMENTED, enforce_noncritical=False):
 
 
 def resolve_version(did, log, version):
-    """REQ-9-5. ASSUMPTION: only the prefix up to `version` must verify."""
+    """REQ-9-5 with REQ-11-1 step 2 (r7): only the log up to and including `version` is verified."""
     hs = [op_hash(o) for o in log] if isinstance(log, list) else []
     if version not in hs:
         return {"valid": False, "req": "REQ-9-5", "message": "no such version"}
@@ -801,8 +831,31 @@ def ward_reports(did, state, resolver):
     return out
 
 
-def resolve(did, log, resolver):
-    """REQ-11-1 + REQ-11-5..11-7."""
+def pin_report(log, pin):
+    """REQ-11-4 against a recorded (anchor, version). Returns None or the report."""
+    if pin is None or not isinstance(log, list) or not log or not all(isinstance(o, dict) for o in log):
+        return None
+    try:
+        a, hs = anchor_of(log), [op_hash(o) for o in log]
+    except Invalid:
+        return None
+    if a != pin[0]:
+        return "different identity"
+    if pin[1] not in hs:
+        return "rolled back or forked"
+    return None
+
+
+def resolve(did, log, resolver, version=None, pins=None):
+    """REQ-11-1 (+ versionId, REQ-9-5), REQ-11-2, 11-4 (pins = recorded {did: [anchor, version]}), 11-5..11-7, 11-9."""
+    rep = pin_report(log, (pins or {}).get(did))
+    if rep:                                                           # REQ-11-9
+        return {"valid": False, "result": "invalid", "req": "REQ-11-9", "message": f"REQ-11-4 reports {rep}: no DID document"}
+    if version is not None:                                           # REQ-11-1 step 2, REQ-9-5
+        hs = [op_hash(o) if isinstance(o, dict) else None for o in log] if isinstance(log, list) else []
+        if version not in hs:
+            return {"valid": False, "result": "invalid", "req": "REQ-9-5", "message": "no operation with that versionId"}
+        log = log[:hs.index(version) + 1]
     r = verify(did, log)
     if not r["valid"]:
         return r
@@ -836,27 +889,77 @@ class Resolver:
 
 
 # ------------------------------------------------------------- §10 registrar
-def standing(e, did, anchor, resolver, skip_keys=False):
-    """REQ-10-6. Returns None if the entry has standing for (did, anchor), else the failing item."""
-    l, r = fetch_verified(e["did"], resolver)
-    if not l: return "log cannot be fetched or does not verify"
+class _Reject(Exception):
+    def __init__(self, req, msg):
+        super().__init__(msg)
+        self.req, self.msg = req, msg
+
+
+UNFETCHABLE = object()
+
+
+class RegFetch:
+    """Logs fetched under REQ-10-7 (r7b). A DID absent from the resolver map cannot be fetched; a DID mapped to
+    null is one whose registrar reports that it has no log. REQ-10-15: a fetch that contradicts a recorded pin
+    (different anchor, or recorded version missing) is treated as a log that cannot be fetched, which counts as
+    a log that does not verify. Pins are recorded for every fetch, whatever the outcome of the operation."""
+
+    def __init__(self, resolver, pins=None):
+        self.resolver, self.pins, self.cache, self.recorded = resolver, pins or {}, {}, {}
+
+    def get(self, d):
+        """Returns (raw log, None if no log is reported, or UNFETCHABLE; verify result if it verifies else None)."""
+        if d in self.cache:
+            return self.cache[d]
+        if d not in self.resolver:
+            out = (UNFETCHABLE, None)
+        elif self.resolver[d] is None:
+            out = (None, None)
+        else:
+            l = self.resolver[d]
+            if pin_report(l, self.pins.get(d)):
+                out = (UNFETCHABLE, None)                             # REQ-10-15: keep the old pin
+            else:
+                r = verify(d, l)
+                out = (l, r if r["valid"] else None)
+                try:
+                    self.recorded[d] = (anchor_of(l), op_hash(l[-1]))
+                except Exception:
+                    pass
+        self.cache[d] = out
+        return out
+
+
+def standing(e, did, anchor, fetch, skip_keys=False):
+    """REQ-10-6. Returns None if the entry has standing for (did, anchor), else the failing item.
+    `fetch` is a RegFetch or a plain {did: log} mapping."""
+    if not isinstance(fetch, RegFetch):
+        fetch = RegFetch(fetch)
+    l, r = fetch.get(e["did"])
+    if not r: return "log cannot be fetched or does not verify"
     if r["anchor"] != e["anchor"]: return "item 1: anchor differs"
     if r["state"]["deactivated"]: return "item 2: deactivated"
     if not skip_keys and not keys_eq(r["state"]["keys"], e["keys"]): return "item 3: keys differ"
     rec = {"did": did, "anchor": anchor}
-    if not _is_guard_for(l, e["consent"], rec): return "item 4: consent is not a guard naming this identity"
+    if not _is_guard_for(l, e["consent"], rec): return "item 4: consent is not an acceptWard naming this identity"
     if rec not in r["state"]["wards"]: return "item 5: record not in wards"
     return None
 
 
-def registrar_checks(did, log, op, resolver):
-    """REQ-10-7 table. Returns None if every applicable check holds, else a reason."""
+def registrar_checks(did, log, op, resolver, pins=None):
+    """REQ-10-7 table (r7b) with REQ-10-15 pins. Returns None if every applicable check holds, else (req, reason)."""
+    F = RegFetch(resolver, pins)
+    why = _registrar_rows(did, log, op, F)
+    return ("REQ-10-7", why) if why else None
+
+
+def _registrar_rows(did, log, op, F):
     t = op.get("type")
     anchor = anchor_of(log if log else [op])
     before = verify(did, log)["state"] if log else None
     after = verify(did, log + [op])["state"]
     S = {p["verificationMethod"].split("#")[1] for p in op.get("proof", [])}
-    # row 1: an operation adds or replaces an entry
+    # row 1: a create that names entries, an addGuardian, an updateGuardian, a setPolicy with a different successor entry
     new = []
     if t == "create":
         new = list(op["guardians"]) + ([op["successor"]] if op["successor"] else [])
@@ -867,76 +970,120 @@ def registrar_checks(did, log, op, resolver):
     elif t == "setPolicy" and op["successor"] is not None and not _entry_eq(op["successor"], before["successor"]):
         new = [op["successor"]]
     for e in new:
-        why = standing(e, did, anchor, resolver)
+        why = standing(e, did, anchor, F)
         if why: return f"row 1: new entry for {e['did']} lacks standing ({why})"
-    # row 2: a guardian or successor approves
-    if before:
-        for e in before["guardians"] + ([before["successor"]] if before["successor"] else []):
-            if S & set(e["keys"]):
-                skip = t == "updateGuardian" and op["guardian"] == e["did"]
-                why = standing(e, did, anchor, resolver, skip_keys=skip)
-                if why: return f"row 2: approving {e['did']} lacks standing ({why})"
-    # row 3
-    if t == "updateGuardian":
-        l, r = fetch_verified(op["guardian"], resolver)
-        if not l or not keys_eq(r["state"]["keys"], op["keys"]): return "row 3: new keys are not the guardian's current keys"
-    # row 4
+    # row 2: REQ-7-6 counting only approvals from guardians/successors whose entries have standing
+    memo = {}
+
+    def counts(e):
+        if e["did"] not in memo:
+            skip = t == "updateGuardian" and op["guardian"] == e["did"]
+            memo[e["did"]] = standing(e, did, anchor, F, skip_keys=skip)
+        return memo[e["did"]] is None
+    if before and not eval_rule(op, before, S, counts=counts)[0]:
+        bad = {d: w for d, w in memo.items() if w}
+        return f"row 2: REQ-7-6 not met counting only approvals with standing (not counted: {bad})"
+    # row 3: removeGuardian with evidence
     if t == "removeGuardian" and "evidence" in op:
         e = next(x for x in before["guardians"] if x["did"] == op["guardian"])
-        l, r = fetch_verified(op["guardian"], resolver)
-        if not l or r["anchor"] != e["anchor"]: return "row 4: guardian log unavailable or anchor differs"
+        l, r = F.get(op["guardian"])
+        if not r: return "row 3: the guardian's log cannot be fetched or does not verify"
+        if r["anchor"] != e["anchor"]: return "row 3: the guardian's anchor differs from the entry's"
         hs = [op_hash(o) for o in l]
-        gi = hs.index(op["evidence"]) if op["evidence"] in hs else None
+        if op["evidence"] not in hs: return "row 3: evidence names no operation in the guardian's log"
+        gi = hs.index(op["evidence"])
         ci = hs.index(e["consent"]) if e["consent"] in hs else None
-        g = l[gi] if gi is not None else None
-        ok = g is not None and (g.get("type") == "deactivate" or (g.get("type") == "releaseWard" and g.get("ward") == did))
-        if not ok: return "row 4: evidence is not a deactivate or a releaseWard of this identity in that log"
-        if ci is None or gi <= ci: return "row 4: evidence does not follow the entry's consent"
+        if ci is None or gi <= ci: return "row 3: evidence does not follow the entry's consent"
+        g = l[gi]
+        if not ((g.get("type") == "releaseWard" and g.get("ward") == did) or r["states"][gi]["deactivated"]):
+            return "row 3: evidence is neither a releaseWard of this identity nor an operation after which the guardian is deactivated"
         rec = {"did": did, "anchor": anchor}
         if not (r["state"]["deactivated"] or rec not in r["state"]["wards"]):
-            return "row 4: the entry does not lack standing because of item 2 or item 5"
-    # row 5: promotion
+            return "row 3: items 2 and 5 of REQ-10-6 both hold"
+    # row 4: promotion
     if t == "removeGuardian" and before["successor"] and not after["successor"] and after["guardians"]:
-        why = standing(before["successor"], did, anchor, resolver)
-        if why: return f"row 5: promoted successor lacks standing ({why})"
-    # row 6
-    if t == "acceptWard" and op["ward"]["did"] in resolver:
-        wl = resolver[op["ward"]["did"]]
-        if isinstance(wl, list) and wl and anchor_of(wl) != op["ward"]["anchor"]: return "row 6: ward record does not name the ward's anchor"
+        why = standing(before["successor"], did, anchor, F)
+        if why: return f"row 4: promoted successor lacks standing ({why})"
+    # row 5 (r7b): setPolicy that does not meet membership and relies on the successor-to-null exception
+    # ASSUMPTION: "does not meet membership" counts approvals with standing, as row 2 does
+    if t == "setPolicy" and before["guardians"] and drops_successor_only(op, before) and \
+            not eval_rule(op, before, S, counts=counts, waiver=False)[0]:
+        e = before["successor"]
+        l, r = F.get(e["did"])
+        if not r: return "row 5: the current successor's log cannot be fetched or does not verify"
+        if r["anchor"] != e["anchor"]: return "row 5: the successor's anchor differs from the entry's"
+        if not (r["state"]["deactivated"] or {"did": did, "anchor": anchor} not in r["state"]["wards"]):
+            return "row 5: the successor has neither deactivated nor released this identity (items 2 and 5 hold)"
+    # row 6: acceptWard
+    if t == "acceptWard":
+        l, r = F.get(op["ward"]["did"])
+        if l is not None:                                            # None only if the registrar reports no log
+            if not r: return "row 6: the ward's log cannot be fetched or does not verify"
+            if r["anchor"] != op["ward"]["anchor"]: return "row 6: ward record does not name the ward's anchor"
     return None
 
 
 def _entry_eq(a, b):
+    """Terminology (r7): did, anchor and consent equal, keys equal as sets (REQ-5-5)."""
     if a is None or b is None: return a is b
     return a["did"] == b["did"] and a["anchor"] == b["anchor"] and a["consent"] == b["consent"] and keys_eq(a["keys"], b["keys"])
 
 
-def registrar_accept(did, log, op, resolver, registrar_domain=None, used_names=(), accepted_prevs=(), implemented=IMPLEMENTED):
-    """REQ-10-5, 10-7, 10-8, 10-9."""
+def request_check(did, op, request):
+    """REQ-10-13, 10-14 (r7b). request = {"authenticatedAs": DID or null, "registrarProofs": [DIDs whose
+    registrar-held keys the registrar used on `op` for this request]}. The attestation is not counted.
+    A held key may sign for its own identity when the request is authenticated as it, or on the create of that
+    identity in the request that creates it (no authentication needed)."""
+    if request is None:
+        return None
+    auth = request.get("authenticatedAs")
+    allowed = {auth} if auth else set()
+    if op.get("type") == "create":
+        allowed.add(did)
+    extra = set(request.get("registrarProofs", [])) - allowed
+    if extra:
+        return f"registrar proofs for {sorted(extra)} in a request authenticated as {auth}"
+    return None
+
+
+def registrar_accept(did, log, op, resolver, registrar_domain=None, used_names=(), accepted_prevs=(), implemented=IMPLEMENTED,
+                     segment=None, pins=None, request=None):
+    """REQ-10-5, 10-7, 10-8, 10-9, 10-10, 10-12, 10-13/10-14 (request), 10-15 (pins).
+    used_names = names for which a create was ACCEPTED (REQ-10-12; rejected creates do not count).
+    segment = the request path segment (REQ-10-5 item 1); default: the path segment of did."""
     log = log or []
     if not isinstance(op, dict):
         return {"accepted": False, "req": "REQ-10-5", "message": "not an object"}
+    is_create = op.get("type") == "create"
+    if is_create and did == root_of(did):
+        return {"accepted": False, "req": "REQ-10-10", "message": "a create of the root identity is not accepted through REQ-10-1"}
     if log:
         if op.get("prev") != op_hash(log[-1]):
             return {"accepted": False, "req": "REQ-10-5", "message": "prev is not the version of the log"}
-    elif op.get("type") != "create":
+    elif not is_create:
         return {"accepted": False, "req": "REQ-10-5", "message": "no log and not a create"}
+    elif op.get("did") != did or (segment is not None and path_segment(did) != segment):
+        return {"accepted": False, "req": "REQ-10-5", "message": "create's did does not have the path segment of the request"}
     if log and op.get("prev") in accepted_prevs:
         return {"accepted": False, "req": "REQ-10-8", "message": "an operation with this prev was already accepted"}
-    if op.get("type") == "create":
-        if registrar_domain is not None and (parse_did(did)[0] != registrar_domain or path_segment(did) in used_names):
-            return {"accepted": False, "req": "REQ-10-9", "message": "wrong domain or name used"}
-        if did != root_of(did):
-            m = ATTREF.fullmatch(op.get("attestation", {}).get("verificationMethod", ""))
-            rl = resolver.get(root_of(did))
-            if not m or not rl or op_hash(rl[-1]) != m.group(2):
-                return {"accepted": False, "req": "REQ-10-9", "message": "attestation does not use the root's current version"}
+    if is_create:
+        if registrar_domain is not None and parse_did(did)[0] != registrar_domain:
+            return {"accepted": False, "req": "REQ-10-9", "message": "the DID's domain is not the registrar's domain"}
+        if path_segment(did) in used_names:
+            return {"accepted": False, "req": "REQ-10-12", "message": "a create was already accepted for this name"}
+        m = ATTREF.fullmatch(op.get("attestation", {}).get("verificationMethod", "")) if isinstance(op.get("attestation"), dict) else None
+        rl = resolver.get(root_of(did))
+        if not m or not rl or op_hash(rl[-1]) != m.group(2):
+            return {"accepted": False, "req": "REQ-10-9", "message": "attestation does not use the root's current version"}
+    why = request_check(did, op, request)
+    if why:
+        return {"accepted": False, "req": "REQ-10-14", "message": why}
     res = verify(did, log + [op], implemented)
     if not res["valid"]:
         return {"accepted": False, "req": "REQ-10-5", "message": f"appended log is {res['result']}: {res['req']} {res['message']}"}
-    if op.get("type") == "create" and did != root_of(did) and not verify_attestation(did, [op], resolver)[0]:
+    if is_create and not verify_attestation(did, [op], resolver)[0]:
         return {"accepted": False, "req": "REQ-10-9", "message": "attestation invalid"}
-    why = registrar_checks(did, log, op, resolver)
+    why = registrar_checks(did, log, op, resolver, pins)
     if why:
-        return {"accepted": False, "req": "REQ-10-7", "message": why}
+        return {"accepted": False, "req": why[0], "message": why[1]}
     return {"accepted": True, "req": None, "message": "ok"}

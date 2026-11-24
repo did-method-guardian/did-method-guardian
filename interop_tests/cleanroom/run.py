@@ -1,4 +1,4 @@
-"""Final runner: vectors-r2, single-change check, DID documents, resolver/registrar checks, W3C vectors."""
+"""Runner (r7): vectors-final, single-change check, DID documents, resolver/registrar checks, W3C vectors."""
 import copy, glob, hashlib, json, os, sys
 from collections import Counter
 from verifier import (IMPLEMENTED, verify, registrar_accept, resolve, resolve_version, Resolver, jcs, b58dec, verify_jcs, hash_data,
@@ -54,11 +54,15 @@ def ndiff(a, b):
 def run_one(v):
     kind = v.get("kind", "verify")
     if kind == "registrar":
-        got = registrar_accept(v["did"], v["log"], v["op"], v["resolver"], implemented=frozenset(v.get("implemented", IMPLEMENTED)))
+        got = registrar_accept(v["did"], v["log"], v["op"], v["resolver"], implemented=frozenset(v.get("implemented", IMPLEMENTED)),
+                               registrar_domain=v.get("registrarDomain"), used_names=set(v.get("acceptedCreates", [])),
+                               segment=v.get("segment"), pins=v.get("pins"), request=v.get("request"))
         return ("accepted" if got["accepted"] else "rejected") == v["expect"]["result"], f"accepted={got['accepted']} {got['req'] or ''} {got['message'][:110]}"
     if kind == "resolve":
-        got = resolve(v["did"], v["log"], v["resolver"])
+        got = resolve(v["did"], v["log"], v["resolver"], version=v.get("versionId"), pins=v.get("pins"))
         ok = (got.get("result") or ("valid" if got["valid"] else "invalid")) == v["expect"]["result"]
+        if ok and got["valid"] and "expectDocument" in v:
+            ok = got["didDocument"] == v["expectDocument"]
         if ok and got["valid"] and "expectMutuality" in v:
             ok = [r for _, _, r in got["mutuality"]] == v["expectMutuality"]
         if ok and got["valid"] and "expectWardReports" in v:
@@ -103,7 +107,8 @@ def extra_checks(V):
     v = V["add-N1"]
     check(not registrar_accept(v["did"], v["log"][:-1], v["log"][-1], v["resolver"], accepted_prevs={v["log"][-1]["prev"]})["accepted"], "REQ-10-7")
     v = V["create"]
-    check(not registrar_accept(v["did"], [], v["log"][0], v["resolver"], registrar_domain="acme.com", used_names={"alice"})["accepted"], "REQ-10-8/10-11")
+    check(not registrar_accept(v["did"], [], v["log"][0], v["resolver"], registrar_domain="acme.com", used_names={"alice"})["accepted"], "REQ-10-12")
+    check(registrar_accept(v["did"], [], v["log"][0], v["resolver"], registrar_domain="acme.com", used_names={"bob"})["accepted"], "REQ-10-12 other name")
     check(not registrar_accept(v["did"], [], v["log"][0], v["resolver"], registrar_domain="other.com")["accepted"], "REQ-10-8 domain")
     return f
 
@@ -141,7 +146,7 @@ def main():
     print(f"conforming implementer vs non-implementer valid/invalid disagreements: {split or 'none'} (over {sum(1 for v in V.values() if v.get('kind', 'verify') == 'verify')} verify vectors)")
     print(f"  (a NON-conforming implementer that applies non-critical extensions would split on: {nonconf})")
     fx = extra_checks(V)
-    print(f"\nextra checks (REQ-9-5, 10-7, 10-8, 10-11, 11-3, 11-4): {'all pass' if not fx else 'FAILED: ' + ', '.join(fx)}")
+    print(f"\nextra checks (REQ-9-5, 10-7, 10-8, 10-9, 10-12, 11-3, 11-4): {'all pass' if not fx else 'FAILED: ' + ', '.join(fx)}")
     print("\nW3C ecdsa-jcs-2019 P-256 test vectors:")
     for n, ok in w3c():
         print(f"  {'PASS' if ok else 'FAIL'} {n}")

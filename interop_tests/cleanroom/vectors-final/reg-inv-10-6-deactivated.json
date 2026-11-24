@@ -151,6 +151,7 @@
    }
   ]
  },
+ "segment": "alice",
  "targets": "REQ-10-6",
  "base": "reg-add-N0"
 }
