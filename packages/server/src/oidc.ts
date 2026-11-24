@@ -1,4 +1,4 @@
-import { anchorOf, checkMutuality, generateKeypair, parseDid, verifyLog, type CreateOp, type Did } from "@did-guardian/lib";
+import { anchorOf, checkMutuality, generateKeypair, multikeyToSpki, parseDid, parseGuardianDid, verifyLog, type CreateOp, type Did } from "@did-guardian/lib";
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { makeResolveLog } from "./logResolver.js";
@@ -56,11 +56,21 @@ async function getOrCreateSigningKeypair(env: Env): Promise<SigningKeypair> {
     const privateKey = await decryptSecret(existing.private_key_enc, env.KEY_ENCRYPTION_KEY);
     return importSigningKeypair(existing.public_key, privateKey, existing.kid);
   }
+  // Audit r4, fix D: generateKeypair's own public key is a Multikey
+  // (REQ-5-8, this method's own did:guardian wire format) -- this
+  // signing key has nothing to do with that; it's an ordinary JOSE/
+  // ES256 key, and importSigningKeypair (jwt.ts) expects base64url
+  // SPKI, the same format packages/lib's crypto.ts itself produces
+  // before Multikey-encoding it. On a fresh deployment (no row in
+  // oidc_signing_keys yet), storing and importing the raw Multikey
+  // string here made every /token call fail: importKey("spki", ...)
+  // rejected it outright.
   const keypair = await generateKeypair();
   const kid = randomSecret().slice(0, 16);
+  const publicKeySpki = multikeyToSpki(keypair.publicKey);
   const privateKeyEnc = await encryptSecret(keypair.privateKey, env.KEY_ENCRYPTION_KEY);
-  await insertSigningKey(env, { kid, public_key: keypair.publicKey, private_key_enc: privateKeyEnc, created_at: new Date().toISOString() });
-  return importSigningKeypair(keypair.publicKey, keypair.privateKey, kid);
+  await insertSigningKey(env, { kid, public_key: publicKeySpki, private_key_enc: privateKeyEnc, created_at: new Date().toISOString() });
+  return importSigningKeypair(publicKeySpki, keypair.privateKey, kid);
 }
 
 function json(data: unknown, status = 200): Response {
@@ -748,7 +758,8 @@ async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret:
   const targetHeld = await getHeldKey(env, targetDid);
   if (!targetHeld) return err(`"${targetDid}" is not an identity this registrar custodies -- it has no key material to issue a token for`, 400);
 
-  if (actorDid !== targetDid) {
+  const actingAsWard = actorDid !== targetDid;
+  if (actingAsWard) {
     const targetLog = await getLog(env, targetDid);
     const verified = targetLog.length > 0 ? await verifyLog(targetDid as Did, targetLog) : undefined;
     const state = verified?.result === "valid" ? verified.state : undefined;
@@ -760,7 +771,34 @@ async function handleTokenExchangeGrant(b: Record<string, string>, clientSecret:
     }
   }
 
-  const scope = typeof b.scope === "string" && b.scope ? b.scope : "openid";
+  // Audit r4, fix C: a delegated token's own scope was never checked
+  // against anything -- a client could request (and receive) any
+  // scope string at all, regardless of what the subject_token's own
+  // holder was ever actually granted, or of whether this is a token
+  // acting AS someone else entirely.
+  const requestedScopes = (typeof b.scope === "string" && b.scope ? b.scope : "openid").split(/\s+/).filter(Boolean);
+
+  // 1. Never wider than what the subject_token itself was granted --
+  // a client cannot use token exchange to escalate past what its own
+  // caller actually consented to.
+  const grantedScopes = new Set(verified.scope);
+  const excessive = requestedScopes.filter((s) => !grantedScopes.has(s));
+  if (excessive.length > 0) return err(`requested scope exceeds the subject_token's own granted scope: ${excessive.join(" ")}`, 400);
+
+  // 2. A token that acts AS a ward (actingAsWard) must never carry
+  // create:managed-identity, or any other scope that makes this
+  // registrar sign with the WARD's own held key on its behalf --
+  // guardian standing authorizes acting for the ward under the
+  // method's own rules, never an open-ended grant of the ward's own
+  // Managed Identity API powers, which only the ward's own direct
+  // consent can give.
+  const FORBIDDEN_WHEN_ACTING_AS_WARD = new Set(["create:managed-identity"]);
+  if (actingAsWard) {
+    const forbidden = requestedScopes.filter((s) => FORBIDDEN_WHEN_ACTING_AS_WARD.has(s));
+    if (forbidden.length > 0) return err(`a token acting as "${targetDid}" (not itself) may never carry: ${forbidden.join(" ")}`, 403);
+  }
+
+  const scope = requestedScopes.join(" ");
   const accessToken = await issueDelegatedAccessToken(env, targetDid, actorDid, b.client_id, scope);
   return json({
     access_token: accessToken,
@@ -849,6 +887,7 @@ export async function verifyAccessToken(env: Env, token: string): Promise<Verifi
 
   let publicKey: CryptoKey | null;
   let checkLocalRevocation: boolean;
+  let federatedHostname: string | undefined;
   if (issuer === selfIssuer) {
     const keypair = await getOrCreateSigningKeypair(env);
     publicKey = await crypto.subtle.importKey("jwk", keypair.publicKeyJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
@@ -858,11 +897,35 @@ export async function verifyAccessToken(env: Env, token: string): Promise<Verifi
     if (!issuer || !trusted.includes(new URL(issuer).hostname)) return null;
     publicKey = await fetchForeignPublicKey(issuer, decoded.header.kid);
     checkLocalRevocation = false;
+    federatedHostname = new URL(issuer).hostname;
   }
   if (!publicKey) return null;
 
   const payload = await verifyJwt(token, publicKey);
   if (!payload || typeof payload.sub !== "string") return null;
+
+  // Audit r4, fix C: an id_token carries no `typ` claim at all
+  // (issueTokenPair's own two JWTs differ exactly there) -- every
+  // caller of this function treats whatever it returns as proof of a
+  // bearer-token-worthy access grant, so an id_token (meant only for
+  // the client application that requested it to read, never to be
+  // replayed as a credential) must never pass here. `aud` is also
+  // required to be present -- a token this registrar itself issues
+  // always sets one (the client, or a resource indicator); its
+  // absence is not a shape this registrar's own tokens take.
+  if (payload.typ !== "access") return null;
+  if (typeof payload.aud !== "string" && !Array.isArray(payload.aud)) return null;
+
+  // Audit r4, fix C: a federated token's own `sub` must actually
+  // belong to the issuer that signed it -- otherwise a trusted peer
+  // registrar (or anything that can get a token signed by one) could
+  // simply claim to BE an identity on a domain it has no authority
+  // over at all, including this registrar's own.
+  if (federatedHostname) {
+    const subDomain = parseGuardianDid(payload.sub)?.domain;
+    if (subDomain !== federatedHostname) return null;
+  }
+
   if (checkLocalRevocation && typeof payload.jti === "string" && (await isJtiRevoked(env, payload.jti))) return null;
   const scope = typeof payload.scope === "string" ? payload.scope.split(/\s+/).filter(Boolean) : [];
   return { sub: payload.sub, scope };

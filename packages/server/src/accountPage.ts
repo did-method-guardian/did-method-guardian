@@ -198,13 +198,29 @@ export async function handleAccountRotate(request: Request, env: Env): Promise<R
   // AuthenticatedRequest signAs itself now requires (REQ-10-13 can't be
   // satisfied by a caller just asserting its own identity).
   const auth = (await authenticateRequest(request, env, session.wardDid))!;
+  let result: { loginSecret?: string };
   try {
-    await rotateHeldKey(env, auth, session.wardDid);
+    result = await rotateHeldKey(env, auth, session.wardDid);
   } catch (e) {
     if (e instanceof RegistrarError) return redirectToAccount(`Couldn't rotate: ${e.message}`, "error");
     throw e;
   }
-  return redirectToAccount("Operational key rotated.");
+
+  // Audit r4, fix D: the rotation that just succeeded already
+  // invalidated THIS request's own gw_session (same as every other
+  // session for this identity) and its old login_secret -- redirecting
+  // to /account now would just bounce into a login wall, and the new
+  // login_secret the rotation issued would never be shown at all. Shown
+  // here directly instead, the same one-time pattern
+  // handleAccountReissueLoginSecret already uses.
+  if (!result.loginSecret) return redirectToAccount("Operational key rotated.");
+  const body = `
+    <h1>Key rotated</h1>
+    <p class="hint">Your key has been rotated. Rotating also ends every session for this identity, including this one, and issues a new login secret -- shown once, right now. Write it down.</p>
+    <dl><dt>New login secret</dt><dd>${secretBox(result.loginSecret)}</dd></dl>
+    <p><a href="/guardian-login">Sign in again</a></p>
+  `;
+  return html(pageShell("Key rotated", body));
 }
 
 const MIN_PASSWORD_LENGTH = 12;

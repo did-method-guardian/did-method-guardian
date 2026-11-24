@@ -7,7 +7,7 @@
 // required signer runs "operation sign" against the same pending id.
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
-import { createProof, operationHash, parseDid } from "@did-guardian/lib";
+import { createProof, operationHash, parseDid, verifyLog } from "@did-guardian/lib";
 import type { Did, Operation } from "@did-guardian/lib";
 import { loadKey } from "../keystore.js";
 import { confirmYesNo } from "../confirm.js";
@@ -60,12 +60,31 @@ export function registerOperationCommand(program: Command): void {
       if (targetDomain !== opts.registrar) {
         throw new Error(`this proposal's own DID (${status.did}) is on ${targetDomain}, not ${opts.registrar} -- refusing to sign a proposal that doesn't match the registrar you asked for`);
       }
-      const prevField = (status.operation as { prev?: string | null }).prev;
-      if (prevField) {
+      // REQ-5-17 (r7d, audit r4): a hostile pending-op server can label
+      // ANY operation with ANY did it likes -- a bare prev-hash
+      // comparison against whatever that same server serves back for
+      // "the DID's log" proves nothing, since the attacker controls
+      // that response too (it can simply echo back an operation that
+      // happens to hash to the right value, with no real log behind
+      // it at all). Fetching the log from the DID's own domain and
+      // running verifyLog against it is what actually catches that:
+      // a forged DID's log can never genuinely verify with someone
+      // else's operation grafted onto its end, since verifyLog's own
+      // first-operation check requires `did` to match exactly. A
+      // mismatch here is a hard refusal, not a warning -- and never
+      // skippable by -y, which only ever skips the confirmation
+      // prompt below, not this check. `create` is exempt (REQ-5-17
+      // itself only applies to every other operation type): there is
+      // no prior log to verify yet.
+      if (status.operation.type !== "create") {
         const log = await fetchLog(status.did);
+        const verified = await verifyLog(status.did, log);
         const currentHead = log.length > 0 ? await operationHash(log[log.length - 1]) : null;
-        if (prevField !== currentHead) {
-          console.log(`Warning: this proposal's own prev (${prevField}) does not match ${status.did}'s current log head (${currentHead ?? "no log yet"}) -- it will be rejected as stale if signed and submitted now.`);
+        const prevField = (status.operation as { prev?: string | null }).prev;
+        if (verified.result !== "valid" || prevField !== currentHead) {
+          throw new Error(
+            `REQ-5-17: refusing to sign -- ${status.did}'s own log ${verified.result !== "valid" ? `does not verify (${verified.reason})` : "does not end where this proposal's own prev claims"} (prev: ${prevField}, current head: ${currentHead ?? "no log yet"})`,
+          );
         }
       }
 

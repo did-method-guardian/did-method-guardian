@@ -48,9 +48,22 @@ export type LogResolver = (did: Did) => Log | null | undefined | Promise<Log | n
 
 export type Outcome = "valid" | "invalid" | "unsupported";
 
+/**
+ * REQ-5-6 compares hashes, never raw content, so a log that has not
+ * been through `verifyLog` yet (every caller here) can contain an
+ * operation that is not even JCS-safe -- `operationHash` throws on
+ * that, which must never silently abort the whole scan (audit r4,
+ * Z-2): a malformed operation is simply never a match, and scanning
+ * continues past it, since a later, well-formed operation might
+ * still be the one actually being searched for.
+ */
 export async function findByHash(log: Log, hash: string): Promise<number> {
   for (let i = 0; i < log.length; i++) {
-    if ((await operationHash(log[i])) === hash) return i;
+    try {
+      if ((await operationHash(log[i])) === hash) return i;
+    } catch {
+      // not a match -- keep scanning.
+    }
   }
   return -1;
 }
@@ -74,18 +87,12 @@ export async function verifyAttestation(create: CreateOp, resolveLog: LogResolve
 
   const rootLog = await resolveLog(rootDid);
   if (!rootLog) return "invalid";
-  // F-8 (audit): rootLog comes from resolveLog -- another party's own
-  // log, fetched over the network for a registrar, never something
-  // this function already validated. A malformed entry in it (not
-  // even JCS-safe content, say) would otherwise throw out of
-  // findByHash's own operationHash call, turning what this function
-  // documents as "invalid" into an uncaught exception instead.
-  let opIndex: number;
-  try {
-    opIndex = await findByHash(rootLog, version);
-  } catch {
-    return "invalid";
-  }
+  // rootLog comes from resolveLog -- another party's own log, fetched
+  // over the network for a registrar, never something this function
+  // already validated. findByHash itself never throws on a malformed
+  // entry (not even JCS-safe content, say) -- it just never matches
+  // one -- so this is a plain -1 check, not a try/catch.
+  const opIndex = await findByHash(rootLog, version);
   if (opIndex === -1) return "invalid";
 
   const prefixResult = await verifyLog(rootDid, rootLog.slice(0, opIndex + 1), implementedExtensions);
@@ -114,21 +121,53 @@ export interface ResolvePin {
 
 /**
  * REQ-11-4 against a previously recorded pin, for REQ-11-9's benefit.
+ *
+ * Audit r4 (Z-2): checking only "is the recorded version's hash
+ * present somewhere in this log" is not enough -- an attacker who
+ * forks right after the anchor can append the honestly-signed,
+ * actually-pinned operation AFTER the fork, purely so its hash is
+ * still found somewhere, while resolving with a `versionId` that
+ * truncates the effective log back to the fork before that pinned
+ * operation is ever reached. REQ-11-4 (r7d) now requires verifying
+ * the log from its first operation through whichever of the recorded
+ * version or the `versionId` operation comes LATER in the log --
+ * which the fork itself fails (its forked operation's own `prev`
+ * never chains to the pinned one two slots further on), reported
+ * correctly as rolled back or forked instead of silently resolving
+ * through the fork to the attacker's own key.
+ *
  * `log` has not been through `verifyLog` yet at this point, so a
- * malformed entry could throw out of its own hashing -- caught the
- * same way as this file's other two pre-verification scans
- * (verifyAttestation's rootLog, resolve's own versionId lookup below).
+ * malformed `log[0]` could throw out of `anchorOf` -- treated as
+ * rolled back or forked (a log that cannot even be checked against
+ * the recorded pin is never treated as matching it). `findByHash`
+ * itself never throws (a malformed operation anywhere else in the
+ * scan is simply never a match, continuing the scan) -- so a pinned
+ * version this can't find by hashing counts as "the recorded version
+ * is absent," not as "no report at all."
  */
-async function pinReport(log: Log, pin: ResolvePin | undefined): Promise<"different identity" | "rolled back or forked" | undefined> {
+async function pinReport(
+  did: Did,
+  log: Log,
+  pin: ResolvePin | undefined,
+  versionId: string | undefined,
+  implementedExtensions: ReadonlySet<string>,
+): Promise<"different identity" | "rolled back or forked" | undefined> {
   if (!pin || log.length === 0) return undefined;
+  let anchor: string;
   try {
-    const anchor = await anchorOf(log[0] as CreateOp);
-    if (anchor !== pin.anchor) return "different identity";
-    if ((await findByHash(log, pin.version)) === -1) return "rolled back or forked";
-    return undefined;
+    anchor = await anchorOf(log[0] as CreateOp);
   } catch {
-    return undefined;
+    return "rolled back or forked";
   }
+  if (anchor !== pin.anchor) return "different identity";
+
+  const pinnedIndex = await findByHash(log, pin.version);
+  if (pinnedIndex === -1) return "rolled back or forked";
+  const versionIdIndex = versionId !== undefined ? await findByHash(log, versionId) : -1;
+  const throughIndex = Math.max(pinnedIndex, versionIdIndex);
+
+  const verified = await verifyLog(did, log.slice(0, throughIndex + 1), implementedExtensions);
+  return verified.result === "valid" ? undefined : "rolled back or forked";
 }
 
 /**
@@ -151,21 +190,15 @@ export async function resolve(
   versionId?: string,
   pin?: ResolvePin,
 ): Promise<ResolveResult> {
-  const report = await pinReport(log, pin);
+  const report = await pinReport(did, log, pin, versionId, implementedExtensions);
   if (report) return { result: "invalid", reason: `REQ-11-9: REQ-11-4 reports ${report} for this DID -- no DID document` };
 
   let effectiveLog = log;
   if (versionId !== undefined) {
-    // F-8 (same class): `log` hasn't been through verifyLog yet at
-    // this point either, so a malformed entry could throw out of
-    // findByHash's own hashing -- caught the same way as
-    // verifyAttestation's own rootLog scan, below.
-    let index: number;
-    try {
-      index = await findByHash(log, versionId);
-    } catch {
-      return { result: "invalid", reason: "REQ-9-5: the log could not be hashed to look for that version" };
-    }
+    // findByHash itself never throws on a malformed entry elsewhere in
+    // the log -- it is simply never a match -- so this is a plain -1
+    // check, not a try/catch.
+    const index = await findByHash(log, versionId);
     if (index === -1) return { result: "invalid", reason: `REQ-9-5: no operation with hash ${versionId} in this log` };
     effectiveLog = log.slice(0, index + 1);
   }

@@ -1460,6 +1460,39 @@ def build():
       "'the operation has no critical' fails", m_body(lambda b, w, i: b.__setitem__("critical", [MINKEYS])))
     S("res-inv-11-9-different-identity", "pins-base", "REQ-11-9", "the resolver's pin for alice has the root's anchor: no DID document",
       m_vec(lambda v, w: v.__setitem__("pins", {ALICE: [w.ids[D].anchor, op_hash(v["log"][-1])]})))
+    # ---- r7d (audit r4, lib M-1): the pin check verifies through the recorded version or versionId, whichever is later
+    S("res-inv-11-4-fork-inserted-versionid", "pins-base", "REQ-11-4", "r7d: the resolver pinned the rotation; the log is served as "
+      "[create, fork, rotation] where fork is signed by the old key, and versionId names the fork: the log does not verify through the "
+      "recorded version, so it is rolled back or forked: no DID document", m_vec(_fork_inserted))
+    S("res-inv-11-4-fork-junk-tail", "pins-base", "REQ-11-4", "r7d: the resolver pinned the rotation; the log is served as [create, fork, "
+      "an operation that cannot be hashed] with versionId naming the fork: the recorded version is absent: no DID document", m_vec(_fork_junk))
+    S("res-11-4-versionid-before-pin", "pins-base", "REQ-11-4", "r7d: the resolver pinned the rotation; versionId names the create of the "
+      "honest log: the log verifies through the recorded version, and the create's document is returned",
+      m_vec(lambda v, w: (v.__setitem__("pins", {v["did"]: [w.ids[v["did"]].anchor, op_hash(v["log"][-1])]}),
+                          v.__setitem__("versionId", op_hash(v["log"][0])))), "valid")
+
+
+def _fork(v, w):
+    a = w.ids[v["did"]]
+    rot = v["log"][1]
+    body = {k: x for k, x in rot.items() if k != "proof"}
+    kx = w.newkey()
+    body["keys"] = [kx]
+    return rot, _signed(w, a, body, sorted([a.states[0]["keys"][0], kx]))
+
+
+def _fork_inserted(v, w):
+    rot, fork = _fork(v, w)
+    v["log"] = [v["log"][0], fork, rot]
+    v["pins"] = {v["did"]: [w.ids[v["did"]].anchor, op_hash(rot)]}
+    v["versionId"] = op_hash(fork)
+
+
+def _fork_junk(v, w):
+    rot, fork = _fork(v, w)
+    v["log"] = [v["log"][0], fork, {"x": 1.5}]
+    v["pins"] = {v["did"]: [w.ids[v["did"]].anchor, op_hash(rot)]}
+    v["versionId"] = op_hash(fork)
 
 
 def _pin_later_op(v, w):

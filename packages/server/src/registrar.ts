@@ -6,7 +6,6 @@ import {
   createProof,
   DEFAULT_POLICY,
   generateKeypair,
-  keyOfVerificationMethod,
   parseGuardianDid,
   resolve as resolveDid,
   sameKeys,
@@ -241,23 +240,24 @@ export async function submitOperation(env: Env, did: Did, candidate: Operation):
       await deleteAllLoginSessionsForWard(env, did);
       await invalidateLoginSecretHash(env, did);
 
-      // Post-recovery reissue (user-decided design, 2026-11-23): the
-      // secret just invalidated above was this ward's only way back
-      // in -- if it was lost or compromised badly enough that its
-      // guardians had to rotate the key *for* it (no proof here came
-      // from any of priorKeys, so this wasn't a current-key-signed
-      // self-service rotation), and this registrar actually holds a
-      // key for it (a self-held/take-custody'd identity has no
-      // login_secret concept at all), issue a fresh one now rather
-      // than leaving the ward locked out until it can reach the
-      // registrar through some other channel. Returned once, below,
-      // to whichever request just finalized this operation -- that's
-      // the guardian's own authenticated request, not the ward's.
-      const signerKeys = new Set(
-        toAccept.proof.map((p) => keyOfVerificationMethod(p.verificationMethod)).filter((k): k is Key => k !== undefined),
-      );
-      const signedByCurrentKey = priorKeys.some((k) => signerKeys.has(k));
-      if (!signedByCurrentKey && (await getHeldKey(env, did))) {
+      // Post-rotation reissue (user-decided design, 2026-11-23;
+      // widened per audit r4 fix D): the secret and every session just
+      // invalidated above were this ward's only way back in -- true
+      // whether its guardians rotated the key *for* it (no proof here
+      // came from any of priorKeys) or the ward rotated its own key
+      // itself (through an authenticated session, e.g. /account/rotate
+      // or /rotate -- the exact deploy blocker fix D names: that
+      // request's own session died in the same step that just
+      // succeeded, with no way back in at all afterward). Either way,
+      // if this registrar actually holds a key for the identity (a
+      // self-held/take-custody'd one has no login_secret concept at
+      // all), issue a fresh one now rather than leaving it locked out
+      // until it can reach the registrar through some other channel.
+      // Returned once, below, to whichever request just finalized this
+      // operation -- the guardian's own authenticated request for a
+      // recovery, or the ward's own for a self-rotation, never anyone
+      // else's.
+      if (await getHeldKey(env, did)) {
         newLoginSecret = randomSecret();
         await setHeldKeyLoginSecretHashForRecovery(env, did, await hashPassword(newLoginSecret));
       }

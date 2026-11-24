@@ -175,6 +175,8 @@ The operation hash of an operation is the hash of the complete operation.
 
 <a id="req-5-16"></a>**REQ-5-16.** A key approves an operation if the operation contains a valid proof from that key. A guardian or successor approves an operation if at least one key in its entry approves it.
 
+<a id="req-5-17"></a>**REQ-5-17.** Before a party creates a proof for an operation other than `create`, it MUST verify the log of the DID that it presents to the key holder as the identity that the operation changes, and MUST NOT create the proof unless that log is valid and the operation's `prev` equals the operation hash of the last operation in that log.
+
 ## 6. State
 
 <a id="req-6-1"></a>**REQ-6-1.** The state of an identity consists of:
@@ -470,7 +472,7 @@ For a `create`, there is no current key, guardian or successor, and N is 0.
 
 <a id="req-11-3"></a>**REQ-11-3.** A resolver SHOULD record the anchor and the version of each log it fetches.
 
-<a id="req-11-4"></a>**REQ-11-4.** If a later fetch of a log yields a different anchor, the resolver MUST report that the DID refers to a different identity. If it yields a log that does not contain the recorded version, the resolver MUST report that the log was rolled back or forked.
+<a id="req-11-4"></a>**REQ-11-4.** If a later fetch of a log yields a different anchor, the resolver MUST report that the DID refers to a different identity. Otherwise, if the resolver has recorded a version for that log, it MUST verify the log from its first operation up to and including the recorded version or the operation named by `versionId`, whichever is later in the log. If the log does not contain the recorded version, or that verification does not report valid, the resolver MUST report that the log was rolled back or forked.
 
 <a id="req-11-5"></a>**REQ-11-5.** For each entry in `guardians` and `successor`, a resolver MAY fetch the log of the entry's `did` and report the first result in this table whose condition holds:
 
@@ -511,7 +513,7 @@ This section is non-normative.
 
 **Mutual guardians.** If two identities are each other's only guardian, one stolen key gives control of both: the holder replaces the keys of one identity, then uses it as guardian to replace the keys of the other. Give each identity at least one guardian outside such a pair.
 
-**Stolen key.** A party that holds a stolen key can act as the identity until the guardians replace the key. Those operations remain in the log.
+**Stolen key.** A party that holds a stolen key can act as the identity until the guardians replace the key. Those operations remain in the log. A registrar accepts only one operation for each `prev` (REQ-10-8). A party that holds a stolen key, or a guardian whose approval alone meets a rule, can therefore keep submitting operations so that operations prepared by other parties name an outdated `prev`. This delays recovery for as long as that party continues.
 
 **Unilateral settings.** `recovery: "any"` lets one guardian replace the keys. `removal: "any"` lets one guardian remove another; with two guardians, either can remove the other. Guardians that can meet `removal` can remove the other guardians and then meet every other setting, so no setting is stricter in effect than `removal`. `deactivation.by: "self"` or `"either"` lets anyone who holds a key end the identity. Choose these settings deliberately.
 
@@ -630,3 +632,4 @@ This draft replaces all earlier drafts of v0.2.0. Earlier drafts are in the repo
 
 - **2026-11-22**: REQ-5-2 constrains the value of a number, not its written form.
 - **2026-11-23**: Revised after audit round 3 and clean-room rounds 7 to 7c.
+- **2026-11-23**: Revised after audit round 4 and clean-room round 7d.

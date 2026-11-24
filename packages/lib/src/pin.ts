@@ -11,6 +11,7 @@
 // caller reimplementing the comparison.
 import { anchorOf, operationHash } from "./operations.js";
 import { findByHash, type LogResolver } from "./resolve.js";
+import { verifyLog } from "./verifyLog.js";
 import type { CreateOp, Did, Log } from "./types.js";
 
 export interface PinRecord {
@@ -49,13 +50,18 @@ export interface PinCheckResult {
 }
 
 /**
- * REQ-11-3/REQ-11-4. `log` MUST already be a log this caller has
- * verified (checkPin trusts its own two hashes, not log's own
- * validity) -- anchorOf/operationHash assume a well-formed `create` at
- * log[0], same precondition every other lib function with that shape
- * has.
+ * REQ-11-3/REQ-11-4. `anchorOf`/`operationHash` on `log[0]`/`log` at
+ * the end assume a well-formed `create` at `log[0]`, same
+ * precondition every other lib function with that shape has -- a
+ * caller that wants `current`/`advance` to mean anything should only
+ * ever call this with a log it has verified. The rollback/fork check
+ * itself makes NO such assumption, deliberately (audit r4, Z-2): this
+ * is commonly the first thing a caller does with a freshly fetched,
+ * not-yet-verified log (see commands/resolve.ts), specifically because
+ * that log might be a fork -- trusting it already verified would defeat
+ * the point.
  */
-export async function checkPin(did: Did, log: Log, store: PinStore): Promise<PinCheckResult> {
+export async function checkPin(did: Did, log: Log, store: PinStore, implementedExtensions: ReadonlySet<string> = new Set()): Promise<PinCheckResult> {
   if (log.length === 0) throw new Error("checkPin: an empty log has no anchor or version to pin");
   const anchor = await anchorOf(log[0] as CreateOp);
   const version = await operationHash(log[log.length - 1]);
@@ -68,11 +74,17 @@ export async function checkPin(did: Did, log: Log, store: PinStore): Promise<Pin
   if (!recorded) return { status: "new", current, advance };
   if (recorded.anchor !== anchor) return { status: "different-identity", current, recorded, advance };
 
-  // REQ-11-4: "does not contain the recorded version" -- the log may
-  // have grown since the recorded version was its own current head, so
-  // this checks the whole log, not just its own last entry.
-  const stillPresent = (await findByHash(log, recorded.version)) !== -1;
-  if (!stillPresent) return { status: "rolled-back-or-forked", current, recorded, advance };
+  // REQ-11-4 (r7d, audit r4 Z-2): "does not contain the recorded
+  // version" alone is not enough -- an attacker who forks right after
+  // the anchor can append the honestly-signed, actually-pinned
+  // operation AFTER the fork purely so its hash is still found
+  // somewhere. Verifying the log from the start through the recorded
+  // version's own index is what actually catches that: the forked
+  // operation's own `prev` never chains to it.
+  const pinnedIndex = await findByHash(log, recorded.version);
+  if (pinnedIndex === -1) return { status: "rolled-back-or-forked", current, recorded, advance };
+  const verified = await verifyLog(did, log.slice(0, pinnedIndex + 1), implementedExtensions);
+  if (verified.result !== "valid") return { status: "rolled-back-or-forked", current, recorded, advance };
   return { status: "same-identity", current, recorded, advance };
 }
 

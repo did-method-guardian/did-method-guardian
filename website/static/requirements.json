@@ -164,6 +164,13 @@
       "tests": []
     },
     {
+      "id": "REQ-5-17",
+      "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-17",
+      "section": "5.4 Proofs",
+      "text": "Before a party creates a proof for an operation other than `create`, it MUST verify the log of the DID that it presents to the key holder as the identity that the operation changes, and MUST NOT create the proof unless that log is valid and the operation's `prev` equals the operation hash of the last operation in that log.",
+      "tests": []
+    },
+    {
       "id": "REQ-6-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-6-1",
       "section": "6. State",
@@ -649,7 +656,8 @@
       "section": "10.2 Accepting operations",
       "text": "For a `create` of an identity other than its root identity, the registrar MUST also require that the DID's domain is its domain and that the name is unused (REQ-10-12). It MUST add the `attestation`, using a key of its root identity and the current version of the root identity's log, before it applies REQ-10-5.",
       "tests": [
-        "packages/lib/tests/registrar-vectors.test.ts"
+        "packages/lib/tests/registrar-vectors.test.ts",
+        "packages/server/tests/managed-identity.test.ts"
       ]
     },
     {
@@ -674,7 +682,8 @@
       "section": "10.2 Accepting operations",
       "text": "A registrar MUST NOT accept a `create` for a name for which it has already accepted a `create`.",
       "tests": [
-        "packages/server/tests/db.test.ts"
+        "packages/server/tests/db.test.ts",
+        "packages/server/tests/managed-identity.test.ts"
       ]
     },
     {
@@ -733,7 +742,7 @@
       "id": "REQ-11-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-11-4",
       "section": "11. Resolution",
-      "text": "If a later fetch of a log yields a different anchor, the resolver MUST report that the DID refers to a different identity. If it yields a log that does not contain the recorded version, the resolver MUST report that the log was rolled back or forked.",
+      "text": "If a later fetch of a log yields a different anchor, the resolver MUST report that the DID refers to a different identity. Otherwise, if the resolver has recorded a version for that log, it MUST verify the log from its first operation up to and including the recorded version or the operation named by `versionId`, whichever is later in the log. If the log does not contain the recorded version, or that verification does not report valid, the resolver MUST report that the log was rolled back or forked.",
       "tests": [
         "packages/lib/tests/pin.test.ts"
       ]

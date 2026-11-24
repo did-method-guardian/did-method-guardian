@@ -192,8 +192,13 @@ async function route(request: Request, env: Env, url: URL, path: string): Promis
       if (suffix === "/rotate" && request.method === "POST") {
         const auth = await authenticateRequest(request, env, did);
         if (!auth) return error("must be signed in as this identity (or a trusted client acting on its behalf) to rotate its key", 403);
-        await rotateHeldKey(env, auth, did);
-        return json({ ok: true, did });
+        // Audit r4, fix D: rotating invalidates this identity's own
+        // login_secret (its own key change always does) and reissues
+        // a fresh one in the same step -- surfaced here so a caller
+        // (the CLI's own "rotate" command, say) actually gets it back,
+        // rather than being left with no credential at all.
+        const { loginSecret } = await rotateHeldKey(env, auth, did);
+        return json({ ok: true, did, ...(loginSecret ? { login_secret: loginSecret } : {}) });
       }
 
       if (suffix === "/take-custody" && request.method === "POST") {

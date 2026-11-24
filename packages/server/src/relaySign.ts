@@ -21,7 +21,8 @@ import { readCookie, resolveSession } from "./login.js";
 import { signAs, authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { getLog } from "./db.js";
-import { parseGuardianDid, verifyLog, type DataIntegrityProof, type Did } from "@did-guardian/lib";
+import { makeResolveLog } from "./logResolver.js";
+import { operationHash, parseGuardianDid, verifyLog, type DataIntegrityProof, type Did } from "@did-guardian/lib";
 
 /**
  * F6 (SSRF + sign-arbitrary-operation): `domain` used to be a free-text
@@ -143,6 +144,26 @@ export async function handleRelaySignSubmit(request: Request, env: Env): Promise
   }
   if (!wardDids.has(status.did)) {
     return html(pageShell("Sign elsewhere", `<h1>Sign elsewhere</h1><p class="error">This operation isn't for a ward you're a guardian of.</p>`), 403);
+  }
+
+  // REQ-5-17 (r7d, audit r4): a remote operation claiming to be for
+  // `status.did` is never trusted on that claim alone -- `domain`'s
+  // own registrar could serve one whose "prev" actually matches some
+  // OTHER identity's own current head instead (hosted there too, or
+  // anywhere), which would make the signature this produces equally
+  // valid if resubmitted directly against THAT identity's own log.
+  // Fetching status.did's own log from its own domain and verifying
+  // it there is what catches that, the same check votingPage.ts's own
+  // signAsSelf makes for a same-registrar operation.
+  if ((status.operation as { type: string }).type !== "create") {
+    const resolveLog = makeResolveLog(env);
+    const remoteLog = await resolveLog(status.did);
+    const verified = remoteLog ? await verifyLog(status.did, remoteLog) : undefined;
+    const currentHead = remoteLog && remoteLog.length > 0 ? await operationHash(remoteLog[remoteLog.length - 1]) : null;
+    const prevField = (status.operation as { prev?: string | null }).prev;
+    if (!remoteLog || verified!.result !== "valid" || prevField !== currentHead) {
+      return html(pageShell("Sign elsewhere", reviewBody(opId, status, signerDid, { error: `${status.did}'s own log does not match this operation's own "prev" -- refusing to sign.` })), 409);
+    }
   }
 
   let proof: DataIntegrityProof;

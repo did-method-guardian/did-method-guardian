@@ -24,7 +24,7 @@ import {
   type RemoveGuardianOp,
   type UpdateOp,
 } from "@did-guardian/lib";
-import { getHeldKey, getLog, insertHeldKey, replaceHeldKey, deleteHeldKey, setHeldKeyLoginSecretHash, type HeldKeyRow } from "./db.js";
+import { deleteAllLoginSessionsForWard, getHeldKey, getLog, insertHeldKey, replaceHeldKey, deleteHeldKey, setHeldKeyLoginSecretHash, type HeldKeyRow } from "./db.js";
 import { didForSegment, submitOperation } from "./registrar.js";
 import { makeResolveLog } from "./logResolver.js";
 import { signAs, type AuthenticatedRequest } from "./signing.js";
@@ -228,6 +228,13 @@ export async function registerManagedIdentity(
 export async function reissueLoginSecret(env: Env, did: Did, password?: string): Promise<string | undefined> {
   const held = await getHeldKey(env, did);
   if (!held) throw new RegistrarError("this registrar does not hold a key for this identity", 404);
+  // Audit r4, fix E: reissuing only ever changed what a NEW login
+  // could produce -- anyone who already used the OLD login_secret to
+  // open a session kept that session working, untouched, until it
+  // expired on its own. A caller reissuing this (e.g. because they
+  // suspect the old one leaked) means for that to actually end
+  // access, not just change what a future login needs.
+  await deleteAllLoginSessionsForWard(env, did);
   if (password) {
     await setHeldKeyLoginSecretHash(env, did, await hashPassword(password));
     return undefined;
@@ -258,7 +265,7 @@ async function currentPrev(env: Env, did: Did): Promise<string> {
  * current key) this registrar can both produce itself, since it holds
  * the old key and is about to hold the new one.
  */
-export async function rotateHeldKey(env: Env, auth: AuthenticatedRequest, did: Did): Promise<void> {
+export async function rotateHeldKey(env: Env, auth: AuthenticatedRequest, did: Did): Promise<{ loginSecret?: string }> {
   const held = await getHeldKey(env, did);
   if (!held) throw new RegistrarError("this registrar does not hold a key for this identity", 404);
   const { services, alsoKnownAs, prev } = await currentServicesAndAkas(env, did);
@@ -269,8 +276,16 @@ export async function rotateHeldKey(env: Env, auth: AuthenticatedRequest, did: D
   const oldKeyProof = await signAs(env, auth, did, base);
   const op: UpdateOp = { ...base, proof: sortProofs([newKeyProof, oldKeyProof]) };
 
-  await submitOperation(env, did, op);
+  // Audit r4, fix D: submitOperation's own keys-changed handling
+  // invalidates every session for this DID, including the one that
+  // authenticated THIS very request -- a rotation used to lock the
+  // requester out completely (dead session, no login_secret, no way
+  // back in) the moment it succeeded. It now reissues a fresh
+  // login_secret in the same step; returning it here is what lets the
+  // caller actually show it, rather than discarding it as before.
+  const result = await submitOperation(env, did, op);
   await replaceHeldKey(env, did, newKeypair.publicKey, await encryptSecret(newKeypair.privateKey, env.KEY_ENCRYPTION_KEY));
+  return { loginSecret: result.newLoginSecret };
 }
 
 /**

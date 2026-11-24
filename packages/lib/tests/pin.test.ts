@@ -10,7 +10,7 @@ async function buildLog(): Promise<Log> {
   const key1 = await generateKeypair();
   const createBase: Omit<CreateOp, "proof"> = {
     type: "create",
-    did: "did:guardian:example.com:alice" as Did,
+    did: "did:guardian:example.com" as Did,
     keys: [key1.publicKey],
     guardians: [],
     successor: null,
@@ -51,18 +51,18 @@ function memoryStore(): PinStore & { records: Map<Did, PinRecord> } {
 test("checkPin: a never-before-seen DID is 'new', and advance() records it", async () => {
   const log = await buildLog();
   const store = memoryStore();
-  const result = await checkPin("did:guardian:example.com:alice" as Did, log, store);
+  const result = await checkPin("did:guardian:example.com" as Did, log, store);
   assert.equal(result.status, "new");
   assert.equal(result.recorded, undefined);
   await result.advance();
-  assert.deepEqual(store.records.get("did:guardian:example.com:alice" as Did), result.current);
+  assert.deepEqual(store.records.get("did:guardian:example.com" as Did), result.current);
 });
 
 test("checkPin: the same log fetched again, with nothing new, is 'same-identity'", async () => {
   const log = await buildLog();
   const store = memoryStore();
-  await (await checkPin("did:guardian:example.com:alice" as Did, log, store)).advance();
-  const second = await checkPin("did:guardian:example.com:alice" as Did, log, store);
+  await (await checkPin("did:guardian:example.com" as Did, log, store)).advance();
+  const second = await checkPin("did:guardian:example.com" as Did, log, store);
   assert.equal(second.status, "same-identity");
 });
 
@@ -70,38 +70,38 @@ test("checkPin: the log growing (a later operation added) is still 'same-identit
   const log = await buildLog();
   const store = memoryStore();
   // Pin after only the create.
-  await (await checkPin("did:guardian:example.com:alice" as Did, [log[0]], store)).advance();
+  await (await checkPin("did:guardian:example.com" as Did, [log[0]], store)).advance();
   // Fetch again later, now with the update appended too.
-  const grown = await checkPin("did:guardian:example.com:alice" as Did, log, store);
+  const grown = await checkPin("did:guardian:example.com" as Did, log, store);
   assert.equal(grown.status, "same-identity");
 });
 
 test("checkPin: a different anchor (a different identity entirely) is 'different-identity'", async () => {
   const log = await buildLog();
   const store = memoryStore();
-  await (await checkPin("did:guardian:example.com:alice" as Did, log, store)).advance();
+  await (await checkPin("did:guardian:example.com" as Did, log, store)).advance();
 
   const otherLog = await buildLog(); // a fresh create -- a different anchor
-  const result = await checkPin("did:guardian:example.com:alice" as Did, otherLog, store);
+  const result = await checkPin("did:guardian:example.com" as Did, otherLog, store);
   assert.equal(result.status, "different-identity");
 });
 
 test("checkPin: a log that no longer contains the previously recorded version is 'rolled-back-or-forked'", async () => {
   const log = await buildLog();
   const store = memoryStore();
-  await (await checkPin("did:guardian:example.com:alice" as Did, log, store)).advance(); // pins at the update
+  await (await checkPin("did:guardian:example.com" as Did, log, store)).advance(); // pins at the update
 
   // A rollback: the fetched log now has only the create.
-  const rolledBack = await checkPin("did:guardian:example.com:alice" as Did, [log[0]], store);
+  const rolledBack = await checkPin("did:guardian:example.com" as Did, [log[0]], store);
   assert.equal(rolledBack.status, "rolled-back-or-forked");
 });
 
 test("checkPin: advance() is callable even after a rolled-back-or-forked result -- a caller may choose to trust it anyway", async () => {
   const log = await buildLog();
   const store = memoryStore();
-  await (await checkPin("did:guardian:example.com:alice" as Did, log, store)).advance();
-  const rolledBack = await checkPin("did:guardian:example.com:alice" as Did, [log[0]], store);
+  await (await checkPin("did:guardian:example.com" as Did, log, store)).advance();
+  const rolledBack = await checkPin("did:guardian:example.com" as Did, [log[0]], store);
   await rolledBack.advance();
-  const after = await checkPin("did:guardian:example.com:alice" as Did, [log[0]], store);
+  const after = await checkPin("did:guardian:example.com" as Did, [log[0]], store);
   assert.equal(after.status, "same-identity");
 });

@@ -831,24 +831,35 @@ def ward_reports(did, state, resolver):
     return out
 
 
-def pin_report(log, pin):
-    """REQ-11-4 against a recorded (anchor, version). Returns None or the report."""
+def pin_report(log, pin, version=None, did=None):
+    """REQ-11-4 (r7d) against a recorded (anchor, version). Returns None or the report."""
     if pin is None or not isinstance(log, list) or not log or not all(isinstance(o, dict) for o in log):
         return None
     try:
-        a, hs = anchor_of(log), [op_hash(o) for o in log]
+        a = anchor_of(log)
     except Invalid:
         return None
     if a != pin[0]:
         return "different identity"
+    hs = []
+    for o in log:
+        try:
+            hs.append(op_hash(o))
+        except Invalid:
+            hs.append(None)
     if pin[1] not in hs:
+        return "rolled back or forked"
+    end = hs.index(pin[1])
+    if version is not None and version in hs:
+        end = max(end, hs.index(version))
+    if did is not None and not verify(did, log[:end + 1])["valid"]:
         return "rolled back or forked"
     return None
 
 
 def resolve(did, log, resolver, version=None, pins=None):
     """REQ-11-1 (+ versionId, REQ-9-5), REQ-11-2, 11-4 (pins = recorded {did: [anchor, version]}), 11-5..11-7, 11-9."""
-    rep = pin_report(log, (pins or {}).get(did))
+    rep = pin_report(log, (pins or {}).get(did), version, did)
     if rep:                                                           # REQ-11-9
         return {"valid": False, "result": "invalid", "req": "REQ-11-9", "message": f"REQ-11-4 reports {rep}: no DID document"}
     if version is not None:                                           # REQ-11-1 step 2, REQ-9-5

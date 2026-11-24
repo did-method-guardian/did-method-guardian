@@ -20,13 +20,34 @@
 import type { Env } from "./env.js";
 import { safeFormData } from "./http.js";
 import { didFor } from "./env.js";
+import { getLog } from "./db.js";
 import { html, escapeHtml, pageShell, authPageShell } from "./htmlPage.js";
 import { readCookie, resolveSession, verifyLogin, createLoginSession, endSession } from "./login.js";
 import { getPendingOperationStatus, contributeProof, cancelPendingOperation } from "./pendingProofs.js";
 import { checkRateLimit, clientIp } from "./rateLimit.js";
 import { signAs, authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
-import type { Did } from "@did-guardian/lib";
+import { operationHash, verifyLog, type Did } from "@did-guardian/lib";
+
+/**
+ * REQ-5-17 (r7d, audit r4): before a party creates a proof for an
+ * operation other than `create` -- or shows one as "the operation
+ * for this DID" to a human about to approve it -- it must verify
+ * that operation's own `prev` against that EXACT DID's own current,
+ * verified log. A pending proposal's own `did` field is never proof
+ * of what the operation actually changes: its `prev` could instead
+ * be some OTHER identity's own current head, crafted so that
+ * identity's own guardian, believing it is approving THIS DID's
+ * recovery, unwittingly produces a proof that is equally valid if
+ * resubmitted directly to that OTHER identity's own log instead.
+ */
+async function matchesOwnLog(env: Env, did: Did, operation: { type: string; prev?: string | null }): Promise<boolean> {
+  if (operation.type === "create") return true;
+  const log = await getLog(env, did);
+  const verified = await verifyLog(did, log);
+  const currentHead = log.length > 0 ? await operationHash(log[log.length - 1]) : null;
+  return verified.result === "valid" && operation.prev === currentHead;
+}
 
 const SESSION_COOKIE = "gw_session";
 
@@ -52,7 +73,14 @@ export async function renderPendingOpPage(env: Env, wardName: string, id: string
     throw e;
   }
   if (status.did !== wardDid) return html(pageShell("Not found", `<h1>Not found</h1><p class="error">No such pending operation for this identity.</p>`), 404);
-  const opType = (status.operation as { type: string }).type;
+  const operation = status.operation as { type: string; prev?: string | null };
+  if (!(await matchesOwnLog(env, wardDid, operation))) {
+    return html(
+      pageShell("Cannot be shown", `<h1>Cannot be shown</h1><p class="error">This proposal's own "prev" does not match ${escapeHtml(wardDid)}'s current log -- it cannot be the next operation for this identity, whatever it claims to be. Refusing to show it for signing.</p>`),
+      409,
+    );
+  }
+  const opType = operation.type;
 
   // F2, corrected per review: a genuine addGuardian (checkAcceptance's
   // own standing check already refuses a fabricated one) can still
@@ -118,7 +146,7 @@ export async function signAsSelf(request: Request, env: Env, id: string): Promis
   const auth = await authenticateRequest(request, env, signerDid);
   if (!auth) return html(pageShell("Sign in required", `<h1>Sign in required</h1><p class="error">You need to be signed in to sign this.</p>`), 401);
 
-  let status: { operation: object; digest: string };
+  let status: { did: Did; operation: object; digest: string };
   try {
     status = await getPendingOperationStatus(env, id);
   } catch (e) {
@@ -134,6 +162,16 @@ export async function signAsSelf(request: Request, env: Env, id: string): Promis
   const submittedDigest = String(form.get("digest") ?? "");
   if (submittedDigest !== status.digest) {
     return html(pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">This confirmation doesn't match the operation's current content -- reload the page and try again.</p>`), 400);
+  }
+
+  // REQ-5-17 (r7d, audit r4): never create a proof for this operation
+  // without independently checking its own "prev" against the DID
+  // this proposal claims it is for -- see matchesOwnLog's own comment.
+  if (!(await matchesOwnLog(env, status.did, status.operation as { type: string; prev?: string | null }))) {
+    return html(
+      pageShell("Couldn't sign", `<h1>Couldn't sign</h1><p class="error">This proposal's own "prev" does not match ${escapeHtml(status.did)}'s current log -- it cannot be the next operation for this identity. Refusing to sign.</p>`),
+      409,
+    );
   }
 
   let proof;
