@@ -20,6 +20,7 @@ import {
   type Did,
   type Entry,
   type Key,
+  type ReleaseWardOp,
   type RemoveGuardianOp,
   type UpdateOp,
 } from "@did-guardian/lib";
@@ -133,13 +134,34 @@ export async function registerManagedIdentity(
 ): Promise<{ did: Did; loginSecret?: string }> {
   if (!isValidName(name)) throw new RegistrarError(`invalid name "${name}" -- must be 3-32 lowercase alphanumeric/hyphen characters, no leading/trailing/double hyphens`, 400);
   const guardianDid = guardianAuth.identity;
-  const guardianLog = await getLog(env, guardianDid);
+  const did = didForSegment(env, name);
+  if ((await getLog(env, did)).length > 0) throw new RegistrarError(`an identity already exists for "${name}"`, 409);
+
+  let guardianLog = await getLog(env, guardianDid);
   if (guardianLog.length === 0) throw new RegistrarError("no such guardian identity", 404);
-  const guardianVerified = await verifyLog(guardianDid, guardianLog);
+  let guardianVerified = await verifyLog(guardianDid, guardianLog);
   if (guardianVerified.result !== "valid") throw new RegistrarError("this guardian's own log does not verify", 500);
   const guardianAnchor = await anchorOf(guardianLog[0] as CreateOp);
 
-  const did = didForSegment(env, name);
+  // Retry safety: a prior attempt at this exact name can have gotten
+  // this guardian's own acceptWard accepted and then failed before the
+  // create itself did (this ward's own log is still empty, checked
+  // above) -- that stale record's anchor came from a keypair this
+  // attempt has no way to recover, and REQ-7-23 rejects a fresh
+  // acceptWard for a `did` already in `wards` regardless of anchor, so
+  // a plain retry would otherwise fail with a confusing REQ-7-6
+  // rejection that has nothing to do with the real problem. Release it
+  // first, the same identity this registrar is about to re-accept
+  // under a brand new key.
+  if (guardianVerified.state!.wards.some((w) => w.did === did)) {
+    const releaseBase: Omit<ReleaseWardOp, "proof"> = { type: "releaseWard", ward: did, prev: await currentPrev(env, guardianDid) };
+    const releaseProof = await signAs(env, guardianAuth, guardianDid, releaseBase);
+    await submitOperation(env, guardianDid, { ...releaseBase, proof: [releaseProof] });
+    guardianLog = await getLog(env, guardianDid);
+    guardianVerified = await verifyLog(guardianDid, guardianLog);
+    if (guardianVerified.result !== "valid") throw new RegistrarError("this guardian's own log does not verify", 500);
+  }
+
   const keypair = await generateKeypair();
   const publicKey = keypair.publicKey as Key;
 
