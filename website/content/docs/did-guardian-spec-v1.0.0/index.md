@@ -97,7 +97,7 @@ This specification defines requirements for identities, registrars and resolvers
 
 <a id="req-4-1"></a>[**REQ-4-1.**](#req-4-1) A did:guardian DID *MUST* match one of these forms:
 
-```
+```text {linenos=false}
 did:guardian:<domain>
 did:guardian:<domain>:<name>
 ```
@@ -563,7 +563,7 @@ This appendix is non-normative. Hashes, keys and signatures are shortened with `
 
 Bob agrees to guard Alice. Alice's client computes the anchor of her `create`, which does not depend on her guardians ([REQ-5-7](#req-5-7)). Bob records `acceptWard` in his log:
 
-```json
+```json {linenos=false}
 {
   "type": "acceptWard",
   "ward": {"did": "did:guardian:acme.com:alice", "anchor": "zQmAliceAnchor…"},
@@ -574,7 +574,7 @@ Bob agrees to guard Alice. Alice's client computes the anchor of her `create`, w
 
 Bob's `acceptWard` has operation hash `zQmBobAccept…`. Alice's `create` names Bob as a guardian:
 
-```json
+```json {linenos=false}
 {
   "type": "create",
   "did": "did:guardian:acme.com:alice",
@@ -602,7 +602,7 @@ Bob's `acceptWard` has operation hash `zQmBobAccept…`. Alice's `create` names 
 
 Bob replaces the key in his log, then updates his entry in Alice's log. In this example, `zDnaeBob…` sorts before `zDnaeBobNew…`; real keys sort by their full encoded values ([REQ-5-10](#req-5-10)):
 
-```json
+```json {linenos=false}
 {
   "type": "updateGuardian",
   "guardian": "did:guardian:acme.com:bob",

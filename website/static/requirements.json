@@ -4,7 +4,7 @@
       "id": "REQ-4-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-4-1",
       "section": "4. Identifier",
-      "text": "A did:guardian DID *MUST* match one of these forms:\n\n```\ndid:guardian:<domain>\ndid:guardian:<domain>:<name>\n```",
+      "text": "A did:guardian DID *MUST* match one of these forms:\n\n```text {linenos=false}\ndid:guardian:<domain>\ndid:guardian:<domain>:<name>\n```",
       "tests": []
     },
     {
