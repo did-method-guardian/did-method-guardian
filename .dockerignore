@@ -5,7 +5,6 @@ dist/
 __pycache__/
 .venv/
 website/
-docs-internal/
 interop_tests/
 .git/
 .wrangler/
