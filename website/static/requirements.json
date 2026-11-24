@@ -11,7 +11,7 @@
       "id": "REQ-4-2",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-4-2",
       "section": "4. Identifier",
-      "text": "`<domain>` *MUST* be a DNS hostname of two or more labels, in lowercase, at most 253 characters long. Each label *MUST* be 1 to 63 characters from `a`\u2013`z`, `0`\u2013`9` and `-`, and *MUST* begin and end with a letter or a digit. Internationalized names *MUST* use their A-label form. The last label *MUST NOT* consist only of digits.",
+      "text": "`<domain>` *MUST* be a [DNS hostname](https://www.rfc-editor.org/rfc/rfc1035) of two or more labels, in lowercase, at most 253 characters long. Each label *MUST* be 1 to 63 characters from `a`\u2013`z`, `0`\u2013`9` and `-`, and *MUST* begin and end with a letter or a digit. Internationalized names *MUST* use their [A-label](https://www.rfc-editor.org/rfc/rfc5890) form. The last label *MUST NOT* consist only of digits.",
       "tests": [
         "packages/lib/tests/resolve.test.ts"
       ]
@@ -52,7 +52,7 @@
       "id": "REQ-5-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-1",
       "section": "5.1 Values",
-      "text": "An operation *MUST* be an I-JSON message (RFC 7493).",
+      "text": "An operation *MUST* be an I-JSON message ([RFC 7493](https://www.rfc-editor.org/rfc/rfc7493)).",
       "tests": []
     },
     {
@@ -69,14 +69,14 @@
       "id": "REQ-5-3",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-3",
       "section": "5.1 Values",
-      "text": "An operation *MUST* contain exactly the members that Section 7 defines for its type, and *MAY* also contain the members `extensions` and `critical` (Section 7.11). Every object inside an operation *MUST* contain exactly the members that this specification defines for it. A policy object *MAY* also contain the member `extensions`.",
+      "text": "An operation *MUST* contain exactly the members that [Section 7](#7-operations) defines for its type, and *MAY* also contain the members `extensions` and `critical` ([Section 7.11](#711-extensions)). Every object inside an operation *MUST* contain exactly the members that this specification defines for it. A policy object *MAY* also contain the member `extensions`.",
       "tests": []
     },
     {
       "id": "REQ-5-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-4",
       "section": "5.1 Values",
-      "text": "The canonical form of a JSON value is its JSON Canonicalization Scheme serialization (RFC 8785).",
+      "text": "The canonical form of a JSON value is its JSON Canonicalization Scheme serialization ([RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)).",
       "tests": []
     },
     {
@@ -90,7 +90,7 @@
       "id": "REQ-5-6",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-6",
       "section": "5.2 Hashes",
-      "text": "The hash of a JSON value is computed as follows:\n\n1. Serialize the value in canonical form.\n2. Compute the SHA-256 digest of the serialization.\n3. Prefix the digest with the multihash header bytes `0x12 0x20`.\n4. Encode the result as base58btc with the multibase prefix `z`.\n\nThe operation hash of an operation is the hash of the complete operation.",
+      "text": "The hash of a JSON value is computed as follows:\n\n1. Serialize the value in canonical form.\n2. Compute the [SHA-256](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) digest of the serialization.\n3. Prefix the digest with the [multihash](https://github.com/multiformats/multihash) header bytes `0x12 0x20`.\n4. Encode the result as base58btc with the [multibase](https://github.com/multiformats/multibase) prefix `z`.\n\nThe operation hash of an operation is the hash of the complete operation.",
       "tests": []
     },
     {
@@ -104,7 +104,7 @@
       "id": "REQ-5-8",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-8",
       "section": "5.3 Keys",
-      "text": "A key *MUST* be a P-256 public key encoded as a Multikey: the bytes `0x80 0x24` (the unsigned-varint encoding of multicodec `0x1200`), followed by the 33-byte compressed point, encoded as base58btc with the multibase prefix `z`.",
+      "text": "A key *MUST* be a P-256 public key encoded as a [Multikey](https://www.w3.org/TR/controller-document/#Multikey): the bytes `0x80 0x24` (the unsigned-varint encoding of [multicodec](https://github.com/multiformats/multicodec) `0x1200`), followed by the 33-byte compressed point, encoded as base58btc with the multibase prefix `z`.",
       "tests": []
     },
     {
@@ -118,7 +118,7 @@
       "id": "REQ-5-10",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-10",
       "section": "5.4 Proofs",
-      "text": "An operation's `proof` member *MUST* be an array of Data Integrity proofs, sorted by `verificationMethod` in code-point order. Each proof secures the operation independently.",
+      "text": "An operation's `proof` member *MUST* be an array of [Data Integrity](https://www.w3.org/TR/vc-data-integrity/) proofs, sorted by `verificationMethod` in code-point order. Each proof secures the operation independently.",
       "tests": []
     },
     {
@@ -132,7 +132,7 @@
       "id": "REQ-5-12",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-5-12",
       "section": "5.4 Proofs",
-      "text": "Proofs *MUST* be created and verified with the `ecdsa-jcs-2019` cryptosuite (W3C Data Integrity ECDSA Cryptosuites v1.0), as follows:\n\n1. The secured document is the operation with the `proof` and `attestation` members removed.\n2. The proof configuration is the proof with the `proofValue` member removed.\n3. The signed data is the SHA-256 digest of the canonical proof configuration, followed by the SHA-256 digest of the canonical secured document.\n4. The signature is an ECDSA P-256 signature over the signed data, using SHA-256.\n5. `proofValue` is the 64-byte signature value, R followed by S, encoded as base58btc with the multibase prefix `z`.",
+      "text": "Proofs *MUST* be created and verified with the `ecdsa-jcs-2019` cryptosuite ([W3C Data Integrity ECDSA Cryptosuites v1.0](https://www.w3.org/TR/vc-di-ecdsa/)), as follows:\n\n1. The secured document is the operation with the `proof` and `attestation` members removed.\n2. The proof configuration is the proof with the `proofValue` member removed.\n3. The signed data is the SHA-256 digest of the canonical proof configuration, followed by the SHA-256 digest of the canonical secured document.\n4. The signature is an ECDSA P-256 signature over the signed data, using SHA-256.\n5. `proofValue` is the 64-byte signature value, R followed by S, encoded as base58btc with the multibase prefix `z`.",
       "tests": []
     },
     {
@@ -177,14 +177,14 @@
       "id": "REQ-6-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-1",
       "section": "6. State",
-      "text": "The state of an identity consists of:\n\n| Field | Value |\n|---|---|\n| `keys` | a list of 1 to 8 distinct keys |\n| `guardians` | a list of 0 to 32 entries with distinct DIDs |\n| `successor` | an entry, or `null` |\n| `wards` | a list of ward records with distinct DIDs |\n| `policy` | a policy object (Section 6.3) |\n| `services` | a list of 0 to 32 services with distinct `id` values |\n| `alsoKnownAs` | a list of 0 to 32 distinct URIs (RFC 3986) |\n| `deactivated` | `true` or `false` |\n| `critical` | a list of distinct extension names (Section 7.11) |",
+      "text": "The state of an identity consists of:\n\n| Field | Value |\n|---|---|\n| `keys` | a list of 1 to 8 distinct keys |\n| `guardians` | a list of 0 to 32 entries with distinct DIDs |\n| `successor` | an entry, or `null` |\n| `wards` | a list of ward records with distinct DIDs |\n| `policy` | a policy object ([Section 6.3](#63-policy)) |\n| `services` | a list of 0 to 32 services with distinct `id` values |\n| `alsoKnownAs` | a list of 0 to 32 distinct URIs ([RFC 3986](https://www.rfc-editor.org/rfc/rfc3986)) |\n| `deactivated` | `true` or `false` |\n| `critical` | a list of distinct extension names ([Section 7.11](#711-extensions)) |",
       "tests": []
     },
     {
       "id": "REQ-6-2",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-2",
       "section": "6. State",
-      "text": "An entry *MUST* contain exactly the members `did`, `anchor`, `keys` and `consent`. `did` is a did:guardian DID. `anchor` and `consent` are hashes (REQ-5-6). `keys` is a list of 1 to 8 distinct keys. REQ-10-6 defines what `anchor` and `consent` name.",
+      "text": "An entry *MUST* contain exactly the members `did`, `anchor`, `keys` and `consent`. `did` is a did:guardian DID. `anchor` and `consent` are hashes ([REQ-5-6](#req-5-6)). `keys` is a list of 1 to 8 distinct keys. [REQ-10-6](#req-10-6) defines what `anchor` and `consent` name.",
       "tests": []
     },
     {
@@ -198,7 +198,7 @@
       "id": "REQ-6-4",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-4",
       "section": "6. State",
-      "text": "A ward record *MUST* contain exactly the members `did` and `anchor`. `did` is a did:guardian DID. `anchor` is a hash (REQ-5-6).",
+      "text": "A ward record *MUST* contain exactly the members `did` and `anchor`. `did` is a did:guardian DID. `anchor` is a hash ([REQ-5-6](#req-5-6)).",
       "tests": []
     },
     {
@@ -212,14 +212,14 @@
       "id": "REQ-6-6",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-6",
       "section": "6. State",
-      "text": "A service *MUST* contain exactly the members `id`, `type` and `serviceEndpoint`. `id` *MUST* be `#` followed by a DID URL fragment, and *MUST NOT* begin with `#key-` after percent-decoding. `type` *MUST* be a string. `serviceEndpoint` *MUST* be a URI (RFC 3986).",
+      "text": "A service *MUST* contain exactly the members `id`, `type` and `serviceEndpoint`. `id` *MUST* be `#` followed by a [DID URL](https://www.w3.org/TR/did-core/#did-url-syntax) fragment, and *MUST NOT* begin with `#key-` after percent-decoding. `type` *MUST* be a string. `serviceEndpoint` *MUST* be a URI ([RFC 3986](https://www.rfc-editor.org/rfc/rfc3986)).",
       "tests": []
     },
     {
       "id": "REQ-6-7",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-7",
       "section": "6. State",
-      "text": "After each operation, the state *MUST* conform to REQ-6-1 through REQ-6-6 and Section 6.3.",
+      "text": "After each operation, the state *MUST* conform to [REQ-6-1](#req-6-1) through [REQ-6-6](#req-6-6) and [Section 6.3](#63-policy).",
       "tests": []
     },
     {
@@ -233,7 +233,7 @@
       "id": "REQ-6-9",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-9",
       "section": "6.1 Required approvals",
-      "text": "A clause of REQ-7-6 that requires guardians per a setting cannot be met if E is 0 or if the required number is greater than E.",
+      "text": "A clause of [REQ-7-6](#req-7-6) that requires guardians per a setting cannot be met if E is 0 or if the required number is greater than E.",
       "tests": []
     },
     {
@@ -247,7 +247,7 @@
       "id": "REQ-6-11",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-6-11",
       "section": "6.3 Policy",
-      "text": "A policy object *MAY* contain these members. A member that is absent takes its default value.\n\n| Member | Governs | Allowed values | Default |\n|---|---|---|---|\n| `recovery` | guardian approval of `update`, `acceptWard` and `releaseWard` | `\"any\"`, `\"majority\"`, `\"all\"`, integer k | `\"majority\"` |\n| `membership` | guardian approval of `addGuardian` and `setPolicy` | `\"majority\"`, `\"all\"`, integer k | `\"majority\"` |\n| `removal` | guardian approval of `removeGuardian` | `\"any\"`, `\"majority\"`, `\"all\"`, integer k | `\"majority\"` |\n| `deactivation` | approval of `deactivate` | a deactivation object (REQ-6-12) | `{\"by\": \"both\", \"threshold\": \"majority\"}` |\n| `orphan` | the change when the last guardian is removed (REQ-6-10) | `\"deactivate\"`, `\"independent\"`, `\"successor\"` | `\"deactivate\"` |\n| `maxWards` | the largest allowed size of `wards` | integer k \u2265 1 | no limit |",
+      "text": "A policy object *MAY* contain these members. A member that is absent takes its default value.\n\n| Member | Governs | Allowed values | Default |\n|---|---|---|---|\n| `recovery` | guardian approval of `update`, `acceptWard` and `releaseWard` | `\"any\"`, `\"majority\"`, `\"all\"`, integer k | `\"majority\"` |\n| `membership` | guardian approval of `addGuardian` and `setPolicy` | `\"majority\"`, `\"all\"`, integer k | `\"majority\"` |\n| `removal` | guardian approval of `removeGuardian` | `\"any\"`, `\"majority\"`, `\"all\"`, integer k | `\"majority\"` |\n| `deactivation` | approval of `deactivate` | a deactivation object ([REQ-6-12](#req-6-12)) | `{\"by\": \"both\", \"threshold\": \"majority\"}` |\n| `orphan` | the change when the last guardian is removed ([REQ-6-10](#req-6-10)) | `\"deactivate\"`, `\"independent\"`, `\"successor\"` | `\"deactivate\"` |\n| `maxWards` | the largest allowed size of `wards` | integer k \u2265 1 | no limit |",
       "tests": [
         "packages/lib/tests/schema-drift.test.ts"
       ]
@@ -347,7 +347,7 @@
       "id": "REQ-7-9",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-7-9",
       "section": "7.3 create",
-      "text": "`attestation` *MUST* be an object with the members and values of REQ-5-11, except that its `cryptosuite` can be any string and its `verificationMethod` is `did:guardian:<domain>?versionId=<version>#key-<n>`, where `<domain>` is the domain of `did`, `<version>` is a version of the root identity's log, and `<n>` is a decimal integer without leading zeros. It secures the same document as the proofs (REQ-5-12).",
+      "text": "`attestation` *MUST* be an object with the members and values of [REQ-5-11](#req-5-11), except that its `cryptosuite` can be any string and its `verificationMethod` is `did:guardian:<domain>?versionId=<version>#key-<n>`, where `<domain>` is the domain of `did`, `<version>` is a version of the root identity's log, and `<n>` is a decimal integer without leading zeros. It secures the same document as the proofs ([REQ-5-12](#req-5-12)).",
       "tests": [
         "packages/lib/tests/schema-drift.test.ts"
       ]
@@ -370,7 +370,7 @@
       "id": "REQ-7-12",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-7-12",
       "section": "7.5 addGuardian",
-      "text": "An `addGuardian` *MUST* contain the members `type`, `entry`, `prev` and `proof`. `entry` is an entry (REQ-6-2).",
+      "text": "An `addGuardian` *MUST* contain the members `type`, `entry`, `prev` and `proof`. `entry` is an entry ([REQ-6-2](#req-6-2)).",
       "tests": []
     },
     {
@@ -412,14 +412,14 @@
       "id": "REQ-7-18",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-7-18",
       "section": "7.7 removeGuardian",
-      "text": "If present, `evidence` is a hash (REQ-5-6). REQ-10-7 defines what it names.",
+      "text": "If present, `evidence` is a hash ([REQ-5-6](#req-5-6)). [REQ-10-7](#req-10-7) defines what it names.",
       "tests": []
     },
     {
       "id": "REQ-7-19",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-7-19",
       "section": "7.7 removeGuardian",
-      "text": "`removeGuardian` removes the entry for `guardian`, and then applies REQ-6-10.",
+      "text": "`removeGuardian` removes the entry for `guardian`, and then applies [REQ-6-10](#req-6-10).",
       "tests": []
     },
     {
@@ -440,7 +440,7 @@
       "id": "REQ-7-22",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-7-22",
       "section": "7.9 acceptWard and releaseWard",
-      "text": "An `acceptWard` *MUST* contain the members `type`, `ward`, `prev` and `proof`. `ward` is a ward record (REQ-6-4).",
+      "text": "An `acceptWard` *MUST* contain the members `type`, `ward`, `prev` and `proof`. `ward` is a ward record ([REQ-6-4](#req-6-4)).",
       "tests": []
     },
     {
@@ -524,7 +524,7 @@
       "id": "REQ-7-34",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-7-34",
       "section": "7.11 Extensions",
-      "text": "A verifier *MUST* ignore every extension that REQ-7-31 does not apply to, whether or not it implements that extension. Ignored extensions remain part of the operation hash and the secured document. The contents of an extension value are defined by the extension, not by REQ-5-3.",
+      "text": "A verifier *MUST* ignore every extension that [REQ-7-31](#req-7-31) does not apply to, whether or not it implements that extension. Ignored extensions remain part of the operation hash and the secured document. The contents of an extension value are defined by the extension, not by [REQ-5-3](#req-5-3).",
       "tests": []
     },
     {
@@ -538,7 +538,7 @@
       "id": "REQ-8-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-8-1",
       "section": "8. Verification",
-      "text": "A verifier *MUST* verify the log of a DID by the following steps, and report one of three results. An operation is **unsupported** if the state's `critical` before it, or the operation's `critical`, names an extension that the verifier does not implement, or if its `type`, or the `cryptosuite` of one of its proofs, has a value that the verifier does not implement. The verifier processes operations in order and stops at the first operation that is unsupported or that fails a step. Within one operation, the unsupported conditions are checked before the steps. It reports **unsupported** or **invalid** for that operation, or **valid** if no operation stops it. A verifier *MUST NOT* treat an unsupported log as valid.\n\n1. The log is a non-empty array of operations.\n2. The first operation is a `create` whose `did` equals the DID.\n3. Each later operation's `prev` equals the operation hash of the operation before it.\n4. No operation follows a state in which `deactivated` is `true`.\n5. For each operation in order:\n   1. The operation conforms to Sections 5 and 7.\n   2. Every proof is valid (REQ-5-14) and comes from a permitted key (REQ-7-5).\n   3. The approvals meet the rule in REQ-7-6, evaluated against the state before the operation.\n   4. Apply the operation to the state, and check that the result conforms to Section 6.",
+      "text": "A verifier *MUST* verify the log of a DID by the following steps, and report one of three results. An operation is **unsupported** if the state's `critical` before it, or the operation's `critical`, names an extension that the verifier does not implement, or if its `type`, or the `cryptosuite` of one of its proofs, has a value that the verifier does not implement. The verifier processes operations in order and stops at the first operation that is unsupported or that fails a step. Within one operation, the unsupported conditions are checked before the steps. It reports **unsupported** or **invalid** for that operation, or **valid** if no operation stops it. A verifier *MUST NOT* treat an unsupported log as valid.\n\n1. The log is a non-empty array of operations.\n2. The first operation is a `create` whose `did` equals the DID.\n3. Each later operation's `prev` equals the operation hash of the operation before it.\n4. No operation follows a state in which `deactivated` is `true`.\n5. For each operation in order:\n   1. The operation conforms to Sections [5](#5-encoding) and [7](#7-operations).\n   2. Every proof is valid ([REQ-5-14](#req-5-14)) and comes from a permitted key ([REQ-7-5](#req-7-5)).\n   3. The approvals meet the rule in [REQ-7-6](#req-7-6), evaluated against the state before the operation.\n   4. Apply the operation to the state, and check that the result conforms to [Section 6](#6-state).",
       "tests": []
     },
     {
@@ -552,7 +552,7 @@
       "id": "REQ-9-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-9-1",
       "section": "9. DID document",
-      "text": "The DID document of an identity is derived from its state after the last operation of its log.",
+      "text": "The [DID document](https://www.w3.org/TR/did-core/) of an identity is derived from its state after the last operation of its log.",
       "tests": []
     },
     {
@@ -589,7 +589,7 @@
       "id": "REQ-10-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-1",
       "section": "10.1 Resources",
-      "text": "The registrar for a domain *MUST* serve these resources over HTTPS at `https://<domain>/.well-known/guardian/<segment>`, where `<segment>` is the path segment of the identity (REQ-4-5):\n\n| Method and path | Response |\n|---|---|\n| `GET .../<segment>/log` | the log, as a JSON array in log order |\n| `GET .../<segment>` | the DID document |\n| `POST .../<segment>/operations` | accepts one operation as the request body |",
+      "text": "The registrar for a domain *MUST* serve these resources over HTTPS at `https://<domain>/.well-known/guardian/<segment>`, where `<segment>` is the path segment of the identity ([REQ-4-5](#req-4-5)):\n\n| Method and path | Response |\n|---|---|\n| `GET .../<segment>/log` | the log, as a JSON array in log order |\n| `GET .../<segment>` | the DID document |\n| `POST .../<segment>/operations` | accepts one operation as the request body |",
       "tests": [
         "packages/lib/tests/registrar-vectors.test.ts"
       ]
@@ -624,7 +624,7 @@
       "id": "REQ-10-5",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-5",
       "section": "10.2 Accepting operations",
-      "text": "A registrar *MUST* accept an operation only if all of these hold:\n\n1. Its `prev` equals the version of the log, or it is a `create` whose `did` has the path segment of the request and that path segment has no log.\n2. The log, with the operation appended, is valid (Section 8). An unsupported result is a rejection.\n3. Every check in REQ-10-7 that applies to the operation holds.",
+      "text": "A registrar *MUST* accept an operation only if all of these hold:\n\n1. Its `prev` equals the version of the log, or it is a `create` whose `did` has the path segment of the request and that path segment has no log.\n2. The log, with the operation appended, is valid ([Section 8](#8-verification)). An unsupported result is a rejection.\n3. Every check in [REQ-10-7](#req-10-7) that applies to the operation holds.",
       "tests": []
     },
     {
@@ -640,7 +640,7 @@
       "id": "REQ-10-7",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-7",
       "section": "10.2 Accepting operations",
-      "text": "Before accepting an operation, a registrar *MUST* fetch the current log of each other identity that the operation involves, and check the rows below. The identities an operation involves are: the DIDs of its new entries; the guardians and successors whose keys approve it; the `guardian` of a `removeGuardian` with `evidence`; the successor in a promotion (REQ-6-10) or in the `successor`-to-`null` exception of REQ-7-6; and the `ward` of an `acceptWard`. A log that cannot be fetched counts as a log that does not verify. A DID has no log only if its registrar reports that it has none.\n\n| Case | Check |\n|---|---|\n| a `create` that names entries, an `addGuardian`, an `updateGuardian`, or a `setPolicy` whose `successor` is an entry that differs from the current one | each new entry has standing |\n| any operation | it meets REQ-7-6 when only approvals from guardians and successors whose entries have standing are counted; for an `updateGuardian`, item 3 is not required of the named guardian or successor |\n| a `removeGuardian` with `evidence` | the log of `guardian` verifies and its anchor equals the entry's `anchor`; `evidence` names an operation in that log that follows the entry's `consent` and is either a `releaseWard` whose `ward` is this identity or an operation after which the state of that log is deactivated; and item 2 or item 5 of REQ-10-6 does not hold |\n| a `removeGuardian` that promotes the successor (REQ-6-10) | the successor's entry has standing |\n| a `setPolicy` that does not meet `membership` when only approvals with standing are counted, and relies on the `successor`-to-`null` exception of REQ-7-6 | the log of the current successor verifies and its anchor equals the entry's `anchor`, and item 2 or item 5 of REQ-10-6 does not hold |\n| an `acceptWard` | if the ward's DID has a log, that log verifies and the `ward` record names its anchor |",
+      "text": "Before accepting an operation, a registrar *MUST* fetch the current log of each other identity that the operation involves, and check the rows below. The identities an operation involves are: the DIDs of its new entries; the guardians and successors whose keys approve it; the `guardian` of a `removeGuardian` with `evidence`; the successor in a promotion ([REQ-6-10](#req-6-10)) or in the `successor`-to-`null` exception of [REQ-7-6](#req-7-6); and the `ward` of an `acceptWard`. A log that cannot be fetched counts as a log that does not verify. A DID has no log only if its registrar reports that it has none.\n\n| Case | Check |\n|---|---|\n| a `create` that names entries, an `addGuardian`, an `updateGuardian`, or a `setPolicy` whose `successor` is an entry that differs from the current one | each new entry has standing |\n| any operation | it meets [REQ-7-6](#req-7-6) when only approvals from guardians and successors whose entries have standing are counted; for an `updateGuardian`, item 3 is not required of the named guardian or successor |\n| a `removeGuardian` with `evidence` | the log of `guardian` verifies and its anchor equals the entry's `anchor`; `evidence` names an operation in that log that follows the entry's `consent` and is either a `releaseWard` whose `ward` is this identity or an operation after which the state of that log is deactivated; and item 2 or item 5 of [REQ-10-6](#req-10-6) does not hold |\n| a `removeGuardian` that promotes the successor ([REQ-6-10](#req-6-10)) | the successor's entry has standing |\n| a `setPolicy` that does not meet `membership` when only approvals with standing are counted, and relies on the `successor`-to-`null` exception of [REQ-7-6](#req-7-6) | the log of the current successor verifies and its anchor equals the entry's `anchor`, and item 2 or item 5 of [REQ-10-6](#req-10-6) does not hold |\n| an `acceptWard` | if the ward's DID has a log, that log verifies and the `ward` record names its anchor |",
       "tests": [
         "packages/lib/tests/f3-evidence-standing.test.ts"
       ]
@@ -658,7 +658,7 @@
       "id": "REQ-10-9",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-9",
       "section": "10.2 Accepting operations",
-      "text": "For a `create` of an identity other than its root identity, the registrar *MUST* also require that the DID's domain is its domain and that the name is unused (REQ-10-12). It *MUST* add the `attestation`, using a key of its root identity and the current version of the root identity's log, before it applies REQ-10-5.",
+      "text": "For a `create` of an identity other than its root identity, the registrar *MUST* also require that the DID's domain is its domain and that the name is unused ([REQ-10-12](#req-10-12)). It *MUST* add the `attestation`, using a key of its root identity and the current version of the root identity's log, before it applies [REQ-10-5](#req-10-5).",
       "tests": [
         "packages/lib/tests/registrar-vectors.test.ts",
         "packages/server/tests/managed-identity.test.ts"
@@ -668,7 +668,7 @@
       "id": "REQ-10-10",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-10",
       "section": "10.2 Accepting operations",
-      "text": "A registrar *MUST* create its root identity before it accepts any other `create`. It *MUST NOT* accept a `create` of its root identity through REQ-10-1.",
+      "text": "A registrar *MUST* create its root identity before it accepts any other `create`. It *MUST NOT* accept a `create` of its root identity through [REQ-10-1](#req-10-1).",
       "tests": [
         "packages/lib/tests/registrar-vectors.test.ts"
       ]
@@ -694,7 +694,7 @@
       "id": "REQ-10-15",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-15",
       "section": "10.2 Accepting operations",
-      "text": "A registrar *MUST* record the anchor and the version of every log it fetches under REQ-10-7, including for operations it rejects. If a later fetch yields a different anchor, or a log that does not contain the recorded version, the registrar *MUST* treat that log as a log that cannot be fetched.",
+      "text": "A registrar *MUST* record the anchor and the version of every log it fetches under [REQ-10-7](#req-10-7), including for operations it rejects. If a later fetch yields a different anchor, or a log that does not contain the recorded version, the registrar *MUST* treat that log as a log that cannot be fetched.",
       "tests": [
         "packages/lib/tests/pin.test.ts"
       ]
@@ -703,7 +703,7 @@
       "id": "REQ-10-13",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-10-13",
       "section": "10.3 Held keys",
-      "text": "A registrar that holds a private key for an identity *MUST* create a proof with that key only for a secured document (REQ-5-12) that a request authenticated as that identity contains or names by its hash, or for the `create` of that identity in the request that creates it.",
+      "text": "A registrar that holds a private key for an identity *MUST* create a proof with that key only for a secured document ([REQ-5-12](#req-5-12)) that a request authenticated as that identity contains or names by its hash, or for the `create` of that identity in the request that creates it.",
       "tests": [
         "packages/server/tests/http-endpoints.test.ts"
       ]
@@ -719,7 +719,7 @@
       "id": "REQ-11-1",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-11-1",
       "section": "11. Resolution",
-      "text": "To resolve a DID, a resolver *MUST*:\n\n1. fetch the log from the registrar of the DID's domain;\n2. verify the log (Section 8), or, for a DID URL with `versionId`, the log up to and including that operation;\n3. verify the `attestation` of its `create`, unless the DID is a root identity (REQ-11-2);\n4. derive the DID document (Section 9).",
+      "text": "To resolve a DID, a resolver *MUST*:\n\n1. fetch the log from the registrar of the DID's domain;\n2. verify the log ([Section 8](#8-verification)), or, for a DID URL with `versionId`, the log up to and including that operation;\n3. verify the `attestation` of its `create`, unless the DID is a root identity ([REQ-11-2](#req-11-2));\n4. derive the DID document ([Section 9](#9-did-document)).",
       "tests": [
         "packages/lib/tests/resolve-vectors.test.ts"
       ]
@@ -773,7 +773,7 @@
       "id": "REQ-11-7",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-11-7",
       "section": "11. Resolution",
-      "text": "A resolver *MUST NOT* present a guardianship as mutual unless REQ-11-5 reports mutual or keys out of date.",
+      "text": "A resolver *MUST NOT* present a guardianship as mutual unless [REQ-11-5](#req-11-5) reports mutual or keys out of date.",
       "tests": []
     },
     {
@@ -787,7 +787,7 @@
       "id": "REQ-11-9",
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/#req-11-9",
       "section": "11. Resolution",
-      "text": "A resolver *MUST NOT* return a DID document if the log verified in step 2 of REQ-11-1 is invalid or unsupported, if the `attestation` is not valid, or if REQ-11-4 reports a different identity or a rolled-back or forked log.",
+      "text": "A resolver *MUST NOT* return a DID document if the log verified in step 2 of [REQ-11-1](#req-11-1) is invalid or unsupported, if the `attestation` is not valid, or if [REQ-11-4](#req-11-4) reports a different identity or a rolled-back or forked log.",
       "tests": []
     }
   ]

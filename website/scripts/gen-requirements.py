@@ -16,7 +16,7 @@ BASE_URL = 'https://guardianspec.org/docs/did-guardian-spec-v1.0.0/'
 TEST_GLOBS = ['../packages/*/tests/*.test.ts']
 
 HEADING_RE = re.compile(r'^(#{2,3})\s+(.*)$')
-REQ_RE = re.compile(r'<a id="(req-\d+-\d+)"></a>\*\*(REQ-\d+-\d+)\.\*\*\s*(.*)$')
+REQ_RE = re.compile(r'<a id="(req-\d+-\d+)"></a>\[\*\*(REQ-\d+-\d+)\.\*\*\]\(#req-\d+-\d+\)\s*(.*)$')
 
 
 def load_test_files():

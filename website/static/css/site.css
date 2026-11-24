@@ -172,6 +172,14 @@ code {
   border-radius: var(--radius-sm);
   background: var(--surface);
 }
+/* A table row's own background (--paper) is much lighter than the page
+   around it -- the ordinary code chip (--surface) read as muddy and too
+   dark sitting on top of it, so a table cell's own inline code gets a
+   lighter chip instead, closer to the row it actually sits on. */
+.prose table td code,
+.prose table th code {
+  background: color-mix(in srgb, var(--surface) 35%, var(--paper));
+}
 pre {
   margin: 0;
 }
@@ -196,6 +204,40 @@ pre {
   padding: 14px 0;
   font: 13px/1.75 var(--font-mono);
   overflow-x: auto;
+}
+
+/* JSON (and any other) syntax highlighting -- hyperctl's own Chroma
+   token classes, colored to fit the Hearth palette rather than a
+   generic default. Keys stand out most (what a reader scans for),
+   strings and constants are each their own color, punctuation stays
+   muted so it doesn't compete with the content. */
+.chroma .nt {
+  color: var(--clay-deep);
+}
+.chroma .s,
+.chroma .s1,
+.chroma .s2 {
+  color: var(--quilt);
+}
+.chroma .kc {
+  color: var(--wood);
+}
+.chroma .m,
+.chroma .mi,
+.chroma .mf {
+  color: var(--blue);
+}
+.chroma .p {
+  color: var(--muted-500);
+}
+.chroma .c,
+.chroma .c1,
+.chroma .cm {
+  color: var(--muted-400);
+  font-style: italic;
+}
+.chroma .err {
+  color: var(--kw-must);
 }
 
 /* Callouts */
