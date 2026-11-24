@@ -145,15 +145,26 @@ export async function registerManagedIdentity(
 
   // Retry safety: a prior attempt at this exact name can have gotten
   // this guardian's own acceptWard accepted and then failed before the
-  // create itself did (this ward's own log is still empty, checked
-  // above) -- that stale record's anchor came from a keypair this
-  // attempt has no way to recover, and REQ-7-23 rejects a fresh
-  // acceptWard for a `did` already in `wards` regardless of anchor, so
-  // a plain retry would otherwise fail with a confusing REQ-7-6
-  // rejection that has nothing to do with the real problem. Release it
-  // first, the same identity this registrar is about to re-accept
-  // under a brand new key.
-  if (guardianVerified.state!.wards.some((w) => w.did === did)) {
+  // create itself did -- that stale record's anchor came from a
+  // keypair this attempt has no way to recover, and REQ-7-23 rejects a
+  // fresh acceptWard for a `did` already in `wards` regardless of
+  // anchor, so a plain retry would otherwise fail with a confusing
+  // REQ-7-6 rejection that has nothing to do with the real problem.
+  //
+  // SAFETY (thoward-59's own review): the condition for releasing it
+  // must be "the ward DID has no log, or its log's anchor differs from
+  // the record's anchor" -- never merely "a record for this DID
+  // exists." A wrong release here signs a releaseWard for the
+  // guardian and silently drops a real guardianship. Checked directly
+  // against a fresh fetch, not inferred from the empty-log check
+  // above, so this stays safe even if that check is ever reordered or
+  // removed independently of this one.
+  const staleWard = guardianVerified.state!.wards.find((w) => w.did === did);
+  if (staleWard) {
+    const wardLogNow = await getLog(env, did);
+    const namesARealIdentity = wardLogNow.length > 0 && (await anchorOf(wardLogNow[0] as CreateOp)) === staleWard.anchor;
+    if (namesARealIdentity) throw new RegistrarError(`an identity already exists for "${name}"`, 409);
+
     const releaseBase: Omit<ReleaseWardOp, "proof"> = { type: "releaseWard", ward: did, prev: await currentPrev(env, guardianDid) };
     const releaseProof = await signAs(env, guardianAuth, guardianDid, releaseBase);
     await submitOperation(env, guardianDid, { ...releaseBase, proof: [releaseProof] });

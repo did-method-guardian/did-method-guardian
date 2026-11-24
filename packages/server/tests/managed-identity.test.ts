@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { createProof, generateKeypair, keyOfVerificationMethod, verifyLog, verifyProofSignature, type AcceptWardOp, type CreateOp, type Operation } from "@did-guardian/lib";
+import { anchorOf, createProof, generateKeypair, keyOfVerificationMethod, operationHash, verifyLog, verifyProofSignature, type AcceptWardOp, type CreateOp, type Operation } from "@did-guardian/lib";
 import { registerManagedIdentity, isGuardianHeldHere } from "../src/profile.js";
 import { submitOperation } from "../src/registrar.js";
 import { authenticatedViaAccessToken } from "../src/signing.js";
@@ -265,4 +265,49 @@ test("registerManagedIdentity: a name collision after the guardian's own acceptW
   const wardLog = await readLog(env, wardDid);
   assert.equal(wardLog.length, 1, "the retry's own create landed");
   assert.equal((wardLog[0] as CreateOp).guardians[0].did, guardianDid);
+});
+
+test("registerManagedIdentity: a guardian that genuinely guards an existing identity at that DID never has that guardianship released -- the attempt fails on the name collision instead, and the guardian's own wards record is untouched", async () => {
+  const env = fakeEnv();
+  const guardianDid = "did:guardian:example.com:priya";
+  const wardDid = "did:guardian:example.com:bot7";
+  const guardianKeypair = await seedHeldIdentity(env, guardianDid);
+
+  // bot7 is a REAL, already-created identity -- not a stale, never-
+  // created record left behind by a failed attempt. It doesn't need
+  // to be held by this registrar; only its own log needs to be real.
+  const wardKeypair = await generateKeypair();
+  const wardCreateBase = {
+    type: "create" as const,
+    did: wardDid,
+    keys: [wardKeypair.publicKey],
+    guardians: [],
+    successor: null,
+    policy: {},
+    services: [],
+    alsoKnownAs: [],
+    prev: null,
+  };
+  const wardProof = await createProof(wardCreateBase, wardKeypair.publicKey, wardKeypair.privateKey);
+  await submitOperation(env, wardDid, { ...wardCreateBase, proof: [wardProof] });
+  const wardAnchor = await anchorOf(wardCreateBase as unknown as CreateOp);
+
+  // The guardian genuinely accepts this real ward -- an ordinary,
+  // correct acceptWard, anchor and all, matching how guardian.ts's own
+  // addFirstGuardian builds one.
+  const acceptBase = { type: "acceptWard" as const, ward: { did: wardDid, anchor: wardAnchor }, prev: await operationHash((await readLog(env, guardianDid)).at(-1)!) };
+  const acceptProof = await createProof(acceptBase, guardianKeypair.publicKey, guardianKeypair.privateKey);
+  await submitOperation(env, guardianDid, { ...acceptBase, proof: [acceptProof] });
+
+  const beforeAttempt = await verifyLog(guardianDid as `did:guardian:${string}`, await readLog(env, guardianDid));
+  assert.equal(beforeAttempt.state!.wards.length, 1);
+  assert.deepEqual(beforeAttempt.state!.wards[0], { did: wardDid, anchor: wardAnchor });
+  const guardianLogLengthBefore = (await readLog(env, guardianDid)).length;
+
+  await assert.rejects(() => registerManagedIdentity(env, "bot7", authenticatedViaAccessToken(guardianDid), {}), (e: unknown) => e instanceof RegistrarError && /already exists/.test(e.message));
+
+  const afterAttempt = await verifyLog(guardianDid as `did:guardian:${string}`, await readLog(env, guardianDid));
+  assert.equal((await readLog(env, guardianDid)).length, guardianLogLengthBefore, "no releaseWard (or anything else) was ever added to the guardian's own log");
+  assert.equal(afterAttempt.state!.wards.length, 1, "the real guardianship still stands, untouched");
+  assert.deepEqual(afterAttempt.state!.wards[0], { did: wardDid, anchor: wardAnchor }, "same record, same anchor -- not released and not replaced");
 });
