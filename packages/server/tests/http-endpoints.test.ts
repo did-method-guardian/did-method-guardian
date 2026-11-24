@@ -9,6 +9,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { createHash, randomBytes } from "node:crypto";
 import { createProof, generateKeypair, operationHash } from "@did-guardian/lib";
 
 const PORT = 18799 + Math.floor(Math.random() * 1000);
@@ -482,4 +483,213 @@ test("F4: setting up email forwarding writes to the DB without hitting the dropp
   // matters is that it's never a 500.
   assert.notEqual(resp.status, 500, "the email_forwarding INSERT must not throw on the dropped wards FK");
   assert.equal(resp.status, 302);
+});
+
+// Audit r4 regression tests, below -- each one reproduces a specific
+// repro script a clean-room review used to find the gap, directly
+// against this file's own shared wrangler dev instance.
+
+function b64url(buf: Buffer): string {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function registerOidcClient(): Promise<{ client_id: string }> {
+  const r = await fetch(`${BASE}/oauth/register-client`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ redirect_uris: ["https://rp.example/cb"], token_endpoint_auth_method: "none" }),
+  });
+  assert.equal(r.status, 201);
+  return (await r.json()) as { client_id: string };
+}
+
+/** Full authorization_code + PKCE flow for an already-registered name, returning a usable access_token. */
+async function getAccessToken(name: string, loginSecret: string, clientId: string, scope: string): Promise<{ access_token: string; scope: string }> {
+  const verifier = b64url(randomBytes(32));
+  const challenge = b64url(createHash("sha256").update(verifier).digest());
+  const authorizeUrl = `${BASE}/authorize?${new URLSearchParams({ client_id: clientId, redirect_uri: "https://rp.example/cb", response_type: "code", scope, code_challenge: challenge, code_challenge_method: "S256" })}`;
+
+  const loginResp = await fetch(authorizeUrl, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ name, login_secret: loginSecret, return_to: "/account" }),
+  });
+  const cookie = cookieFrom(loginResp);
+  assert.ok(cookie, "authorize's own login step sets a session cookie");
+
+  const consentResp = await fetch(authorizeUrl, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: `gw_session=${cookie}` },
+    redirect: "manual",
+    body: new URLSearchParams({ consent: "allow" }),
+  });
+  const code = new URL(consentResp.headers.get("location")!).searchParams.get("code");
+  assert.ok(code, "consent redirects back with an authorization code");
+
+  const tokenResp = await fetch(`${BASE}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "authorization_code", code: code!, redirect_uri: "https://rp.example/cb", code_verifier: verifier, client_id: clientId }),
+  });
+  assert.equal(tokenResp.status, 200, "a fresh DB must issue a token on the very first authorization_code exchange (fix D: signing-key format)");
+  return (await tokenResp.json()) as { access_token: string; scope: string };
+}
+
+test("fix D: a fresh DB issues /token on the very first exchange (signing key Multikey/SPKI mismatch)", async () => {
+  const name = uniqueName("oidcfresh");
+  const { loginSecret, did } = await registerHeld(name);
+  const client = await registerOidcClient();
+  const tok = await getAccessToken(name, loginSecret, client.client_id, "openid");
+  assert.ok(tok.access_token);
+  void did;
+});
+
+test("fix C: token-exchange cannot escalate scope, and a legitimate narrowing exchange still works", async () => {
+  const name = uniqueName("oidcnar");
+  const { loginSecret, did } = await registerHeld(name);
+  const client = await registerOidcClient();
+  const tok = await getAccessToken(name, loginSecret, client.client_id, "openid email");
+
+  const escalate = await fetch(`${BASE}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:token-exchange", subject_token: tok.access_token, resource: did, client_id: client.client_id, scope: "create:managed-identity" }),
+  });
+  assert.notEqual(escalate.status, 200, "exchanging for a scope the subject_token never had must be refused");
+
+  const narrow = await fetch(`${BASE}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:token-exchange", subject_token: tok.access_token, resource: did, client_id: client.client_id, scope: "openid" }),
+  });
+  assert.equal(narrow.status, 200, "exchanging for a scope that IS a subset of the subject_token's own scope must still work");
+});
+
+test("fix C: a guardian cannot token-exchange into create:managed-identity acting as its ward", async () => {
+  const guardianName = uniqueName("oidcguard");
+  const wardName = uniqueName("oidcward");
+  const guardian = await registerHeld(guardianName);
+  const ward = await registerHeld(wardName);
+  const guardianCookie = await loginAs(guardianName, guardian.loginSecret);
+  const wardCookie = await loginAs(wardName, ward.loginSecret);
+
+  const adopt = await fetch(`${BASE}/.well-known/guardian/${wardName}/adopt`, { method: "POST", headers: { cookie: `gw_session=${guardianCookie}` } });
+  const { pendingId } = (await adopt.json()) as { pendingId: string };
+  const pendingStatus = (await (await fetch(`${BASE}/.well-known/guardian/pending/${pendingId}`, { headers: { accept: "application/json" } })).json()) as { digest: string };
+  await fetch(`${BASE}/.well-known/guardian/${wardName}/adopt/confirm`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${wardCookie}`, "content-type": "application/json" },
+    body: JSON.stringify({ pending_id: pendingId, digest: pendingStatus.digest }),
+  });
+
+  const client = await registerOidcClient();
+  const tok = await getAccessToken(guardianName, guardian.loginSecret, client.client_id, "openid");
+
+  const actAsWard = await fetch(`${BASE}/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:token-exchange", subject_token: tok.access_token, resource: ward.did, client_id: client.client_id, scope: "create:managed-identity" }),
+  });
+  assert.notEqual(actAsWard.status, 200, "a guardian's own standing over a ward must never grant it OIDC-level impersonation scope for that ward");
+});
+
+test("fix B2 (REQ-5-17): sign-as-self refuses a proposal whose prev is a DIFFERENT identity's head (the ward-takeover-its-guardian class)", async () => {
+  const guardianName = uniqueName("relayg");
+  const wardName = uniqueName("relayw");
+  const guardian = await registerHeld(guardianName);
+  const ward = await registerHeld(wardName);
+  const guardianCookie = await loginAs(guardianName, guardian.loginSecret);
+  const wardCookie = await loginAs(wardName, ward.loginSecret);
+
+  const adopt = await fetch(`${BASE}/.well-known/guardian/${wardName}/adopt`, { method: "POST", headers: { cookie: `gw_session=${guardianCookie}` } });
+  const { pendingId: adoptId } = (await adopt.json()) as { pendingId: string };
+  const adoptStatus = (await (await fetch(`${BASE}/.well-known/guardian/pending/${adoptId}`, { headers: { accept: "application/json" } })).json()) as { digest: string };
+  await fetch(`${BASE}/.well-known/guardian/${wardName}/adopt/confirm`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${wardCookie}`, "content-type": "application/json" },
+    body: JSON.stringify({ pending_id: adoptId, digest: adoptStatus.digest }),
+  });
+
+  const guardianLog = (await (await fetch(`${BASE}/.well-known/guardian/${guardianName}/log`)).json()) as object[];
+  const guardianHead = await operationHash(guardianLog[guardianLog.length - 1] as never);
+
+  // The ward proposes, UNDER ITS OWN DID, an "update" whose prev is
+  // actually the GUARDIAN's own current head -- a throwaway key's
+  // proof is enough to get it into the pending queue (/propose's own
+  // trust model: the proof is the authorization, checked for real
+  // only at finalization).
+  const attacker = await generateKeypair();
+  const evilOp = { type: "update" as const, keys: [attacker.publicKey], services: [], alsoKnownAs: [], prev: guardianHead };
+  const evilProof = await createProof(evilOp, attacker.publicKey, attacker.privateKey);
+  const proposeResp = await fetch(`${BASE}/.well-known/guardian/${wardName}/propose`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: evilOp, proof: evilProof }),
+  });
+  const proposed = (await proposeResp.json()) as { id: string };
+  assert.ok(proposed.id);
+
+  // The guardian opens the pending op and signs as itself.
+  const status = (await (await fetch(`${BASE}/.well-known/guardian/pending/${proposed.id}`)).json()) as { digest: string };
+  const signAsSelfResp = await fetch(`${BASE}/.well-known/guardian/pending/${proposed.id}/sign-as-self`, {
+    method: "POST",
+    headers: { cookie: `gw_session=${guardianCookie}`, "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ digest: status.digest }),
+  });
+  assert.equal(signAsSelfResp.status, 409, "sign-as-self must refuse a proposal whose prev names a different identity's own head");
+
+  // The guardian's own log and login are unaffected.
+  const guardianLogAfter = (await (await fetch(`${BASE}/.well-known/guardian/${guardianName}/log`)).json()) as Array<{ type: string }>;
+  assert.equal(guardianLogAfter.length, guardianLog.length, "the guardian's own log must not have gained an operation");
+  const relogin = await fetch(`${BASE}/guardian-login`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ name: guardianName, login_secret: guardian.loginSecret, return_to: "/account" }),
+  });
+  assert.ok(cookieFrom(relogin), "the guardian's own login must still work afterward");
+});
+
+test("fix D: self-rotation reissues a working login secret instead of leaving the requester locked out", async () => {
+  const name = uniqueName("rot");
+  const { loginSecret } = await registerHeld(name);
+  const cookie = await loginAs(name, loginSecret);
+
+  const rotateResp = await fetch(`${BASE}/account/rotate`, { method: "POST", headers: { cookie: `gw_session=${cookie}`, "content-type": "application/x-www-form-urlencoded" }, redirect: "manual", body: "" });
+  const page = await rotateResp.text();
+  const newSecret = /<code[^>]*>([^<]+)<\/code>/.exec(page)?.[1];
+  assert.ok(newSecret, "the rotation response must show a new login secret, not just confirm the rotation");
+
+  const loginWithNew = await fetch(`${BASE}/guardian-login`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ name, login_secret: newSecret!, return_to: "/account" }),
+  });
+  assert.ok(cookieFrom(loginWithNew), "the newly-issued secret must actually work -- otherwise self-rotation still locks the requester out");
+
+  const loginWithOld = await fetch(`${BASE}/guardian-login`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    redirect: "manual",
+    body: new URLSearchParams({ name, login_secret: loginSecret, return_to: "/account" }),
+  });
+  assert.equal(cookieFrom(loginWithOld), null, "the OLD secret must be dead after rotation");
+});
+
+test("fix E: reissueLoginSecret ends the identity's other existing sessions, not just future logins", async () => {
+  const name = uniqueName("reissue");
+  const { loginSecret } = await registerHeld(name);
+  const staleCookie = await loginAs(name, loginSecret);
+
+  const beforeReissue = await fetch(`${BASE}/account`, { headers: { cookie: `gw_session=${staleCookie}` } });
+  assert.equal(beforeReissue.status, 200, "sanity: the session works before reissuing");
+
+  const reissueResp = await fetch(`${BASE}/account/login-secret/reissue`, { method: "POST", headers: { cookie: `gw_session=${staleCookie}`, "content-type": "application/x-www-form-urlencoded" }, redirect: "manual", body: "" });
+  assert.notEqual(reissueResp.status, 500);
+
+  const afterReissue = await fetch(`${BASE}/account`, { headers: { cookie: `gw_session=${staleCookie}` }, redirect: "manual" });
+  assert.notEqual(afterReissue.status, 200, "the session that was already open before the reissue must be ended by it");
 });

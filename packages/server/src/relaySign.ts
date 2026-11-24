@@ -22,7 +22,7 @@ import { signAs, authenticateRequest } from "./signing.js";
 import { RegistrarError } from "./registrarError.js";
 import { getLog } from "./db.js";
 import { makeResolveLog } from "./logResolver.js";
-import { operationHash, parseGuardianDid, verifyLog, type DataIntegrityProof, type Did } from "@did-guardian/lib";
+import { operationHash, parseGuardianDid, verifyLog, type DataIntegrityProof, type Did, type Log } from "@did-guardian/lib";
 
 /**
  * F6 (SSRF + sign-arbitrary-operation): `domain` used to be a free-text
@@ -40,6 +40,24 @@ async function allowedWardDids(env: Env, signerDid: Did): Promise<Set<Did>> {
   const verified = await verifyLog(signerDid, log);
   if (verified.result !== "valid") return new Set();
   return new Set(verified.state!.wards.map((w) => w.did));
+}
+
+/**
+ * REQ-5-17 (r7d, audit r4): a remote operation claiming to be for `did`
+ * is never trusted on that claim alone -- the remote registrar could
+ * serve one whose "prev" actually matches some OTHER identity's own
+ * current head, which would make the signature produced for it equally
+ * valid if resubmitted directly against that other identity's own log.
+ * Exported standalone (`remoteLog` passed in, already fetched) so it's
+ * testable without a live cross-registrar fetch -- the same check
+ * votingPage.ts's own matchesOwnLog makes for a same-registrar op.
+ */
+export async function matchesClaimedLog(did: Did, remoteLog: Log | null | undefined, operation: { type: string; prev?: string | null }): Promise<boolean> {
+  if (operation.type === "create") return true;
+  if (!remoteLog) return false;
+  const verified = await verifyLog(did, remoteLog);
+  const currentHead = remoteLog.length > 0 ? await operationHash(remoteLog[remoteLog.length - 1]) : null;
+  return verified.result === "valid" && operation.prev === currentHead;
 }
 
 interface RemotePendingStatus {
@@ -155,15 +173,9 @@ export async function handleRelaySignSubmit(request: Request, env: Env): Promise
   // Fetching status.did's own log from its own domain and verifying
   // it there is what catches that, the same check votingPage.ts's own
   // signAsSelf makes for a same-registrar operation.
-  if ((status.operation as { type: string }).type !== "create") {
-    const resolveLog = makeResolveLog(env);
-    const remoteLog = await resolveLog(status.did);
-    const verified = remoteLog ? await verifyLog(status.did, remoteLog) : undefined;
-    const currentHead = remoteLog && remoteLog.length > 0 ? await operationHash(remoteLog[remoteLog.length - 1]) : null;
-    const prevField = (status.operation as { prev?: string | null }).prev;
-    if (!remoteLog || verified!.result !== "valid" || prevField !== currentHead) {
-      return html(pageShell("Sign elsewhere", reviewBody(opId, status, signerDid, { error: `${status.did}'s own log does not match this operation's own "prev" -- refusing to sign.` })), 409);
-    }
+  const remoteLog = await makeResolveLog(env)(status.did);
+  if (!(await matchesClaimedLog(status.did, remoteLog, status.operation as { type: string; prev?: string | null }))) {
+    return html(pageShell("Sign elsewhere", reviewBody(opId, status, signerDid, { error: `${status.did}'s own log does not match this operation's own "prev" -- refusing to sign.` })), 409);
   }
 
   let proof: DataIntegrityProof;
