@@ -70,8 +70,8 @@ function banner(message: string | null, kind: "ok" | "error" = "ok"): string {
 
 // The canonical formal spec lives on this project's own docs site, not
 // necessarily on whichever domain happens to be serving this particular
-// registrar (zzmq.dev doesn't host the docs site at all) -- always link to
-// the one real copy.
+// registrar -- a deployment's own domain doesn't have to host the docs
+// site at all -- so always link to the one real copy.
 const FORMAL_SPEC_URL = "https://guardianspec.org/docs/did-guardian-spec-v1.0.0/";
 
 function formatSetting(value: Setting): string {

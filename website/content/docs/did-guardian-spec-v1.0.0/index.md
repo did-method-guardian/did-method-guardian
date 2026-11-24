@@ -628,9 +628,4 @@ A sole guardian is removed with `evidence` and one current key, or by the succes
 
 ## Changelog
 
-This replaces every earlier draft, v0.2.0 included. Earlier drafts are in the repository history.
-
-- **2026-11-22**: REQ-5-2 constrains the value of a number, not its written form.
-- **2026-11-23**: Revised after audit round 3 and clean-room rounds 7 to 7c.
-- **2026-11-23**: Revised after audit round 4 and clean-room round 7d.
-- **2026-11-24**: v1.0.0, Stable. The body is unchanged from the 7d revision above; this marks the method as ready for independent implementation.
+- **v1.0.0 (2026-11-24):** first stable release. It replaces every earlier draft; earlier drafts are in the repository history.

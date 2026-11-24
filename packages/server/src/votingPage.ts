@@ -275,8 +275,8 @@ function loginFormBody(returnTo: string, opts: { nameValue?: string; error?: str
 
 /**
  * POST /guardian-logout?return_to=<path> -- named "-logout" (not "/logout")
- * for the same reason "/guardian-login" isn't "/login": zz-maintainer's own
- * catch-all already serves a bare "/logout" of its own on zzmq.dev,
+ * for the same reason "/guardian-login" isn't "/login": another Worker
+ * already serves a bare "/logout" of its own on one deployment's domain,
  * confirmed by reading its route table directly, not assumed.
  *
  * There was no way to end a session at all before this -- confirmed a real

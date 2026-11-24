@@ -15,7 +15,9 @@ RUN npm run build --workspace=packages/uni-resolver-driver
 FROM node:20-slim
 WORKDIR /app
 COPY --from=build /repo/node_modules ./node_modules
-COPY --from=build /repo/packages/lib/dist /repo/packages/lib/package.json ./node_modules/@did-guardian/lib/
+# node_modules/@did-guardian/lib is a workspace symlink to ../../packages/lib, so lib goes there.
+COPY --from=build /repo/packages/lib/package.json ./packages/lib/package.json
+COPY --from=build /repo/packages/lib/dist ./packages/lib/dist
 COPY --from=build /repo/packages/uni-resolver-driver/dist ./dist
 EXPOSE 8080
 CMD ["node", "dist/src/server.js"]
