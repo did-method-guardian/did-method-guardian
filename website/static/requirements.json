@@ -168,7 +168,10 @@
       "anchor": "https://guardianspec.org/docs/did-guardian-spec-v0.2.0/#req-5-17",
       "section": "5.4 Proofs",
       "text": "Before a party creates a proof for an operation other than `create`, it MUST verify the log of the DID that it presents to the key holder as the identity that the operation changes, and MUST NOT create the proof unless that log is valid and the operation's `prev` equals the operation hash of the last operation in that log.",
-      "tests": []
+      "tests": [
+        "packages/server/tests/http-endpoints.test.ts",
+        "packages/server/tests/relaySign.test.ts"
+      ]
     },
     {
       "id": "REQ-6-1",
@@ -329,7 +332,8 @@
       "tests": [
         "packages/lib/tests/f3-evidence-standing.test.ts",
         "packages/lib/tests/resolve-versionid.test.ts",
-        "packages/server/tests/registrar-session-scope.test.ts"
+        "packages/server/tests/registrar-session-scope.test.ts",
+        "packages/server/tests/relaySign.test.ts"
       ]
     },
     {

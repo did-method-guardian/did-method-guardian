@@ -1,6 +1,6 @@
 {
   "name": "@did-guardian/lib",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reference implementation of the did:guardian method: operation log replay, signature verification, threshold rules, and DID document rendering.",
   "type": "module",
   "main": "dist/src/index.js",
